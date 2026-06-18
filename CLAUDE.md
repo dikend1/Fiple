@@ -4,11 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-A **spec-driven MVP workspace**, not (yet) a code repository. It uses the
-*agentic-development-skills* framework to take a product idea from business case
-to executable requirements before any code is written. There is currently **no
-implementation, build, lint, or test tooling** — the artifacts here are design
-documents and OpenSpec change files.
+A **spec-driven MVP workspace** that has now reached a first implementation
+slice. It uses the *agentic-development-skills* framework to take a product idea
+from business case → executable requirements → code. Design documents live in
+`docs/design-docs/` and `openspec/`; the code lives in `FipleKit/` and `Apps/`.
+
+## Build, test, run
+
+The Xcode project is **generated** from `project.yml` via XcodeGen and is not
+committed — regenerate it after pulling or changing `project.yml`:
+
+```bash
+xcodegen generate                                   # → Fiple.xcodeproj
+cd FipleKit && swift test                            # core unit + loopback tests
+xcodebuild -project Fiple.xcodeproj -scheme FipleMac -destination 'platform=macOS' build
+xcodebuild -project Fiple.xcodeproj -scheme FipleiOS -destination 'generic/platform=iOS Simulator' build
+```
+
+Toolchain: Swift 6.3 / Xcode 26, Swift 6 language mode with complete strict
+concurrency. No third-party dependencies.
 
 The MVP being planned is **Fiple**: an iPhone app that acts as a remote control
 for a Mac. The user defines "Tiles" on the Mac (each launches one or more

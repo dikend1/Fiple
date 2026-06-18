@@ -1,0 +1,12 @@
+# Xcode project is generated from project.yml via XcodeGen — do not commit it.
+Fiple.xcodeproj/
+
+# Build artifacts
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# macOS
+.DS_Store

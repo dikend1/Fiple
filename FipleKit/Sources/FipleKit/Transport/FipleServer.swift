@@ -1,0 +1,60 @@
+import Foundation
+import Network
+
+/// Local-network server: advertises the Mac over Bonjour and surfaces each
+/// inbound ``PeerConnection``. Transport only — pairing and tile logic live in
+/// the Mac app, which consumes ``newConnections``.
+public actor FipleServer {
+    private var listener: NWListener?
+    private let stream: AsyncStream<PeerConnection>
+    private let continuation: AsyncStream<PeerConnection>.Continuation
+
+    public init() {
+        (stream, continuation) = AsyncStream.makeStream()
+    }
+
+    /// Connections as they arrive (already started).
+    public var newConnections: AsyncStream<PeerConnection> { stream }
+
+    /// Starts listening and advertising. Returns the bound TCP port once ready.
+    /// Pass `port: .any` (default) to let the OS choose.
+    @discardableResult
+    public func start(deviceName: String, port: NWEndpoint.Port = .any) async throws -> UInt16 {
+        let listener = try NWListener(using: .tcp, on: port)
+        listener.service = NWListener.Service(name: deviceName, type: FipleService.bonjourType)
+
+        listener.newConnectionHandler = { [weak self] nwConnection in
+            let peer = PeerConnection(connection: nwConnection)
+            Task {
+                await peer.start()
+                await self?.deliver(peer)
+            }
+        }
+        self.listener = listener
+
+        let boundPort: UInt16 = try await withCheckedThrowingContinuation { cont in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    cont.resume(returning: listener.port?.rawValue ?? 0)
+                case let .failed(error):
+                    cont.resume(throwing: error)
+                default:
+                    break
+                }
+            }
+            listener.start(queue: .global(qos: .userInitiated))
+        }
+        return boundPort
+    }
+
+    public func stop() {
+        listener?.cancel()
+        listener = nil
+        continuation.finish()
+    }
+
+    private func deliver(_ peer: PeerConnection) {
+        continuation.yield(peer)
+    }
+}
