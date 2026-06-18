@@ -1,0 +1,53 @@
+name: Fiple
+options:
+  bundleIdPrefix: com.fiple
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  FipleKit:
+    path: FipleKit
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  FipleMac:
+    type: application
+    platform: macOS
+    sources:
+      - Apps/FipleMac
+    dependencies:
+      - package: FipleKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.mac
+        PRODUCT_NAME: Fiple
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: Apps/FipleMac/Info.plist
+        ENABLE_HARDENED_RUNTIME: "NO"
+        SWIFT_STRICT_CONCURRENCY: complete
+
+  FipleiOS:
+    type: application
+    platform: iOS
+    sources:
+      - Apps/FipleiOS
+    dependencies:
+      - package: FipleKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.ios
+        PRODUCT_NAME: Fiple
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: Apps/FipleiOS/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_STRICT_CONCURRENCY: complete
