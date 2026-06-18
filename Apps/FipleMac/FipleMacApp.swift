@@ -8,8 +8,12 @@ struct FipleMacApp: App {
 
     init() {
         let store = TileStore()
+        let server = ServerController(store: store)
         _store = State(initialValue: store)
-        _server = State(initialValue: ServerController(store: store))
+        _server = State(initialValue: server)
+        // Advertise immediately at launch — the menu-bar popover is lazy, so we
+        // cannot rely on its `.task` to start the server.
+        Task { await server.start() }
     }
 
     var body: some Scene {
