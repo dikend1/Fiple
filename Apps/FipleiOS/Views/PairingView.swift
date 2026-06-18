@@ -30,6 +30,7 @@ struct PairingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                     .transition(.opacity)
+                
             }
 
             if controller.phase != .searching {
