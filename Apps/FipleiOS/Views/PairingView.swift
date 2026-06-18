@@ -5,6 +5,7 @@ import SwiftUI
 struct PairingView: View {
     let controller: RemoteController
     @State private var code = ""
+    @State private var showSearchHint = false
     @FocusState private var codeFocused: Bool
 
     var body: some View {
@@ -21,6 +22,15 @@ struct PairingView: View {
             }
 
             statusLine
+
+            if controller.phase == .searching, showSearchHint {
+                Text("Can't find your Mac. Check that both devices are on the same Wi-Fi, the Fiple app is open on your Mac, and you allowed Local Network access for Fiple.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .transition(.opacity)
+            }
 
             if controller.phase != .searching {
                 VStack(spacing: 14) {
@@ -58,6 +68,14 @@ struct PairingView: View {
         }
         .onChange(of: controller.phase) { _, phase in
             codeFocused = (phase == .readyToPair)
+        }
+        .task(id: controller.phase) {
+            showSearchHint = false
+            guard controller.phase == .searching else { return }
+            try? await Task.sleep(for: .seconds(6))
+            if controller.phase == .searching {
+                withAnimation { showSearchHint = true }
+            }
         }
     }
 
