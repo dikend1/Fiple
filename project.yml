@@ -35,6 +35,7 @@ targets:
         INFOPLIST_FILE: Apps/FipleMac/Info.plist
         ENABLE_HARDENED_RUNTIME: "NO"
         SWIFT_STRICT_CONCURRENCY: complete
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   FipleiOS:
     type: application
