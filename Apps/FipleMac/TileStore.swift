@@ -68,8 +68,9 @@ final class TileStore {
     static let seed: [Tile] = [
         Tile(
             name: "Start Coding",
+            subtitle: "Everything you need to code",
             iconSystemName: "chevron.left.forwardslash.chevron.right",
-            colorHex: "#3B82F6",
+            colorHex: "#84CC16",
             order: 0,
             actions: [
                 Action(kind: .launchApp(bundleID: "com.apple.dt.Xcode")),
@@ -78,13 +79,38 @@ final class TileStore {
             ]
         ),
         Tile(
-            name: "Deep Work",
-            iconSystemName: "brain.head.profile",
+            name: "Design Session",
+            subtitle: "Design and prototype",
+            iconSystemName: "pencil.and.outline",
             colorHex: "#8B5CF6",
             order: 1,
             actions: [
+                Action(kind: .launchApp(bundleID: "com.apple.Preview")),
+                Action(kind: .openURL(URL(string: "https://figma.com")!)),
+                Action(kind: .openURL(URL(string: "https://dribbble.com")!)),
+            ]
+        ),
+        Tile(
+            name: "Deep Work",
+            subtitle: "Focus and get things done",
+            iconSystemName: "target",
+            colorHex: "#3B82F6",
+            order: 2,
+            actions: [
                 Action(kind: .launchApp(bundleID: "com.apple.Notes")),
                 Action(kind: .openURL(URL(string: "https://music.apple.com")!)),
+            ]
+        ),
+        Tile(
+            name: "Ship Mode",
+            subtitle: "Build, ship, repeat",
+            iconSystemName: "paperplane.fill",
+            colorHex: "#F59E0B",
+            order: 3,
+            actions: [
+                Action(kind: .launchApp(bundleID: "com.apple.dt.Xcode")),
+                Action(kind: .launchApp(bundleID: "com.apple.Terminal")),
+                Action(kind: .openURL(URL(string: "https://github.com")!)),
             ]
         ),
     ]

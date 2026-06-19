@@ -7,6 +7,10 @@ import Foundation
 public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
     public let id: UUID
     public var name: String
+    /// One-line tagline shown under the name on workspace cards
+    /// (e.g. "Everything you need to code"). Optional and omitted from JSON when
+    /// nil, so older tiles — and the iPhone snapshot — decode unchanged.
+    public var subtitle: String?
     /// SF Symbol name shown on the tile when ``iconImageData`` is absent.
     public var iconSystemName: String
     /// Optional PNG of a real logo (e.g. an app icon or a site favicon). When
@@ -23,6 +27,7 @@ public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
     public init(
         id: UUID = UUID(),
         name: String,
+        subtitle: String? = nil,
         iconSystemName: String = "square.grid.2x2",
         iconImageData: Data? = nil,
         colorHex: String = "#3B82F6",
@@ -31,6 +36,7 @@ public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
     ) {
         self.id = id
         self.name = name
+        self.subtitle = subtitle
         self.iconSystemName = iconSystemName
         self.iconImageData = iconImageData
         self.colorHex = colorHex
@@ -40,4 +46,19 @@ public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
 
     /// True when this tile restores a multi-step working context.
     public var isWorkspace: Bool { actions.count > 1 }
+
+    /// Number of app-launch actions — the "Apps" stat on a workspace card.
+    public var appCount: Int {
+        actions.filter { if case .launchApp = $0.kind { true } else { false } }.count
+    }
+
+    /// Number of URL actions — the "Websites" stat on a workspace card.
+    public var websiteCount: Int {
+        actions.filter { if case .openURL = $0.kind { true } else { false } }.count
+    }
+
+    /// Number of file/folder actions — the "Shortcuts" stat on a workspace card.
+    public var shortcutCount: Int {
+        actions.filter { if case .openFile = $0.kind { true } else { false } }.count
+    }
 }
