@@ -6,47 +6,40 @@ import SwiftUI
 struct FipleMacApp: App {
     @State private var store: TileStore
     @State private var server: ServerController
+    @State private var recents: RecentStore
+    @State private var focus: FocusStore
 
     init() {
         let store = TileStore()
+        let recents = RecentStore()
         let server = ServerController(store: store)
         _store = State(initialValue: store)
         _server = State(initialValue: server)
-        // Advertise immediately at launch — the menu-bar popover is lazy, so we
-        // cannot rely on its `.task` to start the server.
-        Task { await server.start() }
+        _recents = State(initialValue: recents)
+        _focus = State(initialValue: FocusStore())
+        // Wire launch history and start advertising on the main actor. Done in a
+        // Task because App.init is nonisolated while these touch @MainActor state.
+        Task { @MainActor in
+            server.didRun = { tile in recents.record(tile) }
+            await server.start()
+        }
     }
 
     var body: some Scene {
+        Window("Fiple", id: "main") {
+            MainWindowView(store: store, server: server, recents: recents, focus: focus)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1120, height: 780)
+
+        // A lightweight menu-bar item keeps the pairing code and status one click
+        // away even when the main window is closed.
         MenuBarExtra {
             MenuContentView(server: server)
                 .task { await server.start() }
         } label: {
-            // The label is rendered eagerly at launch (unlike the lazy popover
-            // content), so it's the reliable place to open the Tiles window
-            // automatically — this app is a menu-bar accessory with no Dock icon.
-            MenuBarLabel()
+            Image(systemName: "square.grid.2x2.fill")
         }
         .menuBarExtraStyle(.window)
-
-        Window("Fiple Tiles", id: "tiles") {
-            TileManagerView(store: store, server: server)
-                .frame(minWidth: 480, minHeight: 440)
-        }
-        .windowResizability(.contentSize)
-    }
-}
-
-/// The menu-bar icon. Opens the Tiles window once at launch and brings the app
-/// to the front, so the user doesn't have to click through the popover first.
-private struct MenuBarLabel: View {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Image(systemName: "square.grid.2x2.fill")
-            .task {
-                openWindow(id: "tiles")
-                NSApp.activate(ignoringOtherApps: true)
-            }
     }
 }

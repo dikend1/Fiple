@@ -39,8 +39,11 @@ struct MenuContentView: View {
 
             Divider()
 
-            Button { openWindow(id: "tiles") } label: {
-                Label("Manage Tiles…", systemImage: "slider.horizontal.3")
+            Button {
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+            } label: {
+                Label("Open Fiple…", systemImage: "macwindow")
             }
             if server.status == .connected {
                 Button { Task { await server.disconnect() } } label: {

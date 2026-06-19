@@ -18,8 +18,6 @@
 	<string>APPL</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Fiple connects to your iPhone over the local network to receive tile commands.</string>
 	<key>NSBonjourServices</key>
