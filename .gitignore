@@ -1,6 +1,10 @@
 # Xcode project is generated from project.yml via XcodeGen — do not commit it.
 Fiple.xcodeproj/
 
+# SourceKit-LSP build server config (machine-specific DerivedData paths)
+buildServer.json
+.compile
+
 # Build artifacts
 .build/
 .swiftpm/
