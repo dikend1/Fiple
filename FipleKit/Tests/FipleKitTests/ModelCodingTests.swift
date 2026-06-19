@@ -39,6 +39,28 @@ struct ModelCodingTests {
         #expect(try roundTrip(tile) == tile)
     }
 
+    @Test("Tile carrying an embedded logo round-trips")
+    func tileWithIconImageRoundTrip() throws {
+        let tile = Tile(
+            name: "Safari",
+            iconSystemName: "safari",
+            iconImageData: Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+            colorHex: "#3B82F6",
+            actions: [Action(kind: .launchApp(bundleID: "com.apple.Safari"))]
+        )
+        #expect(try roundTrip(tile) == tile)
+    }
+
+    @Test("Tile JSON without iconImageData decodes with a nil logo")
+    func tileBackwardCompatibleDecoding() throws {
+        let legacy = """
+        {"id":"\(UUID().uuidString)","name":"Deep Work","iconSystemName":"brain","colorHex":"#8B5CF6","order":0,"actions":[]}
+        """
+        let tile = try MessageCodec.decode(Tile.self, from: Data(legacy.utf8))
+        #expect(tile.iconImageData == nil)
+        #expect(tile.name == "Deep Work")
+    }
+
     @Test("ClientMessage round-trips")
     func clientMessageRoundTrip() throws {
         let id = UUID()
