@@ -1,3 +1,4 @@
+import AppKit
 import FipleKit
 import SwiftUI
 
@@ -17,9 +18,14 @@ struct FipleMacApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("Fiple", systemImage: "square.grid.2x2.fill") {
+        MenuBarExtra {
             MenuContentView(server: server)
                 .task { await server.start() }
+        } label: {
+            // The label is rendered eagerly at launch (unlike the lazy popover
+            // content), so it's the reliable place to open the Tiles window
+            // automatically — this app is a menu-bar accessory with no Dock icon.
+            MenuBarLabel()
         }
         .menuBarExtraStyle(.window)
 
@@ -28,5 +34,19 @@ struct FipleMacApp: App {
                 .frame(minWidth: 480, minHeight: 440)
         }
         .windowResizability(.contentSize)
+    }
+}
+
+/// The menu-bar icon. Opens the Tiles window once at launch and brings the app
+/// to the front, so the user doesn't have to click through the popover first.
+private struct MenuBarLabel: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: "square.grid.2x2.fill")
+            .task {
+                openWindow(id: "tiles")
+                NSApp.activate(ignoringOtherApps: true)
+            }
     }
 }
