@@ -134,6 +134,7 @@ struct TileEditorView: View {
             .padding()
         }
         .frame(width: 460, height: 560)
+        .preferredColorScheme(.light) // keep the editor light like the rest of the app
         .task { installedApps = InstalledApps.all() }
     }
 
@@ -253,22 +254,7 @@ private struct ActionDraftRow: View {
             }
             switch draft.kind {
             case .launchApp:
-                Picker("App", selection: $draft.bundleID) {
-                    Text("Choose an app…").tag("")
-                    ForEach(installedApps) { app in
-                        HStack {
-                            Image(nsImage: app.icon)
-                                .resizable()
-                                .frame(width: 16, height: 16)
-                            Text(app.name)
-                        }
-                        .tag(app.bundleID)
-                    }
-                }
-                .labelsHidden()
-                .onChange(of: draft.bundleID) { _, newID in
-                    if let app = installedApps.first(where: { $0.bundleID == newID }) { onAppChosen(app) }
-                }
+                AppPickerField(apps: installedApps, bundleID: $draft.bundleID, onChosen: onAppChosen)
             case .openURL:
                 TextField("https://…", text: $draft.url)
                     .textFieldStyle(.roundedBorder)
@@ -291,5 +277,88 @@ private struct ActionDraftRow: View {
         if panel.runModal() == .OK, let url = panel.url {
             draft.path = url.path
         }
+    }
+}
+
+/// A searchable app chooser: a compact field showing the selected app, opening a
+/// filterable popover list — far friendlier than a flat menu of every app.
+private struct AppPickerField: View {
+    let apps: [InstalledApp]
+    @Binding var bundleID: String
+    let onChosen: (InstalledApp) -> Void
+
+    @State private var showing = false
+    @State private var query = ""
+
+    private var selected: InstalledApp? { apps.first { $0.bundleID == bundleID } }
+
+    private var filtered: [InstalledApp] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return apps }
+        return apps.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+
+    var body: some View {
+        Button { showing = true } label: {
+            HStack(spacing: 8) {
+                if let app = selected {
+                    Image(nsImage: app.icon).resizable().frame(width: 18, height: 18)
+                    Text(app.name)
+                } else {
+                    Image(systemName: "app.dashed").foregroundStyle(.secondary)
+                    Text("Choose an app…").foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.black.opacity(0.12)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showing, arrowEdge: .bottom) {
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search apps", text: $query).textFieldStyle(.plain)
+                }
+                .padding(8)
+                Divider()
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(filtered) { app in
+                            appRow(app)
+                        }
+                    }
+                }
+                .frame(height: 300)
+            }
+            .frame(width: 280)
+        }
+        .onChange(of: showing) { _, isShowing in
+            if !isShowing { query = "" }
+        }
+    }
+
+    private func appRow(_ app: InstalledApp) -> some View {
+        Button {
+            bundleID = app.bundleID
+            onChosen(app)
+            showing = false
+        } label: {
+            HStack(spacing: 8) {
+                Image(nsImage: app.icon).resizable().frame(width: 18, height: 18)
+                Text(app.name).lineLimit(1)
+                Spacer()
+                if app.bundleID == bundleID {
+                    Image(systemName: "checkmark").font(.caption).foregroundStyle(.tint)
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
