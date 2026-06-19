@@ -17,6 +17,10 @@ final class ServerController {
     private(set) var pairingCode: PairingCode?
     private(set) var lastRun: RunResult?
 
+    /// Called after a tile is run, so launch history can be recorded without the
+    /// transport layer depending on the Recent store.
+    @ObservationIgnored var didRun: (@MainActor (Tile) -> Void)?
+
     let macName = Host.current().localizedName ?? "Mac"
     let macID: String = ServerController.stableMacID()
 
@@ -107,6 +111,7 @@ final class ServerController {
             guard isPaired, let tile = store.tiles.first(where: { $0.id == tileID }) else { return }
             let result = await TileRunner(executor: executor).run(tile)
             lastRun = result
+            didRun?(tile)
             try? await peer.send(ServerMessage.runResult(result))
         }
     }
