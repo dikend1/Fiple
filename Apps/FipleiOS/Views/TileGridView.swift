@@ -1,5 +1,6 @@
 import FipleKit
 import SwiftUI
+import UIKit
 
 /// The remote's main screen: a grid of the Mac's tiles. Tap to run; the tile
 /// shows progress and per-run feedback. No editing — this is a pure remote.
@@ -61,8 +62,7 @@ private struct TileButton: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Image(systemName: tile.iconSystemName)
-                        .font(.title2)
+                    tileIcon
                     Spacer()
                     statusIcon
                 }
@@ -82,6 +82,18 @@ private struct TileButton: View {
         }
         .buttonStyle(.plain)
         .disabled(isRunning)
+    }
+
+    @ViewBuilder private var tileIcon: some View {
+        if let data = tile.iconImageData, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else {
+            Image(systemName: tile.iconSystemName)
+                .font(.title2)
+        }
     }
 
     @ViewBuilder private var statusIcon: some View {

@@ -1,3 +1,4 @@
+import AppKit
 import FipleKit
 import SwiftUI
 
@@ -71,10 +72,8 @@ private struct TileRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 9)
-                .fill(Color(hex: tile.colorHex))
+            tileIcon
                 .frame(width: 38, height: 38)
-                .overlay(Image(systemName: tile.iconSystemName).foregroundStyle(.white))
             VStack(alignment: .leading, spacing: 2) {
                 Text(tile.name).font(.body.weight(.medium))
                 Text(tile.isWorkspace ? "\(tile.actions.count) actions" : actionSummary)
@@ -84,6 +83,18 @@ private struct TileRow: View {
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder private var tileIcon: some View {
+        if let data = tile.iconImageData, let image = NSImage(data: data) {
+            Image(nsImage: image)
+                .resizable()
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+        } else {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(Color(hex: tile.colorHex))
+                .overlay(Image(systemName: tile.iconSystemName).foregroundStyle(.white))
+        }
     }
 
     private var actionSummary: String {
