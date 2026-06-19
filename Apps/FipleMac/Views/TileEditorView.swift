@@ -53,6 +53,7 @@ struct TileEditorView: View {
 
     private let original: Tile?
     @State private var name: String
+    @State private var subtitle: String
     @State private var icon: String
     @State private var iconImageData: Data?
     @State private var colorHex: String
@@ -68,6 +69,7 @@ struct TileEditorView: View {
         self.store = store
         self.original = tile
         _name = State(initialValue: tile?.name ?? "")
+        _subtitle = State(initialValue: tile?.subtitle ?? "")
         _icon = State(initialValue: tile?.iconSystemName ?? "square.grid.2x2")
         _iconImageData = State(initialValue: tile?.iconImageData)
         _colorHex = State(initialValue: tile?.colorHex ?? "#3B82F6")
@@ -87,7 +89,7 @@ struct TileEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(original == nil ? "New Tile" : "Edit Tile").font(.headline).padding()
+            Text(original == nil ? "New Workspace" : "Edit Workspace").font(.headline).padding()
             Divider()
             Form {
                 Section("Appearance") {
@@ -101,6 +103,7 @@ struct TileEditorView: View {
                         }
                     }
                     TextField("Name", text: $name)
+                    TextField("Description", text: $subtitle, prompt: Text("Everything you need to code"))
                     swatches
                 }
                 Section("Actions") {
@@ -183,8 +186,11 @@ struct TileEditorView: View {
 
     private func save() {
         let actions = drafts.compactMap { $0.toAction() }
+        let trimmedSubtitle = subtitle.trimmingCharacters(in: .whitespaces)
+        let resolvedSubtitle = trimmedSubtitle.isEmpty ? nil : trimmedSubtitle
         if var tile = original {
             tile.name = name
+            tile.subtitle = resolvedSubtitle
             tile.iconSystemName = icon
             tile.iconImageData = iconImageData
             tile.colorHex = colorHex
@@ -193,6 +199,7 @@ struct TileEditorView: View {
         } else {
             store.add(Tile(
                 name: name,
+                subtitle: resolvedSubtitle,
                 iconSystemName: icon,
                 iconImageData: iconImageData,
                 colorHex: colorHex,
