@@ -28,13 +28,14 @@ struct SidebarView: View {
 
     private var brand: some View {
         HStack(spacing: Theme.Spacing.md) {
-            RoundedRectangle(cornerRadius: Theme.Radius.tile)
-                .fill(Accent(Theme.Palette.brand).iconBackground)
+            Image("FipleLogo")
+                .resizable()
+                .interpolation(.high)
                 .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
                 .overlay(
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(Theme.Palette.brand)
+                    RoundedRectangle(cornerRadius: Theme.Radius.tile)
+                        .strokeBorder(.white.opacity(0.14))
                 )
             Text("Fiple")
                 .font(.system(size: 22, weight: .bold))
