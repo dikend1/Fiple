@@ -21,8 +21,8 @@ enum Theme {
     }
 
     enum Palette {
-        /// Brand lime — logo, active sidebar item, primary affordances.
-        static let brand = Color(hex: "#84CC16")
+        /// Brand green — active sidebar item, primary affordances.
+        static let brand = Color(hex: "#34C759")
         /// Light content background behind the cards.
         static let windowBackground = Color(hex: "#F4F5F7")
         /// Card surface and elevated panels.
