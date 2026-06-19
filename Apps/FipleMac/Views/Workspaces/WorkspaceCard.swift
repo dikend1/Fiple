@@ -4,6 +4,7 @@ import SwiftUI
 /// A workspace tile rendered as a rich gradient card (grid layout).
 struct WorkspaceCard: View {
     let tile: Tile
+    let onRun: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -50,17 +51,26 @@ struct WorkspaceCard: View {
                 Spacer()
             }
 
-            HStack {
+            HStack(spacing: Theme.Spacing.sm) {
                 Spacer()
                 Button(action: onEdit) {
+                    Text("Edit").font(.system(size: 13, weight: .medium))
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.vertical, 7)
+                        .background(Theme.Palette.surface, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onRun) {
                     HStack(spacing: 5) {
-                        Text("Edit").font(.system(size: 13, weight: .medium))
-                        Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
+                        Image(systemName: "play.fill").font(.system(size: 11, weight: .bold))
+                        Text("Run").font(.system(size: 13, weight: .semibold))
                     }
+                    .foregroundStyle(.white)
                     .padding(.horizontal, Theme.Spacing.md)
                     .padding(.vertical, 7)
-                    .background(Theme.Palette.surface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
+                    .background(Color(hex: tile.colorHex), in: Capsule())
                 }
                 .buttonStyle(.plain)
             }

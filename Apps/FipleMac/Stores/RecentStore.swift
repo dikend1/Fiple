@@ -52,6 +52,11 @@ final class RecentStore {
         commit()
     }
 
+    func delete(_ id: UUID) {
+        records.removeAll { $0.id == id }
+        commit()
+    }
+
     func clear() {
         records.removeAll()
         commit()

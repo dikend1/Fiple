@@ -41,6 +41,12 @@ struct MainWindowView: View {
         .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
     }
 
+    /// Re-run a workspace by id (used by Recent), looked up against current tiles.
+    private func run(tileID: UUID) {
+        guard let tile = store.tiles.first(where: { $0.id == tileID }) else { return }
+        Task { await server.run(tile) }
+    }
+
     @ViewBuilder private var detail: some View {
         switch section {
         case .workspaces:
@@ -52,7 +58,7 @@ struct MainWindowView: View {
         case .shortcuts:
             ActionCatalogView(store: store, kind: .shortcuts)
         case .recent:
-            RecentView(recents: recents)
+            RecentView(recents: recents, onRun: run(tileID:))
         case .focus:
             FocusView(focus: focus)
         case .devices:
