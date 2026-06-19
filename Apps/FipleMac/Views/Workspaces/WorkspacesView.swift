@@ -94,6 +94,7 @@ struct WorkspacesView: View {
                 ForEach(store.tiles) { tile in
                     WorkspaceCard(
                         tile: tile,
+                        onRun: { run(tile) },
                         onEdit: { editingTile = tile },
                         onDelete: { store.delete(tile.id) }
                     )
@@ -104,6 +105,7 @@ struct WorkspacesView: View {
                 ForEach(store.tiles) { tile in
                     WorkspaceListRow(
                         tile: tile,
+                        onRun: { run(tile) },
                         onEdit: { editingTile = tile },
                         onDelete: { store.delete(tile.id) }
                     )
@@ -115,7 +117,7 @@ struct WorkspacesView: View {
     private var summaries: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.xl) {
             Panel(title: "Recent", icon: "clock", actionTitle: "View all") { section = .recent } content: {
-                RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet")
+                RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet", onRun: runByID)
             }
             Panel(title: "Focus", icon: "target", actionTitle: "View all") { section = .focus } content: {
                 VStack(spacing: Theme.Spacing.md) {
@@ -125,6 +127,15 @@ struct WorkspacesView: View {
                 }
             }
         }
+    }
+
+    private func run(_ tile: Tile) {
+        Task { await server.run(tile) }
+    }
+
+    private func runByID(_ tileID: UUID) {
+        guard let tile = store.tiles.first(where: { $0.id == tileID }) else { return }
+        Task { await server.run(tile) }
     }
 
     private var emptyState: some View {
@@ -143,6 +154,7 @@ struct WorkspacesView: View {
 /// Compact row used by the Workspaces list layout.
 private struct WorkspaceListRow: View {
     let tile: Tile
+    let onRun: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -157,6 +169,13 @@ private struct WorkspaceListRow: View {
             Spacer()
             Text("\(tile.appCount) apps · \(tile.websiteCount) sites · \(tile.shortcutCount) files")
                 .font(.caption).foregroundStyle(.secondary)
+            Button(action: onRun) {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Color(hex: tile.colorHex))
+            }
+            .buttonStyle(.plain)
+            .help("Run \(tile.name)")
             Menu {
                 Button("Edit", action: onEdit)
                 Divider()

@@ -1,28 +1,53 @@
 import FipleKit
 import SwiftUI
 
-/// Full launch history page.
+/// Full launch history page. Each row re-runs its workspace on the Mac.
 struct RecentView: View {
     let recents: RecentStore
+    /// Re-run a workspace by id (looked up against the current tiles).
+    var onRun: ((UUID) -> Void)?
+    @State private var confirmingClear = false
+    @State private var pendingRemoval: RunRecord?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                PageHeader(title: "Recent", subtitle: "Workspaces you've launched recently.") {
+                PageHeader(title: "Recent", subtitle: "Tap to relaunch a workspace you opened recently.") {
                     if !recents.records.isEmpty {
-                        Button("Clear", role: .destructive) { recents.clear() }
+                        Button("Clear", role: .destructive) { confirmingClear = true }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
                     }
                 }
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    RecentList(records: recents.records, emptyHint: "Launch a workspace from your iPhone to see it here.")
+                    RecentList(
+                        records: recents.records,
+                        emptyHint: "Launch a workspace from your iPhone to see it here.",
+                        onRun: onRun,
+                        onDelete: { pendingRemoval = $0 }
+                    )
                 }
                 .padding(Theme.Spacing.lg)
                 .fipleCard()
             }
             .padding(Theme.Spacing.xxl)
             .padding(.top, Theme.Spacing.sm)
+        }
+        .alert("Clear launch history?", isPresented: $confirmingClear) {
+            Button("Clear", role: .destructive) { recents.clear() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes all \(recents.records.count) recent launches.")
+        }
+        .alert(
+            "Remove this entry?",
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+            presenting: pendingRemoval
+        ) { record in
+            Button("Remove", role: .destructive) { recents.delete(record.id) }
+            Button("Cancel", role: .cancel) {}
+        } message: { record in
+            Text("Removes the “\(record.tileName)” launch from your history.")
         }
     }
 }
@@ -31,6 +56,8 @@ struct RecentView: View {
 struct RecentList: View {
     let records: [RunRecord]
     var emptyHint: String = "Nothing yet"
+    var onRun: ((UUID) -> Void)?
+    var onDelete: ((RunRecord) -> Void)?
 
     var body: some View {
         if records.isEmpty {
@@ -42,7 +69,7 @@ struct RecentList: View {
         } else {
             VStack(spacing: 0) {
                 ForEach(records) { record in
-                    RecentRow(record: record)
+                    RecentRow(record: record, onRun: onRun, onDelete: onDelete)
                     if record.id != records.last?.id {
                         Divider().padding(.leading, 44)
                     }
@@ -54,6 +81,10 @@ struct RecentList: View {
 
 private struct RecentRow: View {
     let record: RunRecord
+    var onRun: ((UUID) -> Void)?
+    var onDelete: ((RunRecord) -> Void)?
+    @State private var hovering = false
+    @State private var deleteHover = false
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -68,9 +99,40 @@ private struct RecentRow: View {
             Spacer()
             Text(Self.format(record.timestamp))
                 .font(.caption).foregroundStyle(.secondary)
-            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+            if let onDelete, hovering {
+                Button { onDelete(record) } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: deleteHover ? .semibold : .regular))
+                        .foregroundStyle(deleteHover ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                        .frame(width: 26, height: 26)
+                        .background(deleteHover ? Color.red.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { deleteHover = $0 }
+                .help("Remove from history")
+            }
+            trailingIcon
         }
         .padding(.vertical, Theme.Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.sm)
+        .background(
+            hovering ? Color.black.opacity(0.04) : .clear,
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { onRun?(record.tileID) }
+    }
+
+    @ViewBuilder private var trailingIcon: some View {
+        if onRun != nil {
+            Image(systemName: hovering ? "play.circle.fill" : "play.circle")
+                .font(.system(size: 16))
+                .foregroundStyle(hovering ? AnyShapeStyle(Theme.Palette.brand) : AnyShapeStyle(.tertiary))
+        } else {
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+        }
     }
 
     /// "Today, 10:32" / "Yesterday, 17:40" / "12 Jun, 09:20".

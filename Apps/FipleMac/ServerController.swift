@@ -126,6 +126,14 @@ final class ServerController {
         try? await peer.send(ServerMessage.tilesSnapshot(tiles: store.tiles))
     }
 
+    /// Run a tile locally from the Mac (one-click preset launch). Recorded in
+    /// history exactly like a phone-triggered run.
+    func run(_ tile: Tile) async {
+        let result = await TileRunner(executor: executor).run(tile)
+        lastRun = result
+        didRun?(tile)
+    }
+
     private func pushSnapshot() async {
         guard isPaired, let peer else { return }
         try? await peer.send(ServerMessage.tilesSnapshot(tiles: store.tiles))
