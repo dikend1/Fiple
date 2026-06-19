@@ -30,14 +30,32 @@ struct IconTile: View {
     }
 }
 
-/// Page header: big title, supporting line, and an optional trailing accessory.
+/// Page header: an inline sidebar toggle, big title, supporting line, and an
+/// optional trailing accessory.
 struct PageHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder var trailing: Trailing
 
+    @Environment(\.toggleSidebar) private var toggleSidebar
+
     var body: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: Theme.Spacing.md) {
+            if let toggleSidebar {
+                Button(action: toggleSidebar.action) {
+                    Image(systemName: "sidebar.leading")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control).strokeBorder(Theme.Palette.hairline))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("s", modifiers: [.command, .control])
+                .help(toggleSidebar.isOpen ? "Hide Sidebar (⌃⌘S)" : "Show Sidebar (⌃⌘S)")
+                .padding(.top, 2)
+            }
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(title).font(Theme.Font.largeTitle)
                 Text(subtitle).font(.callout).foregroundStyle(.secondary)

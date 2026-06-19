@@ -11,11 +11,17 @@ struct MainWindowView: View {
     let focus: FocusStore
 
     @State private var section: SidebarSection = .workspaces
+    @State private var sidebarVisible = true
+
+    private let sidebarWidth: CGFloat = 250
 
     var body: some View {
         HStack(spacing: 0) {
-            SidebarView(section: $section, server: server)
-                .frame(width: 250)
+            if sidebarVisible {
+                SidebarView(section: $section, server: server)
+                    .frame(width: sidebarWidth)
+                    .transition(.move(edge: .leading))
+            }
 
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -24,9 +30,15 @@ struct MainWindowView: View {
                 // reference), so resolve semantic colours in light appearance
                 // even when the system is in dark mode.
                 .environment(\.colorScheme, .light)
+                // The page header renders a sidebar toggle from this action, so
+                // every page gets a consistent, well-placed control and ⌃⌘S.
+                .environment(\.toggleSidebar, SidebarToggle(isOpen: sidebarVisible) {
+                    sidebarVisible.toggle()
+                })
         }
-        .frame(minWidth: 960, minHeight: 640)
+        .frame(minWidth: 720, minHeight: 640)
         .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
     }
 
     @ViewBuilder private var detail: some View {
@@ -48,5 +60,23 @@ struct MainWindowView: View {
         case .settings:
             SettingsView(server: server)
         }
+    }
+}
+
+/// The sidebar-collapse action, passed via the environment so any page's header
+/// can render the toggle in a consistent place.
+struct SidebarToggle: @unchecked Sendable {
+    let isOpen: Bool
+    let action: () -> Void
+}
+
+private struct SidebarToggleKey: EnvironmentKey {
+    static let defaultValue: SidebarToggle? = nil
+}
+
+extension EnvironmentValues {
+    var toggleSidebar: SidebarToggle? {
+        get { self[SidebarToggleKey.self] }
+        set { self[SidebarToggleKey.self] = newValue }
     }
 }
