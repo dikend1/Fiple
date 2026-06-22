@@ -14,9 +14,6 @@ struct WorkspacesView: View {
     @State private var editingTile: Tile?
     @State private var isCreating = false
 
-    private let columns = [GridItem(.flexible(), spacing: Theme.Spacing.xl),
-                           GridItem(.flexible(), spacing: Theme.Spacing.xl)]
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
@@ -33,6 +30,10 @@ struct WorkspacesView: View {
                     emptyState
                 } else {
                     workspaces
+                    PinnedAppsSection(
+                        store: store,
+                        onViewAll: { section = .apps }
+                    )
                     summaries
                 }
             }
@@ -90,7 +91,7 @@ struct WorkspacesView: View {
     @ViewBuilder private var workspaces: some View {
         switch layout {
         case .grid:
-            LazyVGrid(columns: columns, spacing: Theme.Spacing.xl) {
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Theme.Spacing.lg) {
                 ForEach(store.tiles) { tile in
                     WorkspaceCard(
                         tile: tile,
@@ -113,6 +114,8 @@ struct WorkspacesView: View {
             }
         }
     }
+
+    private let gridColumns = [GridItem(.adaptive(minimum: 270), spacing: Theme.Spacing.lg)]
 
     private var summaries: some View {
         HStack(alignment: .top, spacing: Theme.Spacing.xl) {
