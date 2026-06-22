@@ -34,7 +34,13 @@ struct QuickActionIcon: View {
     var cornerRadius: CGFloat = 16
 
     var body: some View {
-        if let host = action.faviconHost {
+        if let iconImageData = action.iconImageData, let image = UIImage(data: iconImageData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        } else if let host = action.faviconHost {
             Favicon(host: host, size: size, cornerRadius: cornerRadius, fallbackSymbol: action.fallbackSymbol)
         } else {
             Image(systemName: action.fallbackSymbol)

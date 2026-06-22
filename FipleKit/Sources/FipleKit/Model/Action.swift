@@ -55,10 +55,17 @@ extension ActionKind: Codable {
 public struct Action: Identifiable, Sendable, Equatable, Hashable, Codable {
     public let id: UUID
     public var kind: ActionKind
+    /// Real icon (the app's icon, or a file/folder's Finder icon) as a PNG,
+    /// resolved on the Mac and attached only when a tile snapshot is sent to the
+    /// remote — the phone can't resolve macOS icons itself. Omitted from JSON
+    /// when nil, so stored tiles and older clients are unaffected. Website
+    /// actions leave this nil; the remote fetches their favicon directly.
+    public var iconImageData: Data?
 
-    public init(id: UUID = UUID(), kind: ActionKind) {
+    public init(id: UUID = UUID(), kind: ActionKind, iconImageData: Data? = nil) {
         self.id = id
         self.kind = kind
+        self.iconImageData = iconImageData
     }
 
     /// Short, human-readable summary used in lists and feedback.

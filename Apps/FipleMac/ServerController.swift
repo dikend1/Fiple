@@ -123,7 +123,7 @@ final class ServerController {
         sessionToken = token
         UserDefaults.standard.set(token, forKey: Self.tokenKey)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
-        try? await peer.send(ServerMessage.tilesSnapshot(tiles: store.tiles))
+        try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
     }
 
     /// Run a tile locally from the Mac (one-click preset launch). Recorded in
@@ -136,7 +136,25 @@ final class ServerController {
 
     private func pushSnapshot() async {
         guard isPaired, let peer else { return }
-        try? await peer.send(ServerMessage.tilesSnapshot(tiles: store.tiles))
+        try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
+    }
+
+    /// `store.tiles` enriched with each action's real macOS icon (the app icon or
+    /// the file/folder's Finder icon) as a PNG. Icons live only on the Mac, so we
+    /// resolve them here, just before sending — the phone can't produce them and
+    /// otherwise falls back to a flat SF Symbol. Website actions stay nil; the
+    /// phone fetches their favicon itself.
+    private func snapshotTiles() -> [Tile] {
+        store.tiles.map { tile in
+            var tile = tile
+            tile.actions = tile.actions.map { action in
+                guard action.iconImageData == nil else { return action }
+                var action = action
+                action.iconImageData = SystemIcon.pngData(for: action.kind)
+                return action
+            }
+            return tile
+        }
     }
 
     // MARK: - State

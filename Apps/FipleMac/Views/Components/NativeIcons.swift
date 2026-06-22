@@ -1,4 +1,5 @@
 import AppKit
+import FipleKit
 import SwiftUI
 
 /// Resolves real macOS icons for an app bundle id or a file path.
@@ -12,6 +13,39 @@ enum SystemIcon {
     /// The Finder icon for a file or folder (generic placeholder if it's gone).
     static func file(path: String) -> NSImage {
         NSWorkspace.shared.icon(forFile: path)
+    }
+
+    /// A small PNG of an action's real icon for transmission to the remote:
+    /// the app icon or the file/folder icon. Websites return nil (the phone
+    /// fetches their favicon itself).
+    static func pngData(for kind: ActionKind, maxPixel: CGFloat = 128) -> Data? {
+        switch kind {
+        case let .launchApp(bundleID):
+            return app(bundleID: bundleID)?.pngData(maxPixel: maxPixel)
+        case let .openFile(path, _):
+            return file(path: path).pngData(maxPixel: maxPixel)
+        case .openURL:
+            return nil
+        }
+    }
+}
+
+private extension NSImage {
+    /// Renders the image into a square PNG no larger than `maxPixel`, suitable
+    /// for sending over the wire.
+    func pngData(maxPixel: CGFloat) -> Data? {
+        let side = min(maxPixel, max(size.width, size.height, 1))
+        let target = NSSize(width: side, height: side)
+        let resized = NSImage(size: target)
+        resized.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        draw(in: NSRect(origin: .zero, size: target),
+             from: NSRect(origin: .zero, size: size),
+             operation: .copy, fraction: 1)
+        resized.unlockFocus()
+        guard let tiff = resized.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
     }
 }
 

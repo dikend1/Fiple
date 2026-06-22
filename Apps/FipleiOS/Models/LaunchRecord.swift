@@ -85,11 +85,16 @@ struct QuickAction: Identifiable, Hashable {
     let id: UUID          // the action's id
     let tileID: UUID
     let kind: ActionKind
+    /// The action's real icon (app icon / Finder icon) as a PNG, resolved on the
+    /// Mac and carried in the tile snapshot. Nil for websites, which resolve a
+    /// favicon instead.
+    let iconImageData: Data?
 
     init(action: Action, tileID: UUID) {
         id = action.id
         self.tileID = tileID
         kind = action.kind
+        iconImageData = action.iconImageData
     }
 
     /// De-duplication key so the same app/site/file appears once across tiles.
