@@ -6,21 +6,23 @@ import SwiftUI
 /// share one identity.
 struct FipleMark: View {
     var size: CGFloat = 56
+    /// Glyph colour. Defaults to `.primary` so it adapts to light/dark — the
+    /// right behaviour for a menu-bar icon.
+    var style: AnyShapeStyle = AnyShapeStyle(.primary)
+
+    init(size: CGFloat = 56) {
+        self.size = size
+    }
+
+    init<S: ShapeStyle>(size: CGFloat = 56, style: S) {
+        self.size = size
+        self.style = AnyShapeStyle(style)
+    }
 
     private var thickness: CGFloat { size * 0.2 }
     private var glyphWidth: CGFloat { size * 0.74 }
 
     var body: some View {
-        LinearGradient(
-            colors: [Color(hex: "#5C9DFF"), Color(hex: "#2F6BFF")],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .frame(width: glyphWidth, height: size)
-        .mask { strokes }
-    }
-
-    private var strokes: some View {
         ZStack(alignment: .topLeading) {
             Capsule().frame(width: thickness, height: size)            // stem
             Capsule().frame(width: glyphWidth, height: thickness)      // top bar
@@ -29,6 +31,7 @@ struct FipleMark: View {
                 .offset(y: size * 0.40)
         }
         .frame(width: glyphWidth, height: size, alignment: .topLeading)
+        .foregroundStyle(style)
     }
 }
 

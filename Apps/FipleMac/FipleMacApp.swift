@@ -38,10 +38,9 @@ struct FipleMacApp: App {
             MenuContentView(server: server)
                 .task { await server.start() }
         } label: {
-            Image("FipleLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18, height: 18)
+            // The menu bar wants a compact glyph, not the full white app-icon
+            // tile — use the transparent "F" mark so it sits cleanly in the bar.
+            FipleMark(size: 17)
         }
         .menuBarExtraStyle(.window)
     }
