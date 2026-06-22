@@ -20,7 +20,28 @@ final class RemoteController {
     private(set) var tiles: [Tile] = []
     private(set) var pairError: String?
     private(set) var runningTileID: UUID?
-    private(set) var runResults: [UUID: RunResult] = [:]
+    /// Phone-side launch history. The Mac keeps its own `RecentStore`, but it is
+    /// not sent over the wire, so the remote records what *it* triggers — newest
+    /// first, capped and persisted so it survives relaunch.
+    private(set) var recents: [LaunchRecord] = []
+
+    /// Workspaces are multi-action tiles; single-action tiles are "quick access".
+    var workspaces: [Tile] { tiles.filter(\.isWorkspace) }
+
+    /// Every individual action across all tiles, de-duplicated — the Quick
+    /// Access row. Mirrors the Mac's action catalogue, derived from the same
+    /// tile snapshot.
+    var quickAccess: [QuickAction] {
+        var seen = Set<String>()
+        var result: [QuickAction] = []
+        for tile in tiles {
+            for action in tile.actions {
+                let item = QuickAction(action: action, tileID: tile.id)
+                if seen.insert(item.dedupeKey).inserted { result.append(item) }
+            }
+        }
+        return result
+    }
 
     @ObservationIgnored private let client = FipleClient()
     @ObservationIgnored private var peer: PeerConnection?
@@ -32,6 +53,16 @@ final class RemoteController {
 
     func begin() {
         guard discoverTask == nil else { return }
+        recents = LaunchRecord.load()
+        #if DEBUG
+        // Offline demo mode (`-demo` launch arg / SwiftUI previews): skip discovery
+        // and present the connected UI on fixture tiles, so the screens can be
+        // exercised without a paired Mac. Debug builds only.
+        if ProcessInfo.processInfo.arguments.contains("-demo") {
+            loadDemoFixture()
+            return
+        }
+        #endif
         phase = .searching
         discoverTask = Task { [weak self] in
             guard let self else { return }
@@ -113,7 +144,6 @@ final class RemoteController {
             self.tiles = tiles.sorted { $0.order < $1.order }
 
         case let .runResult(result):
-            runResults[result.tileID] = result
             if runningTileID == result.tileID { runningTileID = nil }
         }
     }
@@ -123,7 +153,19 @@ final class RemoteController {
     func run(_ tile: Tile) async {
         guard phase == .connected, let peer else { return }
         runningTileID = tile.id
+        recordLaunch(of: tile)
         try? await peer.send(ClientMessage.run(tileID: tile.id))
+    }
+
+    private func recordLaunch(of tile: Tile) {
+        recents.insert(LaunchRecord(tile: tile, at: Date()), at: 0)
+        if recents.count > 50 { recents.removeLast(recents.count - 50) }
+        LaunchRecord.save(recents)
+    }
+
+    func clearRecents() {
+        recents = []
+        LaunchRecord.save(recents)
     }
 
     // MARK: - Disconnect
@@ -135,7 +177,6 @@ final class RemoteController {
         peer = nil
         tiles = []
         macName = nil
-        runResults = [:]
         phase = endpoint == nil ? .searching : .readyToPair
     }
 
@@ -161,4 +202,54 @@ final class RemoteController {
         get { UserDefaults.standard.string(forKey: "fiple.macID") }
         set { UserDefaults.standard.set(newValue, forKey: "fiple.macID") }
     }
+
+    // MARK: - Demo / preview fixture (debug builds only)
+
+    #if DEBUG
+    /// Puts the controller into a connected state on representative fixture tiles
+    /// (workspaces + single-action apps/sites/files). Used only by `-demo` /
+    /// previews so the UI can be exercised without a live Mac.
+    func loadDemoFixture() {
+        let demo = RemoteController.demoTiles
+        macName = "MacBook Pro M3"
+        tiles = demo
+        recents = [
+            LaunchRecord(tile: demo[3], at: Date().addingTimeInterval(-300)),
+            LaunchRecord(tile: demo[0], at: Date().addingTimeInterval(-3600)),
+            LaunchRecord(tile: demo[5], at: Date().addingTimeInterval(-7200)),
+            LaunchRecord(tile: demo[2], at: Date().addingTimeInterval(-90000)),
+            LaunchRecord(tile: demo[4], at: Date().addingTimeInterval(-180000)),
+        ]
+        phase = .connected
+    }
+
+    static let demoTiles: [Tile] = [
+        Tile(name: "Start Coding", subtitle: "Everything you need to code",
+             iconSystemName: "chevron.left.forwardslash.chevron.right", colorHex: "#34C759", order: 0,
+             actions: [
+                Action(kind: .launchApp(bundleID: "com.apple.dt.Xcode")),
+                Action(kind: .openURL(URL(string: "https://github.com")!)),
+                Action(kind: .launchApp(bundleID: "com.apple.Terminal")),
+             ]),
+        Tile(name: "Design Session", subtitle: "Design and prototype",
+             iconSystemName: "pencil.and.outline", colorHex: "#8B5CF6", order: 1,
+             actions: [
+                Action(kind: .openURL(URL(string: "https://figma.com")!)),
+                Action(kind: .openURL(URL(string: "https://dribbble.com")!)),
+                Action(kind: .launchApp(bundleID: "com.apple.Preview")),
+             ]),
+        Tile(name: "Deep Work", subtitle: "Focus and get things done",
+             iconSystemName: "target", colorHex: "#3B82F6", order: 2,
+             actions: [
+                Action(kind: .launchApp(bundleID: "com.apple.Notes")),
+                Action(kind: .openURL(URL(string: "https://music.apple.com")!)),
+             ]),
+        Tile(name: "ChatGPT", iconSystemName: "sparkle", colorHex: "#10A37F", order: 3,
+             actions: [Action(kind: .openURL(URL(string: "https://chatgpt.com")!))]),
+        Tile(name: "Notion", iconSystemName: "note.text", colorHex: "#111111", order: 4,
+             actions: [Action(kind: .openURL(URL(string: "https://notion.so")!))]),
+        Tile(name: "Roadmap.pdf", iconSystemName: "doc.fill", colorHex: "#E5483D", order: 5,
+             actions: [Action(kind: .openFile(path: "/Users/me/Documents/Roadmap.pdf", openWith: nil))]),
+    ]
+    #endif
 }
