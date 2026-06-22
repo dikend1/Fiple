@@ -10,7 +10,10 @@ struct MenuContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "square.grid.2x2.fill").foregroundStyle(.tint)
+                Image("FipleLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
                 Text("Fiple").font(.headline)
                 Spacer()
                 statusBadge
