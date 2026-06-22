@@ -97,33 +97,22 @@ struct HomeView: View {
         let items = controller.quickAccess
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionHeader(title: "Quick Access") {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.brandLink)
-                        .frame(width: 32, height: 32)
-                        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 10))
-                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.Palette.hairline))
-                }
+                SectionHeader("Quick Access")
 
                 LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 5),
-                    spacing: Theme.Spacing.lg
+                    columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 4),
+                    spacing: Theme.Spacing.md
                 ) {
                     ForEach(items) { item in
                         Button {
                             run(item)
                         } label: {
-                            VStack(spacing: 6) {
-                                QuickActionIcon(action: item, size: 56)
-                                Text(item.title)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Theme.Palette.secondary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
+                            QuickAccessTile(
+                                item: item,
+                                isRunning: controller.runningTileID == item.tileID
+                            )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(QuickTilePressStyle())
                     }
                 }
             }
