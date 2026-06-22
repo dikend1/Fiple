@@ -2,8 +2,8 @@ import SwiftUI
 
 /// A four-box pairing-code entry: the OTP-style field used on the pairing
 /// screen. Renders one rounded box per digit with the active slot highlighted,
-/// and drives input through a single hidden text field so the system keyboard,
-/// SMS autofill and paste all behave normally.
+/// empty slots showing a dash, and drives input through a single hidden text
+/// field so the system keyboard, SMS autofill and paste all behave normally.
 struct CodeEntryField: View {
     @Binding var code: String
     /// Called when the field reaches a full four digits (e.g. to auto-submit).
@@ -22,7 +22,6 @@ struct CodeEntryField: View {
                 .focused($focused)
                 .foregroundStyle(.clear)
                 .tint(.clear)
-                .accentColor(.clear)
                 .onChange(of: code) { _, new in
                     let digits = String(new.filter(\.isNumber).prefix(length))
                     if digits != code { code = digits }
@@ -30,7 +29,7 @@ struct CodeEntryField: View {
                 }
                 .accessibilityLabel("Pairing code")
 
-            HStack(spacing: Theme.Spacing.md) {
+            HStack(spacing: 12) {
                 ForEach(0..<length, id: \.self) { index in
                     box(at: index)
                 }
@@ -45,28 +44,36 @@ struct CodeEntryField: View {
     private func box(at index: Int) -> some View {
         let digits = Array(code)
         let hasDigit = index < digits.count
-        let isActive = focused && index == digits.count
-            || (focused && index == length - 1 && digits.count == length)
+        let isActive = focused
+            && (index == digits.count || (index == length - 1 && digits.count == length))
 
-        return Text(hasDigit ? String(digits[index]) : "")
-            .font(.system(size: 30, weight: .semibold, design: .rounded))
-            .foregroundStyle(Theme.Palette.label)
-            .frame(width: 60, height: 70)
-            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
-            .overlay {
-                RoundedRectangle(cornerRadius: Theme.Radius.control)
-                    .strokeBorder(
-                        isActive ? Theme.Palette.brandLink : Theme.Palette.hairline,
-                        lineWidth: isActive ? 2 : 1
-                    )
-            }
-            .overlay(alignment: .center) {
-                // A blinking caret in the active, empty slot.
-                if isActive && !hasDigit {
-                    Caret()
+        return ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Theme.Palette.surface)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(
+                            isActive ? Theme.Palette.brandLink : Theme.Palette.hairline,
+                            lineWidth: isActive ? 2 : 1.5
+                        )
                 }
+                .shadow(color: .black.opacity(0.04), radius: 7, y: 3)
+
+            if hasDigit {
+                Text(String(digits[index]))
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.Palette.label)
+            } else if isActive {
+                Caret()
+            } else {
+                Text("–")
+                    .font(.system(size: 26, weight: .regular))
+                    .foregroundStyle(Color(hex: "#C7CDD6"))
             }
-            .animation(.easeOut(duration: 0.15), value: isActive)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 84)
+        .animation(.easeOut(duration: 0.15), value: isActive)
     }
 }
 
@@ -77,7 +84,7 @@ private struct Caret: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 1)
             .fill(Theme.Palette.brandLink)
-            .frame(width: 2, height: 28)
+            .frame(width: 2, height: 30)
             .opacity(on ? 1 : 0)
             .onAppear {
                 withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
