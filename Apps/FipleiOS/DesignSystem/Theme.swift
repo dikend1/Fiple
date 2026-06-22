@@ -22,6 +22,8 @@ enum Theme {
     enum Palette {
         /// Brand green — active tab, primary affordances, "Connected" status.
         static let brand = Color(hex: "#34C759")
+        /// Blue used for inline links / "View all" / the add affordance.
+        static let brandLink = Color(hex: "#2F6BFF")
         /// App background behind the cards.
         static let background = Color(hex: "#F4F5F7")
         /// Card / elevated surface.

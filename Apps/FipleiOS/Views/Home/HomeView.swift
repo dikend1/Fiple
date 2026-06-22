@@ -6,11 +6,16 @@ import SwiftUI
 /// workspaces use. Tapping a card or icon runs it on the Mac.
 struct HomeView: View {
     let controller: RemoteController
+    /// Switches the tab bar to Settings — wired to the gear in the header so it
+    /// matches the mockup without nesting a second settings navigation stack.
+    var onOpenSettings: () -> Void = {}
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                    header
+
                     ConnectionCard(controller: controller)
 
                     workspaces
@@ -18,10 +23,34 @@ struct HomeView: View {
                     quickAccess
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.top, Theme.Spacing.sm)
                 .padding(.bottom, Theme.Spacing.xxl)
             }
             .background(Theme.Palette.background)
-            .navigationTitle("Fiple")
+            .toolbar(.hidden, for: .navigationBar)
+        }
+    }
+
+    // MARK: Header
+
+    /// The large "Fiple" wordmark with the settings gear on the same row, matching
+    /// the mockup — a custom header rather than a large nav title so the gear sits
+    /// beside the title instead of above it.
+    private var header: some View {
+        HStack(alignment: .center) {
+            Text("Fiple")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundStyle(Theme.Palette.label)
+            Spacer()
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.secondary)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Palette.hairline))
+            }
+            .accessibilityLabel("Settings")
         }
     }
 
@@ -32,9 +61,9 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SectionHeader(title: "Workspaces") {
                 if !items.isEmpty {
-                    Text("\(items.count)")
+                    Text("View all")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.secondary)
+                        .foregroundStyle(Theme.Palette.brandLink)
                 }
             }
 
@@ -68,7 +97,14 @@ struct HomeView: View {
         let items = controller.quickAccess
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionHeader("Quick Access")
+                SectionHeader(title: "Quick Access") {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.brandLink)
+                        .frame(width: 32, height: 32)
+                        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.Palette.hairline))
+                }
 
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 5),
