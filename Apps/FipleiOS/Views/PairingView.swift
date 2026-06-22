@@ -6,16 +6,16 @@ struct PairingView: View {
     let controller: RemoteController
     @State private var code = ""
     @State private var showSearchHint = false
-    @FocusState private var codeFocused: Bool
 
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
 
-            VStack(spacing: 12) {
-                Image(systemName: "square.grid.2x2.fill")
-                    .font(.system(size: 52))
-                    .foregroundStyle(.tint)
+            VStack(spacing: 14) {
+                Image("FipleLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 96, height: 96)
                 Text("Fiple").font(.largeTitle.bold())
                 Text("One tap back into your flow")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -30,45 +30,40 @@ struct PairingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
                     .transition(.opacity)
-                
             }
 
-            if controller.phase != .searching {
-                VStack(spacing: 14) {
-                    TextField("0000", text: $code)
-                        .keyboardType(.numberPad)
-                        .multilineTextAlignment(.center)
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .focused($codeFocused)
-                        .onChange(of: code) { _, new in
-                            code = String(new.filter(\.isNumber).prefix(4))
-                        }
-
-                    if let error = controller.pairError {
-                        Text(error).font(.caption).foregroundStyle(.red)
-                    }
-
-                    Button {
-                        Task { await controller.submitCode(code) }
-                    } label: {
-                        Text(controller.phase == .connecting ? "Connecting…" : "Connect")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(code.count != 4 || controller.phase == .connecting)
+            // Code entry is available at all times before connecting: typed while
+            // still searching, it's held and submitted the moment the Mac appears.
+            VStack(spacing: 16) {
+                CodeEntryField(code: $code) {
+                    Task { await controller.submitCode(code) }
                 }
-                .padding(.horizontal, 40)
+
+                if let error = controller.pairError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                } else if controller.phase == .searching, code.count == 4 {
+                    Text("Code ready — pairing as soon as your Mac is found.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                Button {
+                    Task { await controller.submitCode(code) }
+                } label: {
+                    Text(connectLabel)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(code.count != 4 || controller.phase == .connecting)
             }
+            .padding(.horizontal, 40)
 
             Spacer()
             Text("Enter the code shown in the Fiple menu-bar app on your Mac.")
                 .font(.footnote).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
-        }
-        .onChange(of: controller.phase) { _, phase in
-            codeFocused = (phase == .readyToPair)
         }
         .task(id: controller.phase) {
             showSearchHint = false
@@ -77,6 +72,14 @@ struct PairingView: View {
             if controller.phase == .searching {
                 withAnimation { showSearchHint = true }
             }
+        }
+    }
+
+    private var connectLabel: String {
+        switch controller.phase {
+        case .connecting: return "Connecting…"
+        case .searching: return code.count == 4 ? "Pair when found" : "Connect"
+        default: return "Connect"
         }
     }
 

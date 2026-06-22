@@ -72,11 +72,18 @@ final class RemoteController {
         }
     }
 
+    /// A code the user typed while we were still searching. We hold it and pair
+    /// automatically the instant a Mac appears, so they never have to re-enter it.
+    @ObservationIgnored private var pendingCode: PairingCode?
+
     private func found(_ endpoint: NWEndpoint) async {
         guard self.endpoint == nil else { return } // MVP: first Mac wins
         self.endpoint = endpoint
         if let token = storedToken {
             await authenticate(.reconnect(token: token))
+        } else if let pending = pendingCode {
+            pendingCode = nil
+            await authenticate(.pair(code: pending.value))
         } else {
             phase = .readyToPair
         }
@@ -87,6 +94,12 @@ final class RemoteController {
     func submitCode(_ code: String) async {
         guard let parsed = PairingCode(code) else {
             pairError = "Enter the 4-digit code shown on your Mac"
+            return
+        }
+        // No Mac on the LAN yet — remember the code and pair as soon as one shows up.
+        guard endpoint != nil else {
+            pendingCode = parsed
+            pairError = nil
             return
         }
         await authenticate(.pair(code: parsed.value))
