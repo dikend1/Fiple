@@ -121,6 +121,43 @@ struct StatColumn: View {
     }
 }
 
+/// A circular "next" arrow used to page a horizontal carousel.
+struct CarouselArrow: View {
+    var systemName: String = "chevron.right"
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 34, height: 34)
+                .background(Theme.Palette.surface, in: Circle())
+                .overlay(Circle().strokeBorder(Theme.Palette.hairline))
+                .shadow(color: .black.opacity(0.06), radius: 5, y: 2)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The page-indicator dots beneath a carousel.
+struct CarouselDots: View {
+    let count: Int
+    let current: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<max(count, 1), id: \.self) { i in
+                Circle()
+                    .fill(i == current ? Color.primary.opacity(0.6) : Color.primary.opacity(0.14))
+                    .frame(width: 7, height: 7)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 /// A titled content panel (Recent / Focus blocks) with an optional trailing
 /// "View all" action in its header.
 struct Panel<Content: View>: View {
