@@ -31,7 +31,7 @@ struct WorkspaceCardView: View {
 
             Spacer(minLength: Theme.Spacing.sm)
 
-            stats
+            actionIcons
 
             HStack {
                 Spacer()
@@ -62,22 +62,30 @@ struct WorkspaceCardView: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Palette.hairline))
     }
 
-    private var stats: some View {
-        HStack(spacing: Theme.Spacing.lg) {
-            if tile.appCount > 0 { stat(tile.appCount, "Apps") }
-            if tile.websiteCount > 0 { stat(tile.websiteCount, "Web") }
-            if tile.shortcutCount > 0 { stat(tile.shortcutCount, tile.shortcutCount == 1 ? "File" : "Files") }
-        }
-    }
-
-    private func stat(_ value: Int, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("\(value)")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.Palette.label)
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.Palette.secondary)
+    /// The real icons of the apps / sites / files this workspace launches, shown
+    /// as a compact row with a "+N" chip for the overflow — the at-a-glance "what's
+    /// inside" preview from the mockup, in place of raw stat counts.
+    private var actionIcons: some View {
+        let actions = tile.actions
+        let maxVisible = 4
+        let visible = actions.count > maxVisible ? Array(actions.prefix(3)) : actions
+        let overflow = actions.count - visible.count
+        return HStack(spacing: 6) {
+            ForEach(visible) { action in
+                QuickActionIcon(
+                    action: QuickAction(action: action, tileID: tile.id),
+                    size: 30,
+                    cornerRadius: 8
+                )
+            }
+            if overflow > 0 {
+                Text("+\(overflow)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.Palette.secondary)
+                    .frame(height: 30)
+                    .padding(.horizontal, 8)
+                    .background(Color.black.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 }
