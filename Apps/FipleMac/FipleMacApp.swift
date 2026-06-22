@@ -38,7 +38,10 @@ struct FipleMacApp: App {
             MenuContentView(server: server)
                 .task { await server.start() }
         } label: {
-            Image(systemName: "square.grid.2x2.fill")
+            Image("FipleLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
         }
         .menuBarExtraStyle(.window)
     }
