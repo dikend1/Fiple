@@ -21,7 +21,7 @@ struct ConnectionCard: View {
                 Text(controller.macName ?? "Your Mac")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(Theme.Palette.label)
-                Text(connected ? "Ready to launch" : "Reconnecting")
+                Text(connected ? "Last active just now" : "Reconnecting")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.Palette.secondary)
             }
