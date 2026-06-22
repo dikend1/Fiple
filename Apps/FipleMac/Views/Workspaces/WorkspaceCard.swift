@@ -1,7 +1,8 @@
 import FipleKit
 import SwiftUI
 
-/// A workspace tile rendered as a rich gradient card (grid layout).
+/// A workspace tile rendered as a clean white card (carousel/grid layout).
+/// Edit and Delete live in the "…" menu; the card surfaces a single Run action.
 struct WorkspaceCard: View {
     let tile: Tile
     let onRun: () -> Void
@@ -15,7 +16,7 @@ struct WorkspaceCard: View {
                     iconImageData: tile.iconImageData,
                     systemName: tile.iconSystemName,
                     colorHex: tile.colorHex,
-                    size: 52
+                    size: 50
                 )
                 Spacer()
                 Menu {
@@ -35,7 +36,7 @@ struct WorkspaceCard: View {
             }
 
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(tile.name).font(Theme.Font.cardTitle)
+                Text(tile.name).font(Theme.Font.cardTitle).lineLimit(1)
                 Text(tile.subtitle ?? "\(tile.actions.count) actions")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -51,37 +52,29 @@ struct WorkspaceCard: View {
                 Spacer()
             }
 
-            HStack(spacing: Theme.Spacing.sm) {
+            HStack {
                 Spacer()
-                Button(action: onEdit) {
-                    Text("Edit").font(.system(size: 13, weight: .medium))
-                        .padding(.horizontal, Theme.Spacing.md)
-                        .padding(.vertical, 7)
-                        .background(Theme.Palette.surface, in: Capsule())
-                        .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
-                }
-                .buttonStyle(.plain)
-
                 Button(action: onRun) {
                     HStack(spacing: 5) {
                         Image(systemName: "play.fill").font(.system(size: 11, weight: .bold))
                         Text("Run").font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, 7)
-                    .background(Color(hex: tile.colorHex), in: Capsule())
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, Theme.Spacing.lg)
+                    .padding(.vertical, 8)
+                    .background(Theme.Palette.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
+                    .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Accent(hex: tile.colorHex).cardGradient)
         .background(Theme.Palette.surface)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Palette.hairline))
-        .shadow(color: .black.opacity(0.04), radius: 8, y: 2)
+        .shadow(color: .black.opacity(0.05), radius: 12, y: 4)
     }
 
     private var statDivider: some View {
