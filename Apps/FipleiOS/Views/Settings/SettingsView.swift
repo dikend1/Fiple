@@ -1,12 +1,21 @@
+import FipleKit
 import SwiftUI
 
 /// Settings: connected devices, app preferences, and the about/legal section.
-/// All controls are presentation-only stand-ins for now.
+/// Mirrors the Mac app's section order (Devices → Preferences → About); every
+/// control performs a real action.
 struct SettingsView: View {
     let controller: RemoteController
 
-    @State private var launchAtLogin = true
+    @Environment(\.openURL) private var openURL
     @State private var confirmingUnpair = false
+    @State private var confirmingClearHistory = false
+
+    private var version: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        return "\(v) (\(b))"
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,6 +35,12 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You'll need to enter the pairing code again to reconnect.")
+            }
+            .alert("Clear launch history?", isPresented: $confirmingClearHistory) {
+                Button("Clear", role: .destructive) { controller.clearRecents() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes the list of recently launched items on this iPhone.")
             }
         }
     }
@@ -88,15 +103,9 @@ struct SettingsView: View {
             GroupLabel("Preferences")
 
             VStack(spacing: 0) {
-                SettingsRow(icon: "circle.dashed", title: "Appearance", value: "System")
-                rowDivider
-                SettingsToggleRow(icon: "bolt.fill", title: "Launch at Login", isOn: $launchAtLogin)
-                rowDivider
-                SettingsRow(icon: "bell", title: "Notifications")
-                rowDivider
-                SettingsRow(icon: "circle.circle", title: "Default Browser", value: "Chrome")
-                rowDivider
-                SettingsRow(icon: "globe", title: "Language", value: "English")
+                SettingsRow(icon: "clock.arrow.circlepath", title: "Clear Launch History") {
+                    confirmingClearHistory = true
+                }
             }
             .fipleCard()
         }
@@ -109,13 +118,19 @@ struct SettingsView: View {
             GroupLabel("About")
 
             VStack(spacing: 0) {
-                SettingsRow(icon: "info.circle", title: "About Fiple")
+                SettingsValueRow(icon: "info.circle", title: "Version", value: version)
                 rowDivider
-                SettingsRow(icon: "questionmark.circle", title: "Help & Support")
+                SettingsRow(icon: "questionmark.circle", title: "Help & Support") {
+                    openURL(FipleLinks.support)
+                }
                 rowDivider
-                SettingsRow(icon: "lock", title: "Privacy Policy")
+                SettingsRow(icon: "lock", title: "Privacy Policy") {
+                    openURL(FipleLinks.privacy)
+                }
                 rowDivider
-                SettingsRow(icon: "doc.text", title: "Terms of Service")
+                SettingsRow(icon: "doc.text", title: "Terms of Service") {
+                    openURL(FipleLinks.terms)
+                }
             }
             .fipleCard()
         }
@@ -147,9 +162,10 @@ private struct SettingsRow: View {
     let icon: String
     let title: String
     var value: String? = nil
+    let action: () -> Void
 
     var body: some View {
-        Button {} label: {
+        Button(action: action) {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: icon)
                     .font(.system(size: 17, weight: .regular))
@@ -175,11 +191,11 @@ private struct SettingsRow: View {
     }
 }
 
-/// A settings row with a trailing toggle.
-private struct SettingsToggleRow: View {
+/// A non-interactive settings row showing a read-only value (e.g. app version).
+private struct SettingsValueRow: View {
     let icon: String
     let title: String
-    @Binding var isOn: Bool
+    let value: String
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -191,12 +207,12 @@ private struct SettingsToggleRow: View {
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.Palette.label)
             Spacer()
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .tint(Theme.Palette.brand)
+            Text(value)
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.Palette.secondary)
         }
         .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm + 2)
+        .padding(.vertical, Theme.Spacing.md + 2)
     }
 }
 
