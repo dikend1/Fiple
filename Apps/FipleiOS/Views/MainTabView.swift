@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Root of the remote: four flat sections in a tab bar, matching the mockups.
-/// Each tab owns its own `NavigationStack`. Screens are presentation-only and
-/// run on sample data until the real device/session logic is wired up.
+/// Root of the remote: flat sections in a tab bar. Each tab owns its own
+/// `NavigationStack`. Home / Recent / Settings are driven by the live
+/// `RemoteController`.
 struct MainTabView: View {
     let controller: RemoteController
 
-    enum Tab: Hashable { case home, focus, recent, settings }
+    enum Tab: Hashable { case home, recent, settings }
 
     @State private var selection: Tab = .home
 
@@ -15,10 +15,6 @@ struct MainTabView: View {
             HomeView(controller: controller) { selection = .settings }
                 .tag(Tab.home)
                 .tabItem { Label("Home", systemImage: "house.fill") }
-
-            FocusListView()
-                .tag(Tab.focus)
-                .tabItem { Label("Focus", systemImage: "circle.circle.fill") }
 
             RecentView(controller: controller)
                 .tag(Tab.recent)

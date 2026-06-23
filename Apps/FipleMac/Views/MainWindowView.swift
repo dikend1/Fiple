@@ -8,7 +8,6 @@ struct MainWindowView: View {
     let store: TileStore
     let server: ServerController
     let recents: RecentStore
-    let focus: FocusStore
     let pinned: PinnedAppsStore
 
     @State private var section: SidebarSection = .workspaces
@@ -51,17 +50,15 @@ struct MainWindowView: View {
     @ViewBuilder private var detail: some View {
         switch section {
         case .workspaces:
-            WorkspacesView(store: store, server: server, recents: recents, focus: focus, pinned: pinned, section: $section)
+            WorkspacesView(store: store, server: server, recents: recents, pinned: pinned, section: $section)
         case .apps:
-            ActionCatalogView(store: store, kind: .apps)
+            ActionCatalogView(store: store, pinned: pinned, kind: .apps)
         case .websites:
-            ActionCatalogView(store: store, kind: .websites)
+            ActionCatalogView(store: store, pinned: pinned, kind: .websites)
         case .shortcuts:
-            ActionCatalogView(store: store, kind: .shortcuts)
+            ActionCatalogView(store: store, pinned: pinned, kind: .shortcuts)
         case .recent:
             RecentView(recents: recents, onRun: run(tileID:))
-        case .focus:
-            FocusView(focus: focus)
         case .devices:
             DevicesView(server: server)
         case .settings:
