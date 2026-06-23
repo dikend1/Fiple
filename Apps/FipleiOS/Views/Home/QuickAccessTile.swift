@@ -23,8 +23,10 @@ struct QuickAccessTile: View {
             Text(item.title)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Theme.Palette.label)
-                .lineLimit(1)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
                 .minimumScaleFactor(0.8)
+                .frame(height: 30, alignment: .top)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.lg)
