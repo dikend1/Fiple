@@ -1,3 +1,4 @@
+import AppKit
 import FipleKit
 import Foundation
 import Observation
@@ -22,6 +23,47 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
         iconImageData = tile.iconImageData
         colorHex = tile.colorHex
         self.timestamp = timestamp
+    }
+
+    /// A launch of a single Fiple Bar action (app / website / file).
+    @MainActor init(action: Action, at timestamp: Date) {
+        id = UUID()
+        tileID = action.id
+        tileName = Self.name(for: action.kind)
+        iconSystemName = Self.symbol(for: action.kind)
+        iconImageData = action.iconImageData ?? SystemIcon.pngData(for: action.kind)
+        colorHex = Self.color(for: action.kind)
+        self.timestamp = timestamp
+    }
+
+    @MainActor private static func name(for kind: ActionKind) -> String {
+        switch kind {
+        case let .launchApp(bundleID):
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+            }
+            return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
+        case let .openURL(url):
+            return (url.host()?.replacingOccurrences(of: "www.", with: "")) ?? url.absoluteString
+        case let .openFile(path, _):
+            return (path as NSString).lastPathComponent
+        }
+    }
+
+    private static func symbol(for kind: ActionKind) -> String {
+        switch kind {
+        case .launchApp: "app.fill"
+        case .openURL: "globe"
+        case .openFile: "doc.fill"
+        }
+    }
+
+    private static func color(for kind: ActionKind) -> String {
+        switch kind {
+        case .launchApp: "#84CC16"
+        case .openURL: "#0EA5E9"
+        case .openFile: "#F59E0B"
+        }
     }
 }
 
@@ -48,6 +90,13 @@ final class RecentStore {
     /// Record a launch. Date is injected so this stays testable and pure.
     func record(_ tile: Tile, at date: Date = Date()) {
         records.insert(RunRecord(tile: tile, at: date), at: 0)
+        if records.count > limit { records.removeLast(records.count - limit) }
+        commit()
+    }
+
+    /// Record a single Fiple Bar action launch.
+    func record(_ action: Action, at date: Date = Date()) {
+        records.insert(RunRecord(action: action, at: date), at: 0)
         if records.count > limit { records.removeLast(records.count - limit) }
         commit()
     }

@@ -30,6 +30,27 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         self.timestamp = timestamp
     }
 
+    /// A launch of a single Fiple Bar action (app / website / file).
+    init(action: Action, at timestamp: Date) {
+        let quick = QuickAction(action: action, tileID: action.id)
+        id = UUID()
+        tileID = action.id
+        name = quick.title
+        iconSystemName = quick.fallbackSymbol
+        iconImageData = action.iconImageData
+        colorHex = "#3B82F6"
+        category = LaunchRecord.category(for: action.kind)
+        self.timestamp = timestamp
+    }
+
+    private static func category(for kind: ActionKind) -> Category {
+        switch kind {
+        case .launchApp: .app
+        case .openURL: .website
+        case .openFile: .file
+        }
+    }
+
     /// A multi-action tile is a workspace; a single-action tile is categorised by
     /// its one action.
     private static func category(for tile: Tile) -> Category {
