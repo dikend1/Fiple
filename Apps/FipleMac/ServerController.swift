@@ -25,6 +25,7 @@ final class ServerController {
     let macID: String = ServerController.stableMacID()
 
     @ObservationIgnored let store: TileStore
+    @ObservationIgnored let pinned: PinnedAppsStore
     @ObservationIgnored private let server = FipleServer()
     @ObservationIgnored private let executor = MacActionExecutor()
     @ObservationIgnored private var peer: PeerConnection?
@@ -36,11 +37,15 @@ final class ServerController {
     /// disconnect, which forces a fresh code.
     @ObservationIgnored private var sessionToken: String?
 
-    init(store: TileStore) {
+    init(store: TileStore, pinned: PinnedAppsStore) {
         self.store = store
+        self.pinned = pinned
         sessionToken = UserDefaults.standard.string(forKey: Self.tokenKey)
         store.didChange = { [weak self] in
             Task { await self?.pushSnapshot() }
+        }
+        pinned.didChange = { [weak self] in
+            Task { await self?.pushFipleBar() }
         }
     }
 
@@ -113,6 +118,14 @@ final class ServerController {
             lastRun = result
             didRun?(tile)
             try? await peer.send(ServerMessage.runResult(result))
+
+        case let .runAction(action):
+            guard isPaired else { return }
+            let actionResult = await executor.execute(action)
+            // Report under the action's own id so the phone can clear its spinner.
+            let result = RunResult(tileID: action.id, actions: [actionResult])
+            lastRun = result
+            try? await peer.send(ServerMessage.runResult(result))
         }
     }
 
@@ -124,6 +137,7 @@ final class ServerController {
         UserDefaults.standard.set(token, forKey: Self.tokenKey)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
         try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
+        try? await peer.send(ServerMessage.fipleBar(actions: snapshotFipleBar()))
     }
 
     /// Run a tile locally from the Mac (one-click preset launch). Recorded in
@@ -137,6 +151,22 @@ final class ServerController {
     private func pushSnapshot() async {
         guard isPaired, let peer else { return }
         try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
+    }
+
+    private func pushFipleBar() async {
+        guard isPaired, let peer else { return }
+        try? await peer.send(ServerMessage.fipleBar(actions: snapshotFipleBar()))
+    }
+
+    /// The Fiple Bar with each action's real macOS icon resolved to a PNG (apps
+    /// and files); website actions stay nil so the phone fetches their favicon.
+    private func snapshotFipleBar() -> [Action] {
+        pinned.actions.map { action in
+            guard action.iconImageData == nil else { return action }
+            var action = action
+            action.iconImageData = SystemIcon.pngData(for: action.kind)
+            return action
+        }
     }
 
     /// `store.tiles` enriched with each action's real macOS icon (the app icon or

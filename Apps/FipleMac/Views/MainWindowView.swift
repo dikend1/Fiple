@@ -9,6 +9,7 @@ struct MainWindowView: View {
     let server: ServerController
     let recents: RecentStore
     let focus: FocusStore
+    let pinned: PinnedAppsStore
 
     @State private var section: SidebarSection = .workspaces
     @State private var sidebarVisible = true
@@ -50,7 +51,7 @@ struct MainWindowView: View {
     @ViewBuilder private var detail: some View {
         switch section {
         case .workspaces:
-            WorkspacesView(store: store, server: server, recents: recents, focus: focus, section: $section)
+            WorkspacesView(store: store, server: server, recents: recents, focus: focus, pinned: pinned, section: $section)
         case .apps:
             ActionCatalogView(store: store, kind: .apps)
         case .websites:

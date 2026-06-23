@@ -7,9 +7,9 @@ import SwiftUI
 /// slot reveals Add, which opens an App / URL / File chooser like New Workspace.
 struct PinnedAppsSection: View {
     let store: TileStore
+    let bar: PinnedAppsStore
     var onViewAll: () -> Void
 
-    @State private var bar = PinnedAppsStore()
     @State private var scrolledPage: Int?
     @State private var isAdding = false
 

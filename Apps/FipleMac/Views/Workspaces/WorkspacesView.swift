@@ -7,6 +7,7 @@ struct WorkspacesView: View {
     let server: ServerController
     let recents: RecentStore
     let focus: FocusStore
+    let pinned: PinnedAppsStore
     @Binding var section: SidebarSection
 
     private enum Layout: String { case grid, list }
@@ -30,12 +31,16 @@ struct WorkspacesView: View {
                     emptyState
                 } else {
                     workspaces
-                    PinnedAppsSection(
-                        store: store,
-                        onViewAll: { section = .apps }
-                    )
-                    summaries
                 }
+
+                // Fiple Bar, Recent and Focus stay visible even with no
+                // workspaces — only the workspaces area itself goes empty.
+                PinnedAppsSection(
+                    store: store,
+                    bar: pinned,
+                    onViewAll: { section = .apps }
+                )
+                summaries
             }
             .padding(Theme.Spacing.xxl)
             .padding(.top, Theme.Spacing.sm) // breathing room under traffic lights
@@ -142,15 +147,23 @@ struct WorkspacesView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No workspaces yet", systemImage: "square.grid.2x2")
-        } description: {
+        VStack(spacing: Theme.Spacing.md) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 30))
+                .foregroundStyle(.secondary)
+            Text("No workspaces yet")
+                .font(.system(size: 17, weight: .semibold))
             Text("Create a workspace to launch apps, websites, and files from your iPhone.")
-        } actions: {
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
             Button("New Workspace") { isCreating = true }
                 .buttonStyle(.borderedProminent)
+                .padding(.top, Theme.Spacing.xs)
         }
-        .frame(maxWidth: .infinity, minHeight: 280)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xxl)
+        .fipleCard()
     }
 }
 
