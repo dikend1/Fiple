@@ -3,7 +3,7 @@ import Foundation
 /// The navigable sections of the main window, grouped as in the design.
 enum SidebarSection: String, CaseIterable, Identifiable {
     case workspaces, apps, websites, shortcuts
-    case recent, focus
+    case recent
     case devices, settings
 
     var id: String { rawValue }
@@ -15,7 +15,6 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .websites: "Websites"
         case .shortcuts: "Shortcuts"
         case .recent: "Recent"
-        case .focus: "Focus"
         case .devices: "Devices"
         case .settings: "Settings"
         }
@@ -28,7 +27,6 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .websites: "globe"
         case .shortcuts: "bolt"
         case .recent: "clock"
-        case .focus: "target"
         case .devices: "iphone.gen3"
         case .settings: "gearshape"
         }
@@ -37,7 +35,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     /// Visual grouping with separators between groups, matching the reference.
     static let groups: [[SidebarSection]] = [
         [.workspaces, .apps, .websites, .shortcuts],
-        [.recent, .focus],
+        [.recent],
         [.devices, .settings],
     ]
 }

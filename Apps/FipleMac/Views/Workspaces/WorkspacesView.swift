@@ -6,7 +6,6 @@ struct WorkspacesView: View {
     let store: TileStore
     let server: ServerController
     let recents: RecentStore
-    let focus: FocusStore
     let pinned: PinnedAppsStore
     @Binding var section: SidebarSection
 
@@ -123,17 +122,8 @@ struct WorkspacesView: View {
     private let gridColumns = [GridItem(.adaptive(minimum: 270), spacing: Theme.Spacing.lg)]
 
     private var summaries: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.xl) {
-            Panel(title: "Recent", icon: "clock", actionTitle: "View all") { section = .recent } content: {
-                RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet", onRun: runByID)
-            }
-            Panel(title: "Focus", icon: "target", actionTitle: "View all") { section = .focus } content: {
-                VStack(spacing: Theme.Spacing.md) {
-                    ForEach(focus.modes.prefix(4)) { mode in
-                        FocusToggleRow(mode: mode) { focus.toggle(mode.id) }
-                    }
-                }
-            }
+        Panel(title: "Recent", icon: "clock", actionTitle: "View all") { section = .recent } content: {
+            RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet", onRun: runByID)
         }
     }
 

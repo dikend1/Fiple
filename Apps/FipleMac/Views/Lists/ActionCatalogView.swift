@@ -6,6 +6,7 @@ import SwiftUI
 /// Shortcuts sidebar pages). A read-only catalogue — editing happens on the tile.
 struct ActionCatalogView: View {
     let store: TileStore
+    let pinned: PinnedAppsStore
     let kind: Kind
 
     enum Kind {
@@ -47,19 +48,27 @@ struct ActionCatalogView: View {
 
     private struct Entry: Identifiable {
         let id: UUID
-        let tileID: UUID
+        /// Parent workspace, or nil when the entry comes from the Fiple Bar.
+        let tileID: UUID?
         let kind: ActionKind
         let title: String
-        let workspace: String
+        let source: String
     }
 
+    /// Actions of this kind across all workspaces *and* the Fiple Bar.
     private var entries: [Entry] {
-        store.tiles.flatMap { tile in
-            tile.actions.compactMap { action -> Entry? in
-                guard let title = label(for: action.kind) else { return nil }
-                return Entry(id: action.id, tileID: tile.id, kind: action.kind, title: title, workspace: tile.name)
+        var result: [Entry] = []
+        for tile in store.tiles {
+            for action in tile.actions {
+                guard let title = label(for: action.kind) else { continue }
+                result.append(Entry(id: action.id, tileID: tile.id, kind: action.kind, title: title, source: tile.name))
             }
         }
+        for action in pinned.actions {
+            guard let title = label(for: action.kind) else { continue }
+            result.append(Entry(id: action.id, tileID: nil, kind: action.kind, title: title, source: "Fiple Bar"))
+        }
+        return result
     }
 
     var body: some View {
@@ -96,7 +105,7 @@ struct ActionCatalogView: View {
             Button("Remove", role: .destructive) { remove(entry) }
             Button("Cancel", role: .cancel) {}
         } message: { entry in
-            Text("“\(entry.title)” will be removed from the “\(entry.workspace)” workspace.")
+            Text("“\(entry.title)” will be removed from “\(entry.source)”.")
         }
     }
 
@@ -105,7 +114,7 @@ struct ActionCatalogView: View {
             icon(for: entry.kind)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.title).font(.system(size: 14, weight: .medium)).lineLimit(1)
-                Text(entry.workspace).font(.caption).foregroundStyle(.secondary)
+                Text(entry.source).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if hoveredID == entry.id {
@@ -121,7 +130,7 @@ struct ActionCatalogView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Remove from \(entry.workspace)")
+                .help("Remove from \(entry.source)")
                 .onHover { deleteHoverID = $0 ? entry.id : (deleteHoverID == entry.id ? nil : deleteHoverID) }
             }
         }
@@ -129,16 +138,20 @@ struct ActionCatalogView: View {
         .contentShape(Rectangle())
         .onHover { hoveredID = $0 ? entry.id : (hoveredID == entry.id ? nil : hoveredID) }
         .contextMenu {
-            Button("Remove from \(entry.workspace)", role: .destructive) { pendingRemoval = entry }
+            Button("Remove from \(entry.source)", role: .destructive) { pendingRemoval = entry }
         }
     }
 
     /// Removes this action from its parent workspace (the catalogue's source of
     /// truth). The list updates automatically as the store is observed.
     private func remove(_ entry: Entry) {
-        guard var tile = store.tiles.first(where: { $0.id == entry.tileID }) else { return }
-        tile.actions.removeAll { $0.id == entry.id }
-        store.update(tile)
+        if let tileID = entry.tileID {
+            guard var tile = store.tiles.first(where: { $0.id == tileID }) else { return }
+            tile.actions.removeAll { $0.id == entry.id }
+            store.update(tile)
+        } else {
+            pinned.remove(entry.id)
+        }
     }
 
     /// A real icon for the action: the app's icon, the site favicon, or the
