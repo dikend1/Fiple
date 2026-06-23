@@ -9,11 +9,13 @@ public enum ClientMessage: Sendable, Equatable {
     case reconnect(token: String)
     /// Trigger a tile by id.
     case run(tileID: UUID)
+    /// Trigger a single Fiple Bar action (app / website / file).
+    case runAction(Action)
 }
 
 extension ClientMessage: Codable {
-    private enum Tag: String, Codable { case pair, reconnect, run }
-    private enum CodingKeys: String, CodingKey { case type, code, token, tileID }
+    private enum Tag: String, Codable { case pair, reconnect, run, runAction }
+    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, action }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -21,6 +23,7 @@ extension ClientMessage: Codable {
         case .pair: self = .pair(code: try c.decode(String.self, forKey: .code))
         case .reconnect: self = .reconnect(token: try c.decode(String.self, forKey: .token))
         case .run: self = .run(tileID: try c.decode(UUID.self, forKey: .tileID))
+        case .runAction: self = .runAction(try c.decode(Action.self, forKey: .action))
         }
     }
 
@@ -36,6 +39,9 @@ extension ClientMessage: Codable {
         case let .run(tileID):
             try c.encode(Tag.run, forKey: .type)
             try c.encode(tileID, forKey: .tileID)
+        case let .runAction(action):
+            try c.encode(Tag.runAction, forKey: .type)
+            try c.encode(action, forKey: .action)
         }
     }
 }
@@ -49,14 +55,17 @@ public enum ServerMessage: Sendable, Equatable {
     case pairRejected(reason: String)
     /// The current tile list (sent on connect and whenever tiles change).
     case tilesSnapshot(tiles: [Tile])
+    /// The current Fiple Bar (curated quick actions; sent on connect and whenever
+    /// the bar changes). Icons are resolved on the Mac and carried here.
+    case fipleBar(actions: [Action])
     /// Per-action result of a triggered tile.
     case runResult(RunResult)
 }
 
 extension ServerMessage: Codable {
-    private enum Tag: String, Codable { case paired, pairRejected, tilesSnapshot, runResult }
+    private enum Tag: String, Codable { case paired, pairRejected, tilesSnapshot, fipleBar, runResult }
     private enum CodingKeys: String, CodingKey {
-        case type, macID, macName, token, reason, tiles, result
+        case type, macID, macName, token, reason, tiles, actions, result
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,6 +81,8 @@ extension ServerMessage: Codable {
             self = .pairRejected(reason: try c.decode(String.self, forKey: .reason))
         case .tilesSnapshot:
             self = .tilesSnapshot(tiles: try c.decode([Tile].self, forKey: .tiles))
+        case .fipleBar:
+            self = .fipleBar(actions: try c.decode([Action].self, forKey: .actions))
         case .runResult:
             self = .runResult(try c.decode(RunResult.self, forKey: .result))
         }
@@ -91,6 +102,9 @@ extension ServerMessage: Codable {
         case let .tilesSnapshot(tiles):
             try c.encode(Tag.tilesSnapshot, forKey: .type)
             try c.encode(tiles, forKey: .tiles)
+        case let .fipleBar(actions):
+            try c.encode(Tag.fipleBar, forKey: .type)
+            try c.encode(actions, forKey: .actions)
         case let .runResult(result):
             try c.encode(Tag.runResult, forKey: .type)
             try c.encode(result, forKey: .result)
