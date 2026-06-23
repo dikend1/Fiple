@@ -20,6 +20,8 @@ final class ServerController {
     /// Called after a tile is run, so launch history can be recorded without the
     /// transport layer depending on the Recent store.
     @ObservationIgnored var didRun: (@MainActor (Tile) -> Void)?
+    /// Called after a single Fiple Bar action is run, so it lands in history too.
+    @ObservationIgnored var didRunAction: (@MainActor (Action) -> Void)?
 
     let macName = Host.current().localizedName ?? "Mac"
     let macID: String = ServerController.stableMacID()
@@ -125,6 +127,7 @@ final class ServerController {
             // Report under the action's own id so the phone can clear its spinner.
             let result = RunResult(tileID: action.id, actions: [actionResult])
             lastRun = result
+            didRunAction?(action)
             try? await peer.send(ServerMessage.runResult(result))
         }
     }

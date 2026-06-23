@@ -182,11 +182,18 @@ final class RemoteController {
     func runAction(_ action: Action) async {
         guard phase == .connected, let peer else { return }
         runningActionID = action.id
+        recordLaunch(of: action)
         try? await peer.send(ClientMessage.runAction(action))
     }
 
     private func recordLaunch(of tile: Tile) {
         recents.insert(LaunchRecord(tile: tile, at: Date()), at: 0)
+        if recents.count > 50 { recents.removeLast(recents.count - 50) }
+        LaunchRecord.save(recents)
+    }
+
+    private func recordLaunch(of action: Action) {
+        recents.insert(LaunchRecord(action: action, at: Date()), at: 0)
         if recents.count > 50 { recents.removeLast(recents.count - 50) }
         LaunchRecord.save(recents)
     }
