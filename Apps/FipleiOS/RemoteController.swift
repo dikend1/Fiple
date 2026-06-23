@@ -20,6 +20,10 @@ final class RemoteController {
     private(set) var tiles: [Tile] = []
     private(set) var pairError: String?
     private(set) var runningTileID: UUID?
+    private(set) var runningActionID: UUID?
+    /// The Mac's curated Fiple Bar — quick actions synced from the Mac (apps,
+    /// websites, files), tapped here to launch on the Mac.
+    private(set) var fipleBar: [Action] = []
     /// Phone-side launch history. The Mac keeps its own `RecentStore`, but it is
     /// not sent over the wire, so the remote records what *it* triggers — newest
     /// first, capped and persisted so it survives relaunch.
@@ -156,8 +160,12 @@ final class RemoteController {
         case let .tilesSnapshot(tiles):
             self.tiles = tiles.sorted { $0.order < $1.order }
 
+        case let .fipleBar(actions):
+            self.fipleBar = actions
+
         case let .runResult(result):
             if runningTileID == result.tileID { runningTileID = nil }
+            if runningActionID == result.tileID { runningActionID = nil }
         }
     }
 
@@ -168,6 +176,13 @@ final class RemoteController {
         runningTileID = tile.id
         recordLaunch(of: tile)
         try? await peer.send(ClientMessage.run(tileID: tile.id))
+    }
+
+    /// Trigger a single Fiple Bar action on the Mac.
+    func runAction(_ action: Action) async {
+        guard phase == .connected, let peer else { return }
+        runningActionID = action.id
+        try? await peer.send(ClientMessage.runAction(action))
     }
 
     private func recordLaunch(of tile: Tile) {
@@ -226,6 +241,7 @@ final class RemoteController {
         let demo = RemoteController.demoTiles
         macName = "MacBook Pro M3"
         tiles = demo
+        fipleBar = Array(demo.flatMap(\.actions).prefix(6))
         recents = [
             LaunchRecord(tile: demo[3], at: Date().addingTimeInterval(-300)),
             LaunchRecord(tile: demo[0], at: Date().addingTimeInterval(-3600)),

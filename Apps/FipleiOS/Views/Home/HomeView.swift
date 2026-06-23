@@ -94,22 +94,22 @@ struct HomeView: View {
     // MARK: Quick Access
 
     @ViewBuilder private var quickAccess: some View {
-        let items = controller.quickAccess
+        let items = controller.fipleBar
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionHeader("Quick Access")
+                SectionHeader("Fiple Bar")
 
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 4),
                     spacing: Theme.Spacing.md
                 ) {
-                    ForEach(items) { item in
+                    ForEach(items) { action in
                         Button {
-                            run(item)
+                            Task { await controller.runAction(action) }
                         } label: {
                             QuickAccessTile(
-                                item: item,
-                                isRunning: controller.runningTileID == item.tileID
+                                item: QuickAction(action: action, tileID: action.id),
+                                isRunning: controller.runningActionID == action.id
                             )
                         }
                         .buttonStyle(QuickTilePressStyle())
