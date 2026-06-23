@@ -127,16 +127,79 @@ struct QuickAction: Identifiable, Hashable {
         }
     }
 
-    /// Short human label ("Xcode", "github.com", "Roadmap.pdf").
+    /// Short human label ("Xcode", "YouTube", "Roadmap").
     var title: String {
         switch kind {
         case let .launchApp(bundleID):
-            (bundleID.split(separator: ".").last.map(String.init) ?? bundleID).capitalized
+            appTitle(for: bundleID)
         case let .openURL(url):
-            (url.host()?.replacingOccurrences(of: "www.", with: "")) ?? url.absoluteString
+            websiteTitle(for: url)
         case let .openFile(path, _):
-            (path as NSString).lastPathComponent
+            fileTitle(for: path)
         }
+    }
+
+    private func appTitle(for bundleID: String) -> String {
+        let normalized = bundleID.lowercased()
+        let knownApps: [(String, String)] = [
+            ("com.microsoft.vscode", "VS Code"),
+            ("claudefordesktop", "Claude"),
+            ("com.openai.chat", "ChatGPT"),
+            ("chatgpt", "ChatGPT"),
+            ("notion", "Notion"),
+            ("telegram", "Telegram")
+        ]
+
+        if let match = knownApps.first(where: { normalized.contains($0.0) }) {
+            return match.1
+        }
+
+        let rawName = bundleID.split(separator: ".").last.map(String.init) ?? bundleID
+        return prettifiedName(rawName)
+    }
+
+    private func websiteTitle(for url: URL) -> String {
+        guard let host = url.host()?.replacingOccurrences(of: "www.", with: "") else {
+            return url.absoluteString
+        }
+
+        let baseName = host.split(separator: ".").first.map(String.init) ?? host
+        let knownSites = [
+            "youtube": "YouTube",
+            "linkedin": "LinkedIn",
+            "github": "GitHub",
+            "chatgpt": "ChatGPT"
+        ]
+
+        return knownSites[baseName.lowercased()] ?? prettifiedName(baseName)
+    }
+
+    private func fileTitle(for path: String) -> String {
+        let name = (path as NSString).deletingPathExtension.isEmpty
+            ? (path as NSString).lastPathComponent
+            : (path as NSString).deletingPathExtension
+        return prettifiedName((name as NSString).lastPathComponent)
+            .replacingOccurrences(of: "Development", with: "Dev")
+    }
+
+    private func prettifiedName(_ value: String) -> String {
+        let spaced = value
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(
+                of: "([a-z0-9])([A-Z])",
+                with: "$1 $2",
+                options: .regularExpression
+            )
+
+        return spaced
+            .split(separator: " ")
+            .map { word in
+                let text = String(word)
+                if text.uppercased() == text { return text }
+                return text.prefix(1).uppercased() + text.dropFirst()
+            }
+            .joined(separator: " ")
     }
 
     /// Favicon host for websites; nil otherwise.
