@@ -9,6 +9,8 @@ import Observation
 @Observable
 final class PinnedAppsStore {
     private(set) var actions: [Action]
+    /// Notifies when the bar changes, so the server can re-sync it to the phone.
+    @ObservationIgnored var didChange: (() -> Void)?
     private let key = "fiple.fipleBar"
     private let seededKey = "fiple.fipleBar.seeded"
 
@@ -54,6 +56,7 @@ final class PinnedAppsStore {
         if let data = try? JSONEncoder().encode(actions) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        didChange?()
     }
 
     /// Stable identity for de-duplication (one Fiple Bar entry per app/site/file).
