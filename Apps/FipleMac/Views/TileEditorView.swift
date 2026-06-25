@@ -60,6 +60,7 @@ struct TileEditorView: View {
     @State private var colorHex: String
     @State private var drafts: [ActionDraft]
     @State private var installedApps: [InstalledApp] = []
+    @State private var shortcuts: [String] = []
     /// The host we last fetched a favicon for, so typing doesn't refetch.
     @State private var faviconHost: String?
     /// The last name we auto-filled, so re-picking another app/URL can replace
@@ -112,6 +113,7 @@ struct TileEditorView: View {
                         ActionDraftRow(
                             draft: $draft,
                             installedApps: installedApps,
+                            shortcuts: shortcuts,
                             onAppChosen: applyAppMetadata,
                             onURLChanged: applyURLMetadata
                         ) {
@@ -136,7 +138,10 @@ struct TileEditorView: View {
         }
         .frame(width: 460, height: 560)
         .preferredColorScheme(.light) // keep the editor light like the rest of the app
-        .task { installedApps = await InstalledApps.all() }
+        .task {
+            installedApps = await InstalledApps.all()
+            shortcuts = await InstalledShortcuts.all()
+        }
     }
 
     private var swatches: some View {
@@ -236,6 +241,7 @@ struct TileIconPreview: View {
 private struct ActionDraftRow: View {
     @Binding var draft: ActionDraft
     let installedApps: [InstalledApp]
+    let shortcuts: [String]
     let onAppChosen: (InstalledApp) -> Void
     let onURLChanged: (String) -> Void
     let onDelete: () -> Void
@@ -261,13 +267,7 @@ private struct ActionDraftRow: View {
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: draft.url) { _, newValue in onURLChanged(newValue) }
             case .runShortcut:
-                VStack(alignment: .leading, spacing: 4) {
-                    TextField("Shortcut name", text: $draft.shortcutName)
-                        .textFieldStyle(.roundedBorder)
-                    Text("Enter the exact name of a shortcut from the Shortcuts app.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                ShortcutPickerField(shortcuts: shortcuts, name: $draft.shortcutName)
             }
         }
         .padding(.vertical, 4)
@@ -351,6 +351,111 @@ private struct AppPickerField: View {
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Picks one of the user's Apple Shortcuts (listed via "Shortcuts Events"). The
+/// search field doubles as manual entry: if automation is denied or the shortcut
+/// isn't listed, the user can still type a name and "Use" it.
+struct ShortcutPickerField: View {
+    let shortcuts: [String]
+    @Binding var name: String
+
+    @State private var showing = false
+    @State private var query = ""
+    @State private var shortcutsIcon: NSImage?
+
+    @ViewBuilder private var glyph: some View {
+        if let shortcutsIcon {
+            Image(nsImage: shortcutsIcon).resizable().frame(width: 22, height: 22)
+        } else {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22, height: 22)
+        }
+    }
+
+    private var filtered: [String] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return shortcuts }
+        return shortcuts.filter { $0.localizedCaseInsensitiveContains(q) }
+    }
+
+    private var typedQuery: String { query.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        Button { showing = true } label: {
+            HStack(spacing: 8) {
+                glyph
+                Text(name.isEmpty ? "Choose a shortcut…" : name)
+                    .foregroundStyle(name.isEmpty ? .secondary : .primary)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.black.opacity(0.12)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .task { shortcutsIcon = SystemIcon.shortcutsAppIcon() }
+        .popover(isPresented: $showing, arrowEdge: .bottom) {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search or type a name", text: $query).textFieldStyle(.plain)
+                }
+                .padding(10)
+                Divider()
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        // Manual fallback: use exactly what was typed.
+                        if !typedQuery.isEmpty && !shortcuts.contains(where: { $0.caseInsensitiveCompare(typedQuery) == .orderedSame }) {
+                            row(label: "Use “\(typedQuery)”", value: typedQuery, manual: true)
+                        }
+                        ForEach(filtered, id: \.self) { shortcut in
+                            row(label: shortcut, value: shortcut, manual: false)
+                        }
+                        if shortcuts.isEmpty && typedQuery.isEmpty {
+                            Text("No shortcuts found.\nType a name above, or allow access when prompted.")
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.vertical, 18).padding(.horizontal, 10)
+                        }
+                    }
+                    .padding(6)
+                }
+                .frame(height: 280)
+            }
+            .frame(width: 320)
+        }
+        .onChange(of: showing) { _, isShowing in if !isShowing { query = "" } }
+    }
+
+    private func row(label: String, value: String, manual: Bool) -> some View {
+        Button {
+            name = value
+            showing = false
+        } label: {
+            HStack(spacing: 10) {
+                if manual {
+                    Image(systemName: "character.cursor.ibeam")
+                        .foregroundStyle(.secondary).frame(width: 22, height: 22)
+                } else {
+                    glyph
+                }
+                Text(label).lineLimit(1)
+                Spacer()
+                if value == name {
+                    Image(systemName: "checkmark").font(.caption).foregroundStyle(.tint)
+                }
+            }
+            .padding(.horizontal, 8).padding(.vertical, 7)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
