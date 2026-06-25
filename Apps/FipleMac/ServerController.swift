@@ -67,7 +67,13 @@ final class ServerController {
         acceptTask = Task { [weak self] in
             guard let self else { return }
             for await peer in await self.server.newConnections {
-                await self.handle(peer)
+                // Handle each connection in its own task. If we `await handle`
+                // here, the accept loop blocks inside the message loop until that
+                // connection closes — so a phone that relaunches (its old TCP
+                // socket not yet torn down on our side) never gets served: the
+                // new connection sits unhandled and the phone hangs on
+                // "Connecting…". Spawning a task lets us accept it immediately.
+                Task { [weak self] in await self?.handle(peer) }
             }
         }
     }
@@ -88,6 +94,13 @@ final class ServerController {
     // MARK: - Connection handling
 
     private func handle(_ peer: PeerConnection) async {
+        // A new connection supersedes the previous one (MVP: a single phone).
+        // Close the stale socket so its message loop ends and it stops lingering
+        // as the "current" peer — otherwise a relaunched phone can't reconnect.
+        if let old = self.peer, old !== peer {
+            FipleLog.connection.info("superseding previous connection")
+            await old.close()
+        }
         self.peer = peer
         isPaired = false
         do {
