@@ -161,31 +161,30 @@ final class ServerController {
         try? await peer.send(ServerMessage.fipleBar(actions: snapshotFipleBar()))
     }
 
-    /// The Fiple Bar with each action's real macOS icon resolved to a PNG (apps
-    /// and files); website actions stay nil so the phone fetches their favicon.
-    private func snapshotFipleBar() -> [Action] {
-        pinned.actions.map { action in
-            guard action.iconImageData == nil else { return action }
-            var action = action
+    /// Enriches an outgoing action with the data only the Mac can resolve: the
+    /// app's real icon (PNG) and its real display name. Both live only on the
+    /// Mac (the phone can't produce an app icon, and deriving a name from a
+    /// bundle id yields junk), so we attach them just before sending. Website and
+    /// shortcut actions keep a nil icon — the phone draws a favicon / SF Symbol.
+    private func resolved(_ action: Action) -> Action {
+        var action = action
+        if action.iconImageData == nil {
             action.iconImageData = SystemIcon.pngData(for: action.kind)
-            return action
         }
+        if action.displayName == nil, case let .launchApp(bundleID) = action.kind {
+            action.displayName = SystemIcon.appDisplayName(bundleID: bundleID)
+        }
+        return action
     }
 
-    /// `store.tiles` enriched with each action's real macOS icon (the app icon or
-    /// the file/folder's Finder icon) as a PNG. Icons live only on the Mac, so we
-    /// resolve them here, just before sending — the phone can't produce them and
-    /// otherwise falls back to a flat SF Symbol. Website actions stay nil; the
-    /// phone fetches their favicon itself.
+    private func snapshotFipleBar() -> [Action] {
+        pinned.actions.map(resolved)
+    }
+
     private func snapshotTiles() -> [Tile] {
         store.tiles.map { tile in
             var tile = tile
-            tile.actions = tile.actions.map { action in
-                guard action.iconImageData == nil else { return action }
-                var action = action
-                action.iconImageData = SystemIcon.pngData(for: action.kind)
-                return action
-            }
+            tile.actions = tile.actions.map(resolved)
             return tile
         }
     }

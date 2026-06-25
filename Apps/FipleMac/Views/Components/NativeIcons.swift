@@ -2,7 +2,7 @@ import AppKit
 import FipleKit
 import SwiftUI
 
-/// Resolves real macOS icons for an app bundle id or a file path.
+/// Resolves real macOS icons for an app bundle id.
 enum SystemIcon {
     /// The installed app's icon, or nil when the bundle id can't be resolved.
     static func app(bundleID: String) -> NSImage? {
@@ -10,21 +10,22 @@ enum SystemIcon {
         return NSWorkspace.shared.icon(forFile: url.path)
     }
 
-    /// The Finder icon for a file or folder (generic placeholder if it's gone).
-    static func file(path: String) -> NSImage {
-        NSWorkspace.shared.icon(forFile: path)
+    /// The installed app's Finder display name (e.g. "Books"), or nil when the
+    /// bundle id can't be resolved. Resolved here on the Mac and carried in the
+    /// snapshot so the phone shows a real name, not a mangled bundle id.
+    static func appDisplayName(bundleID: String) -> String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
     }
 
     /// A small PNG of an action's real icon for transmission to the remote:
-    /// the app icon or the file/folder icon. Websites return nil (the phone
-    /// fetches their favicon itself).
+    /// the app icon. Websites and shortcuts return nil (the phone draws a
+    /// favicon / SF Symbol itself).
     static func pngData(for kind: ActionKind, maxPixel: CGFloat = 128) -> Data? {
         switch kind {
         case let .launchApp(bundleID):
             return app(bundleID: bundleID)?.pngData(maxPixel: maxPixel)
-        case let .openFile(path, _):
-            return file(path: path).pngData(maxPixel: maxPixel)
-        case .openURL:
+        case .runShortcut, .openURL:
             return nil
         }
     }

@@ -10,8 +10,8 @@ struct MacActionExecutor: ActionExecutor {
             await launchApp(bundleID: bundleID, actionID: action.id)
         case let .openURL(url):
             await openURL(url, actionID: action.id)
-        case let .openFile(path, openWith):
-            await openFile(path: path, openWith: openWith, actionID: action.id)
+        case let .runShortcut(name):
+            await runShortcut(named: name, actionID: action.id)
         }
     }
 
@@ -38,19 +38,24 @@ struct MacActionExecutor: ActionExecutor {
         }
     }
 
-    private func openFile(path: String, openWith: String?, actionID: UUID) async -> ActionResult {
-        let fileURL = URL(fileURLWithPath: path)
-        guard FileManager.default.fileExists(atPath: path) else {
-            return .failure(actionID, "File not found: \(path)")
+    /// Runs an Apple Shortcut by name via the `shortcuts://` URL scheme. Opening
+    /// a URL is permitted under the App Sandbox, so this needs no file-system
+    /// access. The shortcut itself (created by the user in the Shortcuts app)
+    /// carries whatever file/script permissions it requires.
+    private func runShortcut(named name: String, actionID: UUID) async -> ActionResult {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .failure(actionID, "Shortcut name is empty")
         }
-        let config = NSWorkspace.OpenConfiguration()
+        var components = URLComponents()
+        components.scheme = "shortcuts"
+        components.host = "run-shortcut"
+        components.queryItems = [URLQueryItem(name: "name", value: trimmed)]
+        guard let url = components.url else {
+            return .failure(actionID, "Invalid shortcut name: \(trimmed)")
+        }
         do {
-            if let openWith,
-               let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: openWith) {
-                _ = try await NSWorkspace.shared.open([fileURL], withApplicationAt: appURL, configuration: config)
-            } else {
-                _ = try await NSWorkspace.shared.open(fileURL, configuration: config)
-            }
+            _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
             return .success(actionID)
         } catch {
             return .failure(actionID, error.localizedDescription)
