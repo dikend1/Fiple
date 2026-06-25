@@ -154,16 +154,16 @@ struct ActionCatalogView: View {
         }
     }
 
-    /// A real icon for the action: the app's icon, the site favicon, or the
-    /// Finder icon of the file/folder.
+    /// A real icon for the action: the app's icon, the site favicon, or a
+    /// lightning symbol for a Shortcut.
     @ViewBuilder private func icon(for kind: ActionKind) -> some View {
         switch kind {
         case let .launchApp(bundleID):
             NativeIconTile(image: SystemIcon.app(bundleID: bundleID), fallbackSymbol: "app.dashed")
         case let .openURL(url):
             FaviconView(host: url.host() ?? "")
-        case let .openFile(path, _):
-            NativeIconTile(image: SystemIcon.file(path: path), fallbackSymbol: "folder")
+        case .runShortcut:
+            NativeIconTile(image: nil, fallbackSymbol: "bolt.fill")
         }
     }
 
@@ -174,8 +174,8 @@ struct ActionCatalogView: View {
             return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
         case let (.websites, .openURL(url)):
             return url.host() ?? url.absoluteString
-        case let (.shortcuts, .openFile(path, _)):
-            return (path as NSString).lastPathComponent
+        case let (.shortcuts, .runShortcut(name)):
+            return name
         default:
             return nil
         }
