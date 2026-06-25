@@ -53,6 +53,11 @@ final class RemoteController {
     @ObservationIgnored private var discoverTask: Task<Void, Never>?
     @ObservationIgnored private var receiveTask: Task<Void, Never>?
 
+    /// When each in-flight tile/action was triggered, so we can log the
+    /// round-trip latency (tap → Mac confirms) when the result returns. This is
+    /// the number to watch for "does it feel instant?" — aim for < ~150 ms.
+    @ObservationIgnored private var runStartedAt: [UUID: Date] = [:]
+
     // MARK: - Lifecycle
 
     func begin() {
@@ -83,7 +88,9 @@ final class RemoteController {
     private func found(_ endpoint: NWEndpoint) async {
         guard self.endpoint == nil else { return } // MVP: first Mac wins
         self.endpoint = endpoint
+        FipleLog.discovery.info("Mac found on LAN")
         if let token = storedToken {
+            FipleLog.pairing.info("auto-reconnecting with stored token")
             await authenticate(.reconnect(token: token))
         } else if let pending = pendingCode {
             pendingCode = nil
@@ -119,6 +126,7 @@ final class RemoteController {
             startReceiving(on: peer)
             try await peer.send(auth)
         } catch {
+            FipleLog.pairing.error("authenticate failed: \(error.localizedDescription)")
             pairError = "Couldn't reach your Mac"
             phase = .readyToPair
         }
@@ -143,6 +151,7 @@ final class RemoteController {
     private func handle(_ message: ServerMessage) async {
         switch message {
         case let .paired(macID, macName, token):
+            FipleLog.pairing.info("paired with '\(macName)'")
             self.macName = macName
             storedToken = token
             storedMacID = macID
@@ -151,6 +160,7 @@ final class RemoteController {
 
         case let .pairRejected(reason):
             // a rejected reconnect means the remembered pairing is stale
+            FipleLog.pairing.notice("pair rejected: \(reason)")
             storedToken = nil
             await peer?.close()
             peer = nil
@@ -158,12 +168,18 @@ final class RemoteController {
             phase = .readyToPair
 
         case let .tilesSnapshot(tiles):
+            FipleLog.pairing.debug("received \(tiles.count) tile(s)")
             self.tiles = tiles.sorted { $0.order < $1.order }
 
         case let .fipleBar(actions):
             self.fipleBar = actions
 
         case let .runResult(result):
+            if let started = runStartedAt.removeValue(forKey: result.tileID) {
+                let ms = Int(Date().timeIntervalSince(started) * 1000)
+                let ok = result.actions.allSatisfy(\.ok)
+                FipleLog.execution.info("round-trip \(ms)ms — \(ok ? "ok" : "had failures")")
+            }
             if runningTileID == result.tileID { runningTileID = nil }
             if runningActionID == result.tileID { runningActionID = nil }
         }
@@ -173,7 +189,9 @@ final class RemoteController {
 
     func run(_ tile: Tile) async {
         guard phase == .connected, let peer else { return }
+        FipleLog.execution.info("triggering tile '\(tile.name)'")
         runningTileID = tile.id
+        runStartedAt[tile.id] = Date()
         recordLaunch(of: tile)
         try? await peer.send(ClientMessage.run(tileID: tile.id))
     }
@@ -181,7 +199,9 @@ final class RemoteController {
     /// Trigger a single Fiple Bar action on the Mac.
     func runAction(_ action: Action) async {
         guard phase == .connected, let peer else { return }
+        FipleLog.execution.info("triggering action: \(action.displayLabel)")
         runningActionID = action.id
+        runStartedAt[action.id] = Date()
         recordLaunch(of: action)
         try? await peer.send(ClientMessage.runAction(action))
     }
@@ -220,6 +240,7 @@ final class RemoteController {
         self.peer = nil
         // Transient drop: auto-reconnect silently if we still trust this Mac.
         if let token = storedToken, endpoint != nil {
+            FipleLog.connection.notice("connection dropped — auto-reconnecting")
             await authenticate(.reconnect(token: token))
         } else {
             phase = endpoint == nil ? .searching : .readyToPair
