@@ -9,14 +9,15 @@ public enum ActionKind: Sendable, Equatable, Hashable {
     case launchApp(bundleID: String)
     /// Open a URL in the system default handler.
     case openURL(URL)
-    /// Open a file or folder, optionally with a specific app (by bundle id).
-    case openFile(path: String, openWith: String?)
+    /// Run an Apple Shortcut by name (triggered via the `shortcuts://` URL
+    /// scheme on the Mac — sandbox-safe, no file-system access required).
+    case runShortcut(name: String)
 }
 
 extension ActionKind: Codable {
-    private enum Tag: String, Codable { case launchApp, openURL, openFile }
+    private enum Tag: String, Codable { case launchApp, openURL, runShortcut }
     private enum CodingKeys: String, CodingKey {
-        case type, bundleID, url, path, openWith
+        case type, bundleID, url, name
     }
 
     public init(from decoder: Decoder) throws {
@@ -26,11 +27,8 @@ extension ActionKind: Codable {
             self = .launchApp(bundleID: try c.decode(String.self, forKey: .bundleID))
         case .openURL:
             self = .openURL(try c.decode(URL.self, forKey: .url))
-        case .openFile:
-            self = .openFile(
-                path: try c.decode(String.self, forKey: .path),
-                openWith: try c.decodeIfPresent(String.self, forKey: .openWith)
-            )
+        case .runShortcut:
+            self = .runShortcut(name: try c.decode(String.self, forKey: .name))
         }
     }
 
@@ -43,10 +41,9 @@ extension ActionKind: Codable {
         case let .openURL(url):
             try c.encode(Tag.openURL, forKey: .type)
             try c.encode(url, forKey: .url)
-        case let .openFile(path, openWith):
-            try c.encode(Tag.openFile, forKey: .type)
-            try c.encode(path, forKey: .path)
-            try c.encodeIfPresent(openWith, forKey: .openWith)
+        case let .runShortcut(name):
+            try c.encode(Tag.runShortcut, forKey: .type)
+            try c.encode(name, forKey: .name)
         }
     }
 }
@@ -55,17 +52,25 @@ extension ActionKind: Codable {
 public struct Action: Identifiable, Sendable, Equatable, Hashable, Codable {
     public let id: UUID
     public var kind: ActionKind
-    /// Real icon (the app's icon, or a file/folder's Finder icon) as a PNG,
-    /// resolved on the Mac and attached only when a tile snapshot is sent to the
+    /// Real icon (the app's Finder icon) as a PNG, resolved on the Mac and
+    /// attached only when a tile snapshot is sent to the
     /// remote — the phone can't resolve macOS icons itself. Omitted from JSON
     /// when nil, so stored tiles and older clients are unaffected. Website
     /// actions leave this nil; the remote fetches their favicon directly.
     public var iconImageData: Data?
+    /// The app's real display name (e.g. "Books", "Cursor"), resolved on the Mac
+    /// where `NSWorkspace` is available and attached to the tile snapshot. The
+    /// phone can't resolve this from a bundle id alone — deriving it there yields
+    /// junk like "I Books X" or "230313mzl4w4u92" — so it uses this when present.
+    /// Omitted from JSON when nil, so stored tiles and older clients are
+    /// unaffected. Website and shortcut actions leave it nil.
+    public var displayName: String?
 
-    public init(id: UUID = UUID(), kind: ActionKind, iconImageData: Data? = nil) {
+    public init(id: UUID = UUID(), kind: ActionKind, iconImageData: Data? = nil, displayName: String? = nil) {
         self.id = id
         self.kind = kind
         self.iconImageData = iconImageData
+        self.displayName = displayName
     }
 
     /// Short, human-readable summary used in lists and feedback.
@@ -73,7 +78,7 @@ public struct Action: Identifiable, Sendable, Equatable, Hashable, Codable {
         switch kind {
         case let .launchApp(bundleID): "Launch \(bundleID)"
         case let .openURL(url): "Open \(url.absoluteString)"
-        case let .openFile(path, _): "Open \(path)"
+        case let .runShortcut(name): "Run shortcut \(name)"
         }
     }
 }

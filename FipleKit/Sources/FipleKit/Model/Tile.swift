@@ -57,8 +57,8 @@ public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
         actions.filter { if case .openURL = $0.kind { true } else { false } }.count
     }
 
-    /// Number of file/folder actions — the "Shortcuts" stat on a workspace card.
+    /// Number of Shortcut actions — the "Shortcuts" stat on a workspace card.
     public var shortcutCount: Int {
-        actions.filter { if case .openFile = $0.kind { true } else { false } }.count
+        actions.filter { if case .runShortcut = $0.kind { true } else { false } }.count
     }
 }
