@@ -5,14 +5,22 @@ import Foundation
 /// Executes actions on the Mac via `NSWorkspace`. Stateless, hence `Sendable`.
 struct MacActionExecutor: ActionExecutor {
     func execute(_ action: Action) async -> ActionResult {
+        FipleLog.execution.info("executing: \(action.displayLabel)")
+        let result: ActionResult
         switch action.kind {
         case let .launchApp(bundleID):
-            await launchApp(bundleID: bundleID, actionID: action.id)
+            result = await launchApp(bundleID: bundleID, actionID: action.id)
         case let .openURL(url):
-            await openURL(url, actionID: action.id)
+            result = await openURL(url, actionID: action.id)
         case let .runShortcut(name):
-            await runShortcut(named: name, actionID: action.id)
+            result = await runShortcut(named: name, actionID: action.id)
         }
+        if result.ok {
+            FipleLog.execution.info("ok: \(action.displayLabel)")
+        } else {
+            FipleLog.execution.error("failed: \(action.displayLabel) — \(result.error ?? "unknown error")")
+        }
+        return result
     }
 
     private func launchApp(bundleID: String, actionID: UUID) async -> ActionResult {

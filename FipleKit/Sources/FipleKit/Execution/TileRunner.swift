@@ -18,11 +18,15 @@ public struct TileRunner: Sendable {
     }
 
     public func run(_ tile: Tile) async -> RunResult {
+        FipleLog.execution.info("running tile '\(tile.name)' (\(tile.actions.count) action(s))")
         var results: [ActionResult] = []
         results.reserveCapacity(tile.actions.count)
         for action in tile.actions {
             results.append(await executor.execute(action))
         }
-        return RunResult(tileID: tile.id, actions: results)
+        let result = RunResult(tileID: tile.id, actions: results)
+        let ok = results.filter(\.ok).count
+        FipleLog.execution.info("tile '\(tile.name)' done: \(ok)/\(results.count) ok")
+        return result
     }
 }
