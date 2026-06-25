@@ -45,8 +45,8 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
             return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
         case let .openURL(url):
             return (url.host()?.replacingOccurrences(of: "www.", with: "")) ?? url.absoluteString
-        case let .openFile(path, _):
-            return (path as NSString).lastPathComponent
+        case let .runShortcut(name):
+            return name
         }
     }
 
@@ -54,7 +54,7 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
         switch kind {
         case .launchApp: "app.fill"
         case .openURL: "globe"
-        case .openFile: "doc.fill"
+        case .runShortcut: "bolt.fill"
         }
     }
 
@@ -62,7 +62,7 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
         switch kind {
         case .launchApp: "#84CC16"
         case .openURL: "#0EA5E9"
-        case .openFile: "#F59E0B"
+        case .runShortcut: "#F59E0B"
         }
     }
 }
