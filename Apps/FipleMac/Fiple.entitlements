@@ -11,5 +11,9 @@
 	<!-- Discover the iPhone and fetch website favicons. -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- List the user's Apple Shortcuts via the scriptable "Shortcuts Events"
+	     target (Apple Events). The user is prompted to allow this on first use. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>
