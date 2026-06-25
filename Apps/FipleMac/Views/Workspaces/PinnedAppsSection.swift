@@ -2,9 +2,9 @@ import AppKit
 import FipleKit
 import SwiftUI
 
-/// The "Fiple Bar": an editable grid of quick actions (apps, websites, files),
-/// 8 per page (4×2). Hovering a filled tile reveals Remove; hovering an empty
-/// slot reveals Add, which opens an App / URL / File chooser like New Workspace.
+/// The "Fiple Bar": an editable grid of quick actions (apps, websites,
+/// shortcuts), 8 per page (4×2). Hovering a filled tile reveals Remove; hovering
+/// an empty slot reveals Add, which opens an App / URL / Shortcut chooser.
 struct PinnedAppsSection: View {
     let store: TileStore
     let bar: PinnedAppsStore
@@ -171,9 +171,7 @@ private struct BarTile: View {
         case let .launchApp(bundleID):
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
             return NSWorkspace.shared.icon(forFile: url.path)
-        case let .openFile(path, _):
-            return FileManager.default.fileExists(atPath: path) ? NSWorkspace.shared.icon(forFile: path) : nil
-        case .openURL:
+        case .runShortcut, .openURL:
             return nil
         }
     }
@@ -187,8 +185,8 @@ private struct BarTile: View {
             return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
         case let .openURL(url):
             return (url.host()?.replacingOccurrences(of: "www.", with: "")) ?? url.absoluteString
-        case let .openFile(path, _):
-            return (path as NSString).lastPathComponent
+        case let .runShortcut(name):
+            return name
         }
     }
 
@@ -196,7 +194,7 @@ private struct BarTile: View {
         switch action.kind {
         case .launchApp: "app.dashed"
         case .openURL: "globe"
-        case .openFile: "doc.fill"
+        case .runShortcut: "bolt.fill"
         }
     }
 }
@@ -229,7 +227,7 @@ private struct EmptyBarSlot: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Add an app, website or file to Fiple Bar")
+        .help("Add an app, website or shortcut to Fiple Bar")
     }
 }
 
@@ -258,7 +256,7 @@ private struct EditOverlay: View {
     }
 }
 
-// MARK: - Add sheet (App / URL / File, like New Workspace)
+// MARK: - Add sheet (App / URL / Shortcut, like New Workspace)
 
 private struct AddActionSheet: View {
     let onAdd: (ActionKind) -> Void
@@ -284,12 +282,9 @@ private struct AddActionSheet: View {
                 case .openURL:
                     TextField("https://…", text: $draft.url)
                         .textFieldStyle(.roundedBorder)
-                case .openFile:
-                    HStack {
-                        TextField("/path/to/file-or-folder", text: $draft.path)
-                            .textFieldStyle(.roundedBorder)
-                        Button("Choose…") { choose() }
-                    }
+                case .runShortcut:
+                    TextField("Shortcut name", text: $draft.shortcutName)
+                        .textFieldStyle(.roundedBorder)
                 }
             }
             .formStyle(.grouped)
@@ -307,16 +302,7 @@ private struct AddActionSheet: View {
         }
         .frame(width: 420, height: 340)
         .preferredColorScheme(.light)
-        .task { apps = InstalledApps.all() }
-    }
-
-    private func choose() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        if panel.runModal() == .OK, let url = panel.url {
-            draft.path = url.path
-        }
+        .task { apps = await InstalledApps.all() }
     }
 }
 

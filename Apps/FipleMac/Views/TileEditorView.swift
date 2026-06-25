@@ -8,7 +8,7 @@ struct ActionDraft: Identifiable {
     enum Kind: String, CaseIterable, Identifiable {
         case launchApp = "App"
         case openURL = "URL"
-        case openFile = "File"
+        case runShortcut = "Shortcut"
         var id: String { rawValue }
     }
 
@@ -16,19 +16,19 @@ struct ActionDraft: Identifiable {
     var kind: Kind
     var bundleID: String
     var url: String
-    var path: String
+    var shortcutName: String
 
     init() {
-        id = UUID(); kind = .launchApp; bundleID = ""; url = ""; path = ""
+        id = UUID(); kind = .launchApp; bundleID = ""; url = ""; shortcutName = ""
     }
 
     init(_ action: Action) {
         id = action.id
-        bundleID = ""; url = ""; path = ""
+        bundleID = ""; url = ""; shortcutName = ""
         switch action.kind {
         case let .launchApp(bundleID): kind = .launchApp; self.bundleID = bundleID
         case let .openURL(u): kind = .openURL; url = u.absoluteString
-        case let .openFile(p, _): kind = .openFile; path = p
+        case let .runShortcut(name): kind = .runShortcut; shortcutName = name
         }
     }
 
@@ -40,9 +40,10 @@ struct ActionDraft: Identifiable {
         case .openURL:
             guard let u = URL(string: url), u.scheme != nil else { return nil }
             return Action(id: id, kind: .openURL(u))
-        case .openFile:
-            guard !path.isEmpty else { return nil }
-            return Action(id: id, kind: .openFile(path: path, openWith: nil))
+        case .runShortcut:
+            let trimmed = shortcutName.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            return Action(id: id, kind: .runShortcut(name: trimmed))
         }
     }
 }
@@ -135,7 +136,7 @@ struct TileEditorView: View {
         }
         .frame(width: 460, height: 560)
         .preferredColorScheme(.light) // keep the editor light like the rest of the app
-        .task { installedApps = InstalledApps.all() }
+        .task { installedApps = await InstalledApps.all() }
     }
 
     private var swatches: some View {
@@ -259,24 +260,17 @@ private struct ActionDraftRow: View {
                 TextField("https://…", text: $draft.url)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: draft.url) { _, newValue in onURLChanged(newValue) }
-            case .openFile:
-                HStack {
-                    TextField("/path/to/file-or-folder", text: $draft.path)
+            case .runShortcut:
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField("Shortcut name", text: $draft.shortcutName)
                         .textFieldStyle(.roundedBorder)
-                    Button("Choose…") { chooseFile() }
+                    Text("Enter the exact name of a shortcut from the Shortcuts app.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private func chooseFile() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        if panel.runModal() == .OK, let url = panel.url {
-            draft.path = url.path
-        }
     }
 }
 
