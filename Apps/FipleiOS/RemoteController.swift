@@ -284,8 +284,8 @@ final class RemoteController {
              actions: [Action(kind: .openURL(URL(string: "https://chatgpt.com")!))]),
         Tile(name: "Notion", iconSystemName: "note.text", colorHex: "#111111", order: 4,
              actions: [Action(kind: .openURL(URL(string: "https://notion.so")!))]),
-        Tile(name: "Roadmap.pdf", iconSystemName: "doc.fill", colorHex: "#E5483D", order: 5,
-             actions: [Action(kind: .openFile(path: "/Users/me/Documents/Roadmap.pdf", openWith: nil))]),
+        Tile(name: "Morning Routine", iconSystemName: "bolt.fill", colorHex: "#E5483D", order: 5,
+             actions: [Action(kind: .runShortcut(name: "Morning Routine"))]),
     ]
     #endif
 }
