@@ -7,7 +7,7 @@ import Foundation
 /// is not sent over the wire.
 struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
     enum Category: String, Codable {
-        case app, website, file, workspace
+        case app, website, shortcut, workspace
     }
 
     let id: UUID
@@ -30,7 +30,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         self.timestamp = timestamp
     }
 
-    /// A launch of a single Fiple Bar action (app / website / file).
+    /// A launch of a single Fiple Bar action (app / website / shortcut).
     init(action: Action, at timestamp: Date) {
         let quick = QuickAction(action: action, tileID: action.id)
         id = UUID()
@@ -47,7 +47,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         switch kind {
         case .launchApp: .app
         case .openURL: .website
-        case .openFile: .file
+        case .runShortcut: .shortcut
         }
     }
 
@@ -58,7 +58,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         switch tile.actions.first?.kind {
         case .launchApp: return .app
         case .openURL: return .website
-        case .openFile: return .file
+        case .runShortcut: return .shortcut
         case .none: return .app
         }
     }
@@ -79,7 +79,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         switch category {
         case .app: "Application"
         case .website: "Website"
-        case .file: "File"
+        case .shortcut: "Shortcut"
         case .workspace: "Workspace"
         }
     }
@@ -106,36 +106,41 @@ struct QuickAction: Identifiable, Hashable {
     let id: UUID          // the action's id
     let tileID: UUID
     let kind: ActionKind
-    /// The action's real icon (app icon / Finder icon) as a PNG, resolved on the
-    /// Mac and carried in the tile snapshot. Nil for websites, which resolve a
-    /// favicon instead.
+    /// The action's real app icon as a PNG, resolved on the Mac and carried in
+    /// the tile snapshot. Nil for websites (favicon) and shortcuts (SF Symbol).
     let iconImageData: Data?
+    /// The app's real display name, resolved on the Mac. Preferred over a
+    /// name derived from the bundle id, which mangles apps like Books / Cursor.
+    let displayName: String?
 
     init(action: Action, tileID: UUID) {
         id = action.id
         self.tileID = tileID
         kind = action.kind
         iconImageData = action.iconImageData
+        displayName = action.displayName
     }
 
-    /// De-duplication key so the same app/site/file appears once across tiles.
+    /// De-duplication key so the same app/site/shortcut appears once across tiles.
     var dedupeKey: String {
         switch kind {
         case let .launchApp(bundleID): "app:\(bundleID)"
         case let .openURL(url): "url:\(url.host() ?? url.absoluteString)"
-        case let .openFile(path, _): "file:\(path)"
+        case let .runShortcut(name): "shortcut:\(name)"
         }
     }
 
-    /// Short human label ("Xcode", "YouTube", "Roadmap").
+    /// Short human label ("Xcode", "YouTube", "Morning Routine").
     var title: String {
         switch kind {
         case let .launchApp(bundleID):
-            appTitle(for: bundleID)
+            // Prefer the Mac-resolved name; fall back to deriving from the id.
+            if let displayName, !displayName.isEmpty { return displayName }
+            return appTitle(for: bundleID)
         case let .openURL(url):
-            websiteTitle(for: url)
-        case let .openFile(path, _):
-            fileTitle(for: path)
+            return websiteTitle(for: url)
+        case let .runShortcut(name):
+            return name
         }
     }
 
@@ -174,14 +179,6 @@ struct QuickAction: Identifiable, Hashable {
         return knownSites[baseName.lowercased()] ?? prettifiedName(baseName)
     }
 
-    private func fileTitle(for path: String) -> String {
-        let name = (path as NSString).deletingPathExtension.isEmpty
-            ? (path as NSString).lastPathComponent
-            : (path as NSString).deletingPathExtension
-        return prettifiedName((name as NSString).lastPathComponent)
-            .replacingOccurrences(of: "Development", with: "Dev")
-    }
-
     private func prettifiedName(_ value: String) -> String {
         let spaced = value
             .replacingOccurrences(of: "-", with: " ")
@@ -213,7 +210,7 @@ struct QuickAction: Identifiable, Hashable {
         switch kind {
         case .launchApp: "app.fill"
         case .openURL: "globe"
-        case .openFile: "doc.fill"
+        case .runShortcut: "bolt.fill"
         }
     }
 }
