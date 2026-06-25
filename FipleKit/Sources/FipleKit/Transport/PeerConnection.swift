@@ -65,13 +65,18 @@ public actor PeerConnection {
     private func handleState(_ state: NWConnection.State) {
         switch state {
         case .ready:
+            FipleLog.connection.info("ready")
             isReady = true
             readyWaiters.forEach { $0.resume() }
             readyWaiters.removeAll()
         case let .failed(error):
+            FipleLog.connection.error("failed: \(error.localizedDescription)")
             finish(throwing: error)
         case .cancelled:
+            FipleLog.connection.info("cancelled")
             finish(throwing: nil)
+        case .waiting(let error):
+            FipleLog.connection.notice("waiting: \(error.localizedDescription)")
         default:
             break
         }
@@ -85,13 +90,18 @@ public actor PeerConnection {
     }
 
     private func handleReceive(data: Data?, isComplete: Bool, error: NWError?) {
-        if let error { finish(throwing: error); return }
+        if let error {
+            FipleLog.connection.error("receive error: \(error.localizedDescription)")
+            finish(throwing: error); return
+        }
         if let data, !data.isEmpty {
             do {
                 for payload in try decoder.append(data) {
+                    FipleLog.connection.debug("recv frame: \(payload.count) bytes")
                     inboundContinuation.yield(payload)
                 }
             } catch {
+                FipleLog.connection.error("frame decode failed: \(error.localizedDescription)")
                 finish(throwing: error)
                 return
             }

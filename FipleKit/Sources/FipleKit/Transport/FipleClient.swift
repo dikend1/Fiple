@@ -18,30 +18,43 @@ public actor FipleClient {
         let browser = NWBrowser(for: descriptor, using: .tcp)
 
         browser.browseResultsChangedHandler = { results, _ in
+            FipleLog.discovery.info("browse results changed: \(results.count) endpoint(s)")
             for result in results {
                 continuation.yield(result.endpoint)
             }
         }
         browser.stateUpdateHandler = { state in
-            if case .failed = state { continuation.finish() }
+            if case let .failed(error) = state {
+                FipleLog.discovery.error("browser failed: \(error.localizedDescription)")
+                continuation.finish()
+            }
         }
         continuation.onTermination = { _ in browser.cancel() }
 
+        FipleLog.discovery.info("discovery started for \(FipleService.bonjourType)")
         browser.start(queue: .global(qos: .userInitiated))
         self.browser = browser
         return stream
     }
 
     public func stopDiscovery() {
+        FipleLog.discovery.info("discovery stopped")
         browser?.cancel()
         browser = nil
     }
 
     /// Opens a framed connection to an endpoint and waits until it is ready.
     public func connect(to endpoint: NWEndpoint) async throws -> PeerConnection {
+        FipleLog.connection.info("connecting to \(String(describing: endpoint))")
         let peer = PeerConnection(connection: NWConnection(to: endpoint, using: .tcp))
         await peer.start()
-        try await peer.waitUntilReady()
+        do {
+            try await peer.waitUntilReady()
+        } catch {
+            FipleLog.connection.error("connect failed: \(error.localizedDescription)")
+            throw error
+        }
+        FipleLog.connection.info("connected")
         return peer
     }
 

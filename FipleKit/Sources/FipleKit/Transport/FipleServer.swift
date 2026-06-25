@@ -24,6 +24,7 @@ public actor FipleServer {
         listener.service = NWListener.Service(name: deviceName, type: FipleService.bonjourType)
 
         listener.newConnectionHandler = { [weak self] nwConnection in
+            FipleLog.discovery.info("inbound connection accepted")
             let peer = PeerConnection(connection: nwConnection)
             Task {
                 await peer.start()
@@ -38,6 +39,7 @@ public actor FipleServer {
                 case .ready:
                     cont.resume(returning: listener.port?.rawValue ?? 0)
                 case let .failed(error):
+                    FipleLog.discovery.error("listener failed: \(error.localizedDescription)")
                     cont.resume(throwing: error)
                 default:
                     break
@@ -45,10 +47,12 @@ public actor FipleServer {
             }
             listener.start(queue: .global(qos: .userInitiated))
         }
+        FipleLog.discovery.info("advertising '\(deviceName)' as \(FipleService.bonjourType) on port \(boundPort)")
         return boundPort
     }
 
     public func stop() {
+        FipleLog.discovery.info("server stopped")
         listener?.cancel()
         listener = nil
         continuation.finish()
