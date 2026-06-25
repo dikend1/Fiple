@@ -163,7 +163,7 @@ struct ActionCatalogView: View {
         case let .openURL(url):
             FaviconView(host: url.host() ?? "")
         case .runShortcut:
-            NativeIconTile(image: nil, fallbackSymbol: "bolt.fill")
+            NativeIconTile(image: SystemIcon.shortcutsAppIcon(), fallbackSymbol: "bolt.fill")
         }
     }
 

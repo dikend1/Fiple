@@ -171,7 +171,9 @@ private struct BarTile: View {
         case let .launchApp(bundleID):
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
             return NSWorkspace.shared.icon(forFile: url.path)
-        case .runShortcut, .openURL:
+        case .runShortcut:
+            return SystemIcon.shortcutsAppIcon()
+        case .openURL:
             return nil
         }
     }
@@ -264,6 +266,7 @@ private struct AddActionSheet: View {
 
     @State private var draft = ActionDraft()
     @State private var apps: [InstalledApp] = []
+    @State private var shortcuts: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -283,8 +286,7 @@ private struct AddActionSheet: View {
                     TextField("https://…", text: $draft.url)
                         .textFieldStyle(.roundedBorder)
                 case .runShortcut:
-                    TextField("Shortcut name", text: $draft.shortcutName)
-                        .textFieldStyle(.roundedBorder)
+                    ShortcutPickerField(shortcuts: shortcuts, name: $draft.shortcutName)
                 }
             }
             .formStyle(.grouped)
@@ -302,7 +304,10 @@ private struct AddActionSheet: View {
         }
         .frame(width: 420, height: 340)
         .preferredColorScheme(.light)
-        .task { apps = await InstalledApps.all() }
+        .task {
+            apps = await InstalledApps.all()
+            shortcuts = await InstalledShortcuts.all()
+        }
     }
 }
 
