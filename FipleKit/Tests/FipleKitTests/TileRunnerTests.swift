@@ -39,7 +39,7 @@ struct TileRunnerTests {
     @Test("A failing action does not abort the rest")
     func failureDoesNotAbort() async {
         let a = Action(kind: .launchApp(bundleID: "ok1"))
-        let b = Action(kind: .openFile(path: "/missing", openWith: nil))
+        let b = Action(kind: .runShortcut(name: "Broken Shortcut"))
         let c = Action(kind: .openURL(URL(string: "https://ok.com")!))
         let mock = MockExecutor(failing: [b.id])
 
