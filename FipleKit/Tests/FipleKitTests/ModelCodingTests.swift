@@ -14,8 +14,8 @@ struct ModelCodingTests {
         let cases: [ActionKind] = [
             .launchApp(bundleID: "com.apple.dt.Xcode"),
             .openURL(URL(string: "https://github.com/dikend1/Fiple")!),
-            .openFile(path: "/Users/me/proj", openWith: "com.todesktop.230313mzl4w4u92"),
-            .openFile(path: "/Users/me/notes.md", openWith: nil),
+            .runShortcut(name: "Start Coding"),
+            .runShortcut(name: "Morning Routine"),
         ]
         for kind in cases {
             let action = Action(kind: kind)
@@ -34,7 +34,7 @@ struct ModelCodingTests {
             actions: [
                 Action(kind: .launchApp(bundleID: "com.todesktop.230313mzl4w4u92")),
                 Action(kind: .openURL(URL(string: "https://github.com")!)),
-                Action(kind: .openFile(path: "/Users/me/proj", openWith: nil)),
+                Action(kind: .runShortcut(name: "Open Project")),
             ]
         )
         #expect(tile.isWorkspace)
