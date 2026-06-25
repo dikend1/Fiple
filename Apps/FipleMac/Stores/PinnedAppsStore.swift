@@ -59,12 +59,12 @@ final class PinnedAppsStore {
         didChange?()
     }
 
-    /// Stable identity for de-duplication (one Fiple Bar entry per app/site/file).
+    /// Stable identity for de-duplication (one Fiple Bar entry per app/site/shortcut).
     static func key(_ kind: ActionKind) -> String {
         switch kind {
         case let .launchApp(bundleID): "app:\(bundleID)"
         case let .openURL(url): "url:\(url.host() ?? url.absoluteString)"
-        case let .openFile(path, _): "file:\(path)"
+        case let .runShortcut(name): "shortcut:\(name)"
         }
     }
 }
