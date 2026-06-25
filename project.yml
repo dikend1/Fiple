@@ -29,7 +29,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.mac
+        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.Fiple
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleMac/Info.plist
@@ -48,7 +48,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.Fiple
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleiOS/Info.plist
