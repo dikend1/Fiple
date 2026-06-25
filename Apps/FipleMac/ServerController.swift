@@ -58,7 +58,9 @@ final class ServerController {
         do {
             _ = try await server.start(deviceName: macName)
             status = .advertising
+            FipleLog.pairing.info("advertising started — code \(pairingCode?.value ?? "?")")
         } catch {
+            FipleLog.pairing.error("failed to start server: \(error.localizedDescription)")
             status = .idle
             return
         }
@@ -73,6 +75,7 @@ final class ServerController {
     /// Explicit disconnect: invalidates the remembered pairing so the next
     /// connection requires a fresh code (PRD `fiple-pairing`).
     func disconnect() async {
+        FipleLog.pairing.info("explicit disconnect — clearing remembered pairing")
         if let peer { await peer.close() }
         peer = nil
         isPaired = false
@@ -93,7 +96,7 @@ final class ServerController {
                 await process(message, on: peer)
             }
         } catch {
-            // stream ended with error — fall through to reset
+            FipleLog.connection.notice("peer stream ended: \(error.localizedDescription)")
         }
         if self.peer === peer { resetToAdvertising() }
     }
@@ -102,27 +105,37 @@ final class ServerController {
         switch message {
         case let .pair(code):
             if let current = pairingCode, code == current.value {
+                FipleLog.pairing.info("pair accepted — code matched")
                 await acceptPairing(on: peer)
             } else {
+                FipleLog.pairing.notice("pair rejected — wrong code")
                 try? await peer.send(ServerMessage.pairRejected(reason: "Incorrect code"))
             }
 
         case let .reconnect(token):
             if let saved = sessionToken, token == saved {
+                FipleLog.pairing.info("reconnect accepted — token matched")
                 await acceptPairing(on: peer)
             } else {
+                FipleLog.pairing.notice("reconnect rejected — token expired")
                 try? await peer.send(ServerMessage.pairRejected(reason: "Pairing expired"))
             }
 
         case let .run(tileID):
-            guard isPaired, let tile = store.tiles.first(where: { $0.id == tileID }) else { return }
+            guard isPaired, let tile = store.tiles.first(where: { $0.id == tileID }) else {
+                FipleLog.execution.notice("run ignored — \(isPaired ? "unknown tile" : "not paired")")
+                return
+            }
             let result = await TileRunner(executor: executor).run(tile)
             lastRun = result
             didRun?(tile)
             try? await peer.send(ServerMessage.runResult(result))
 
         case let .runAction(action):
-            guard isPaired else { return }
+            guard isPaired else {
+                FipleLog.execution.notice("runAction ignored — not paired")
+                return
+            }
             let actionResult = await executor.execute(action)
             // Report under the action's own id so the phone can clear its spinner.
             let result = RunResult(tileID: action.id, actions: [actionResult])
@@ -135,6 +148,7 @@ final class ServerController {
     private func acceptPairing(on peer: PeerConnection) async {
         isPaired = true
         status = .connected
+        FipleLog.pairing.info("paired — sending tiles snapshot")
         let token = sessionToken ?? UUID().uuidString
         sessionToken = token
         UserDefaults.standard.set(token, forKey: Self.tokenKey)
@@ -194,6 +208,7 @@ final class ServerController {
     /// Transient drop (Wi-Fi blip): keep the code and token so a remembered
     /// phone reconnects silently.
     private func resetToAdvertising() {
+        FipleLog.connection.info("peer dropped — back to advertising (pairing remembered)")
         peer = nil
         isPaired = false
         status = .advertising
