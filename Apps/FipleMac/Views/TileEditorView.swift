@@ -139,8 +139,12 @@ struct TileEditorView: View {
         .frame(width: 460, height: 560)
         .preferredColorScheme(.light) // keep the editor light like the rest of the app
         .task {
-            installedApps = await InstalledApps.all()
-            shortcuts = await InstalledShortcuts.all()
+            // Load apps (Spotlight) and shortcuts (Apple Events, off-main + cached)
+            // concurrently so the shortcut list doesn't wait behind the app scan.
+            async let apps = InstalledApps.all()
+            async let names = InstalledShortcuts.shared.all()
+            installedApps = await apps
+            shortcuts = await names
         }
     }
 
@@ -358,8 +362,8 @@ private struct AppPickerField: View {
 }
 
 /// Picks one of the user's Apple Shortcuts (listed via "Shortcuts Events"). The
-/// search field doubles as manual entry: if automation is denied or the shortcut
-/// isn't listed, the user can still type a name and "Use" it.
+/// search field doubles as manual entry: if the shortcut isn't listed, the user
+/// can still type a name and "Use" it.
 struct ShortcutPickerField: View {
     let shortcuts: [String]
     @Binding var name: String
@@ -422,7 +426,7 @@ struct ShortcutPickerField: View {
                             row(label: shortcut, value: shortcut, manual: false)
                         }
                         if shortcuts.isEmpty && typedQuery.isEmpty {
-                            Text("No shortcuts found.\nType a name above, or allow access when prompted.")
+                            Text("No shortcuts found.\nType a name above to use it.")
                                 .font(.caption2).foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                                 .padding(.vertical, 18).padding(.horizontal, 10)

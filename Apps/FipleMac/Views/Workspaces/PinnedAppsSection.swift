@@ -305,8 +305,10 @@ private struct AddActionSheet: View {
         .frame(width: 420, height: 340)
         .preferredColorScheme(.light)
         .task {
-            apps = await InstalledApps.all()
-            shortcuts = await InstalledShortcuts.all()
+            async let appList = InstalledApps.all()
+            async let names = InstalledShortcuts.shared.all()
+            apps = await appList
+            shortcuts = await names
         }
     }
 }
