@@ -15,5 +15,13 @@
 	     target (Apple Events). The user is prompted to allow this on first use. -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- Explicit scripting target: required to list the user's Apple Shortcuts
+	     from inside the sandbox. Plain automation.apple-events alone fails with
+	     error -600 for "Shortcuts Events"; whitelisting that helper's bundle id
+	     here is what makes `get name of every shortcut` work. -->
+	<key>com.apple.security.temporary-exception.apple-events</key>
+	<array>
+		<string>com.apple.shortcuts.events</string>
+	</array>
 </dict>
 </plist>
