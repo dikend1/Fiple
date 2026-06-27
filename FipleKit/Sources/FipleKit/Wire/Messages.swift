@@ -46,13 +46,25 @@ extension ClientMessage: Codable {
     }
 }
 
+/// Why a pairing or reconnect attempt was rejected, so the remote can react
+/// distinctly (e.g. surface a lockout) rather than treating every rejection as
+/// a wrong code.
+public enum PairRejectReason: String, Sendable, Equatable, Codable {
+    /// Wrong 4-digit code.
+    case incorrectCode
+    /// Too many wrong codes; pairing is temporarily locked and the code rotated.
+    case tooManyAttempts
+    /// A remembered reconnect token no longer matches (pairing was cleared).
+    case pairingExpired
+}
+
 /// Messages sent from the Mac companion to the iPhone remote.
 public enum ServerMessage: Sendable, Equatable {
     /// Pairing succeeded; identifies the Mac and returns the session token the
     /// phone stores to reconnect later without re-entering the code.
     case paired(macID: String, macName: String, token: String)
-    /// Pairing rejected (wrong/expired code, etc.).
-    case pairRejected(reason: String)
+    /// Pairing rejected, with a typed reason.
+    case pairRejected(reason: PairRejectReason)
     /// The current tile list (sent on connect and whenever tiles change).
     case tilesSnapshot(tiles: [Tile])
     /// The current Fiple Bar (curated quick actions; sent on connect and whenever
@@ -78,7 +90,10 @@ extension ServerMessage: Codable {
                 token: try c.decode(String.self, forKey: .token)
             )
         case .pairRejected:
-            self = .pairRejected(reason: try c.decode(String.self, forKey: .reason))
+            // Tolerate an unknown reason from a newer peer rather than failing
+            // to decode the whole message.
+            let raw = try c.decode(String.self, forKey: .reason)
+            self = .pairRejected(reason: PairRejectReason(rawValue: raw) ?? .incorrectCode)
         case .tilesSnapshot:
             self = .tilesSnapshot(tiles: try c.decode([Tile].self, forKey: .tiles))
         case .fipleBar:
@@ -98,7 +113,7 @@ extension ServerMessage: Codable {
             try c.encode(token, forKey: .token)
         case let .pairRejected(reason):
             try c.encode(Tag.pairRejected, forKey: .type)
-            try c.encode(reason, forKey: .reason)
+            try c.encode(reason.rawValue, forKey: .reason)
         case let .tilesSnapshot(tiles):
             try c.encode(Tag.tilesSnapshot, forKey: .type)
             try c.encode(tiles, forKey: .tiles)
