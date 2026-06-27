@@ -14,6 +14,10 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
     let iconImageData: Data?
     let colorHex: String
     let timestamp: Date
+    /// Set for single-action launches (Fiple Bar) so the row can be re-run by
+    /// re-dispatching the action; nil for workspace/tile launches, which are
+    /// re-run by tile id. Optional, so older saved history decodes unchanged.
+    let actionKind: ActionKind?
 
     init(tile: Tile, at timestamp: Date) {
         id = UUID()
@@ -22,6 +26,7 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
         iconSystemName = tile.iconSystemName
         iconImageData = tile.iconImageData
         colorHex = tile.colorHex
+        actionKind = nil
         self.timestamp = timestamp
     }
 
@@ -33,7 +38,15 @@ struct RunRecord: Identifiable, Sendable, Codable, Equatable {
         iconSystemName = Self.symbol(for: action.kind)
         iconImageData = action.iconImageData ?? SystemIcon.pngData(for: action.kind)
         colorHex = Self.color(for: action.kind)
+        actionKind = action.kind
         self.timestamp = timestamp
+    }
+
+    /// Reconstructs the action for a single-action record so it can be re-run.
+    /// Returns nil for workspace/tile records.
+    var replayAction: Action? {
+        guard let actionKind else { return nil }
+        return Action(id: tileID, kind: actionKind, iconImageData: iconImageData, displayName: tileName)
     }
 
     @MainActor private static func name(for kind: ActionKind) -> String {

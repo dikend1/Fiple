@@ -4,8 +4,8 @@ import SwiftUI
 /// Full launch history page. Each row re-runs its workspace on the Mac.
 struct RecentView: View {
     let recents: RecentStore
-    /// Re-run a workspace by id (looked up against the current tiles).
-    var onRun: ((UUID) -> Void)?
+    /// Re-run a record: re-dispatch a single action, or look up a workspace tile.
+    var onRun: ((RunRecord) -> Void)?
     @State private var confirmingClear = false
     @State private var pendingRemoval: RunRecord?
 
@@ -56,7 +56,7 @@ struct RecentView: View {
 struct RecentList: View {
     let records: [RunRecord]
     var emptyHint: String = "Nothing yet"
-    var onRun: ((UUID) -> Void)?
+    var onRun: ((RunRecord) -> Void)?
     var onDelete: ((RunRecord) -> Void)?
 
     var body: some View {
@@ -81,7 +81,7 @@ struct RecentList: View {
 
 private struct RecentRow: View {
     let record: RunRecord
-    var onRun: ((UUID) -> Void)?
+    var onRun: ((RunRecord) -> Void)?
     var onDelete: ((RunRecord) -> Void)?
     @State private var hovering = false
     @State private var deleteHover = false
@@ -122,7 +122,7 @@ private struct RecentRow: View {
         )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture { onRun?(record.tileID) }
+        .onTapGesture { onRun?(record) }
     }
 
     @ViewBuilder private var trailingIcon: some View {
