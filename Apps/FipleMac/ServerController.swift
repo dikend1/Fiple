@@ -36,13 +36,19 @@ final class ServerController {
 
     /// Persistent token for the currently remembered phone. Survives Mac app
     /// restarts so a known phone reconnects silently; cleared on explicit
-    /// disconnect, which forces a fresh code.
+    /// disconnect, which forces a fresh code. Stored in the Keychain, not
+    /// UserDefaults (a bearer credential granting remote control).
     @ObservationIgnored private var sessionToken: String?
+
+    /// Brute-force protection for the 4-digit code, shared across every socket
+    /// in this advertising session. Reset only on a successful pair or an
+    /// explicit restart — never when a connection drops.
+    @ObservationIgnored private var throttle = PairingThrottle()
 
     init(store: TileStore, pinned: PinnedAppsStore) {
         self.store = store
         self.pinned = pinned
-        sessionToken = UserDefaults.standard.string(forKey: Self.tokenKey)
+        sessionToken = Self.loadToken()
         store.didChange = { [weak self] in
             Task { await self?.pushSnapshot() }
         }
@@ -54,6 +60,7 @@ final class ServerController {
     /// Idempotent: starts advertising and accepting connections.
     func start() async {
         guard status == .idle else { return }
+        throttle.reset()
         regenerateCode()
         do {
             _ = try await server.start(deviceName: macName)
@@ -86,7 +93,8 @@ final class ServerController {
         peer = nil
         isPaired = false
         sessionToken = nil
-        UserDefaults.standard.removeObject(forKey: Self.tokenKey)
+        Keychain.remove(Self.tokenKey)
+        throttle.reset()
         status = .advertising
         regenerateCode()
     }
@@ -117,12 +125,25 @@ final class ServerController {
     private func process(_ message: ClientMessage, on peer: PeerConnection) async {
         switch message {
         case let .pair(code):
-            if let current = pairingCode, code == current.value {
+            let matches = pairingCode.map { $0.value == code } ?? false
+            switch throttle.register(matches: matches, now: Date()) {
+            case .accepted:
                 FipleLog.pairing.info("pair accepted — code matched")
                 await acceptPairing(on: peer)
-            } else {
-                FipleLog.pairing.notice("pair rejected — wrong code")
-                try? await peer.send(ServerMessage.pairRejected(reason: "Incorrect code"))
+            case let .rejected(remaining):
+                FipleLog.pairing.notice("pair rejected — wrong code (\(remaining) attempt(s) left)")
+                try? await peer.send(ServerMessage.pairRejected(reason: .incorrectCode))
+            case .lockedOut:
+                // Limit hit: rotate the code (every prior guess is now worthless,
+                // and the new code shows in the UI), tell the phone, drop the socket.
+                regenerateCode()
+                FipleLog.pairing.error("too many attempts — locked out \(Int(throttle.lockoutDuration))s, code rotated")
+                try? await peer.send(ServerMessage.pairRejected(reason: .tooManyAttempts))
+                await peer.close()
+            case .ignored:
+                FipleLog.pairing.notice("pair attempt ignored — still locked out")
+                try? await peer.send(ServerMessage.pairRejected(reason: .tooManyAttempts))
+                await peer.close()
             }
 
         case let .reconnect(token):
@@ -131,7 +152,7 @@ final class ServerController {
                 await acceptPairing(on: peer)
             } else {
                 FipleLog.pairing.notice("reconnect rejected — token expired")
-                try? await peer.send(ServerMessage.pairRejected(reason: "Pairing expired"))
+                try? await peer.send(ServerMessage.pairRejected(reason: .pairingExpired))
             }
 
         case let .run(tileID):
@@ -164,7 +185,7 @@ final class ServerController {
         FipleLog.pairing.info("paired — sending tiles snapshot")
         let token = sessionToken ?? UUID().uuidString
         sessionToken = token
-        UserDefaults.standard.set(token, forKey: Self.tokenKey)
+        Keychain.set(token, for: Self.tokenKey)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
         try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
         try? await peer.send(ServerMessage.fipleBar(actions: snapshotFipleBar()))
@@ -176,6 +197,14 @@ final class ServerController {
         let result = await TileRunner(executor: executor).run(tile)
         lastRun = result
         didRun?(tile)
+    }
+
+    /// Run a single action locally from the Mac (used to relaunch an item from
+    /// Recent). Recorded in history like a Fiple Bar action launch.
+    func run(_ action: Action) async {
+        let actionResult = await executor.execute(action)
+        lastRun = RunResult(tileID: action.id, actions: [actionResult])
+        didRunAction?(action)
     }
 
     private func pushSnapshot() async {
@@ -232,6 +261,20 @@ final class ServerController {
     }
 
     private static let tokenKey = "com.fiple.sessionToken"
+
+    /// Loads the session token from the Keychain, migrating a token left in
+    /// UserDefaults by an earlier build (then scrubbing the plaintext copy).
+    private static func loadToken() -> String? {
+        if let token = Keychain.get(tokenKey) { return token }
+        if let legacy = UserDefaults.standard.string(forKey: tokenKey) {
+            // Only scrub the plaintext copy once it is safely in the Keychain.
+            if Keychain.set(legacy, for: tokenKey) {
+                UserDefaults.standard.removeObject(forKey: tokenKey)
+            }
+            return legacy
+        }
+        return nil
+    }
 
     /// A stable identifier for this Mac, persisted in UserDefaults.
     private static func stableMacID() -> String {
