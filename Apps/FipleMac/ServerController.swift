@@ -111,6 +111,8 @@ final class ServerController {
         }
         self.peer = peer
         isPaired = false
+        // Reap the connection if it never authenticates (pair/reconnect) in time.
+        await peer.startAuthTimeout(.seconds(Self.authTimeoutSeconds))
         do {
             for try await payload in await peer.messages {
                 let message = try MessageCodec.decode(ClientMessage.self, from: payload)
@@ -191,6 +193,7 @@ final class ServerController {
     }
 
     private func acceptPairing(on peer: PeerConnection) async {
+        await peer.markAuthenticated()
         isPaired = true
         status = .connected
         FipleLog.pairing.info("paired — sending tiles snapshot")
@@ -270,6 +273,9 @@ final class ServerController {
     private func regenerateCode() {
         pairingCode = PairingCode.random()
     }
+
+    /// How long an inbound connection may stay open without authenticating.
+    private static let authTimeoutSeconds = 15
 
     private static let tokenKey = "com.fiple.sessionToken"
 
