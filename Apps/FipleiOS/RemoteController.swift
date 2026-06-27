@@ -62,6 +62,7 @@ final class RemoteController {
 
     func begin() {
         guard discoverTask == nil else { return }
+        migrateLegacyToken()
         recents = LaunchRecord.load()
         #if DEBUG
         // Offline demo mode (`-demo` launch arg / SwiftUI previews): skip discovery
@@ -160,11 +161,11 @@ final class RemoteController {
 
         case let .pairRejected(reason):
             // a rejected reconnect means the remembered pairing is stale
-            FipleLog.pairing.notice("pair rejected: \(reason)")
+            FipleLog.pairing.notice("pair rejected: \(reason.rawValue)")
             storedToken = nil
             await peer?.close()
             peer = nil
-            pairError = reason
+            pairError = Self.message(for: reason)
             phase = .readyToPair
 
         case let .tilesSnapshot(tiles):
@@ -247,11 +248,37 @@ final class RemoteController {
         }
     }
 
+    /// User-facing copy for a typed rejection reason.
+    private static func message(for reason: PairRejectReason) -> String {
+        switch reason {
+        case .incorrectCode: "Incorrect code. Check the code shown on your Mac."
+        case .tooManyAttempts: "Too many attempts. A new code is shown on your Mac — wait a moment and use it."
+        case .pairingExpired: "Pairing expired. Enter the code shown on your Mac."
+        }
+    }
+
     // MARK: - Persistence
 
+    private static let tokenKey = "fiple.token"
+
+    /// The reconnect token is a bearer credential (full remote control of the
+    /// Mac), so it lives in the Keychain, not UserDefaults.
     private var storedToken: String? {
-        get { UserDefaults.standard.string(forKey: "fiple.token") }
-        set { UserDefaults.standard.set(newValue, forKey: "fiple.token") }
+        get { Keychain.get(Self.tokenKey) }
+        set {
+            if let newValue { Keychain.set(newValue, for: Self.tokenKey) }
+            else { Keychain.remove(Self.tokenKey) }
+        }
+    }
+
+    /// One-time migration of a token left in UserDefaults by an earlier build.
+    private func migrateLegacyToken() {
+        guard Keychain.get(Self.tokenKey) == nil,
+              let legacy = UserDefaults.standard.string(forKey: Self.tokenKey) else { return }
+        // Only scrub the plaintext copy once it is safely in the Keychain.
+        if Keychain.set(legacy, for: Self.tokenKey) {
+            UserDefaults.standard.removeObject(forKey: Self.tokenKey)
+        }
     }
 
     private var storedMacID: String? {

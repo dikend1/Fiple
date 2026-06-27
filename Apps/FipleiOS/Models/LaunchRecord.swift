@@ -18,6 +18,10 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
     let colorHex: String
     let category: Category
     let timestamp: Date
+    /// Set for single-action launches (Fiple Bar) so the row can be re-run by
+    /// re-dispatching the action; nil for workspace/tile launches, which are
+    /// re-run by tile id. Optional, so older saved history decodes unchanged.
+    let actionKind: ActionKind?
 
     init(tile: Tile, at timestamp: Date) {
         id = UUID()
@@ -27,6 +31,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         iconImageData = tile.iconImageData
         colorHex = tile.colorHex
         category = LaunchRecord.category(for: tile)
+        actionKind = nil
         self.timestamp = timestamp
     }
 
@@ -40,7 +45,15 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         iconImageData = action.iconImageData
         colorHex = "#3B82F6"
         category = LaunchRecord.category(for: action.kind)
+        actionKind = action.kind
         self.timestamp = timestamp
+    }
+
+    /// Reconstructs the action for a single-action record so it can be re-run.
+    /// Returns nil for workspace/tile records.
+    var replayAction: Action? {
+        guard let actionKind else { return nil }
+        return Action(id: tileID, kind: actionKind, iconImageData: iconImageData, displayName: name)
     }
 
     private static func category(for kind: ActionKind) -> Category {
