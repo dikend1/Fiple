@@ -44,14 +44,35 @@ public actor FipleClient {
     }
 
     /// Opens a framed connection to an endpoint and waits until it is ready.
-    public func connect(to endpoint: NWEndpoint) async throws -> PeerConnection {
+    ///
+    /// Fails after `timeout` instead of hanging forever: `NWConnection` reports
+    /// an unreachable host (Mac asleep/off, wrong port) as `.waiting`, which
+    /// never resolves on its own, so without a deadline `waitUntilReady()` would
+    /// suspend indefinitely.
+    public func connect(to endpoint: NWEndpoint, timeout: Duration = .seconds(10)) async throws -> PeerConnection {
         FipleLog.connection.info("connecting to \(String(describing: endpoint))")
         let peer = PeerConnection(connection: NWConnection(to: endpoint, using: .tcp))
         await peer.start()
+
+        // Race readiness against a deadline. An unreachable host sits in
+        // `.waiting` forever, so `waitUntilReady()` would never return on its
+        // own. The timer closes the peer on expiry, which resumes the ready
+        // waiter (`close()` → `finish`), so there is no leaked continuation and
+        // no structured-task-group drain to deadlock on.
+        let timeoutTask = Task {
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            FipleLog.connection.error("connect timed out")
+            await peer.close()
+        }
+
         do {
             try await peer.waitUntilReady()
+            timeoutTask.cancel()
         } catch {
+            timeoutTask.cancel()
             FipleLog.connection.error("connect failed: \(error.localizedDescription)")
+            await peer.close()
             throw error
         }
         FipleLog.connection.info("connected")

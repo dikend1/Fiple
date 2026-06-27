@@ -34,11 +34,22 @@ public actor FipleServer {
         self.listener = listener
 
         let boundPort: UInt16 = try await withCheckedThrowingContinuation { cont in
+            // The continuation must resume exactly once. Network.framework keeps
+            // calling this handler for the listener's whole life (a later
+            // interface change can deliver `.failed` long after start), so once
+            // we resume we swap in a handler that only logs — never touching the
+            // already-resumed continuation again.
             listener.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
+                    listener.stateUpdateHandler = { state in
+                        if case let .failed(error) = state {
+                            FipleLog.discovery.error("listener failed after start: \(error.localizedDescription)")
+                        }
+                    }
                     cont.resume(returning: listener.port?.rawValue ?? 0)
                 case let .failed(error):
+                    listener.stateUpdateHandler = nil
                     FipleLog.discovery.error("listener failed: \(error.localizedDescription)")
                     cont.resume(throwing: error)
                 default:
