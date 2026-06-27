@@ -9,12 +9,22 @@ public actor FipleServer {
     private let stream: AsyncStream<PeerConnection>
     private let continuation: AsyncStream<PeerConnection>.Continuation
 
-    public init() {
+    /// Cap on simultaneously-open inbound connections. The MVP serves one phone;
+    /// a small cap leaves slack for a relaunch overlap while stopping a LAN peer
+    /// from exhausting sockets/memory by opening many connections at once.
+    private let maxConnections: Int
+    private var activeConnections = 0
+
+    public init(maxConnections: Int = 4) {
+        self.maxConnections = maxConnections
         (stream, continuation) = AsyncStream.makeStream()
     }
 
     /// Connections as they arrive (already started).
     public var newConnections: AsyncStream<PeerConnection> { stream }
+
+    /// Number of currently-open accepted connections (diagnostics / tests).
+    public var connectionCount: Int { activeConnections }
 
     /// Starts listening and advertising. Returns the bound TCP port once ready.
     /// Pass `port: .any` (default) to let the OS choose.
@@ -24,12 +34,8 @@ public actor FipleServer {
         listener.service = NWListener.Service(name: deviceName, type: FipleService.bonjourType)
 
         listener.newConnectionHandler = { [weak self] nwConnection in
-            FipleLog.discovery.info("inbound connection accepted")
-            let peer = PeerConnection(connection: nwConnection)
-            Task {
-                await peer.start()
-                await self?.deliver(peer)
-            }
+            guard let self else { nwConnection.cancel(); return }
+            Task { await self.accept(nwConnection) }
         }
         self.listener = listener
 
@@ -66,10 +72,29 @@ public actor FipleServer {
         FipleLog.discovery.info("server stopped")
         listener?.cancel()
         listener = nil
+        activeConnections = 0
         continuation.finish()
     }
 
-    private func deliver(_ peer: PeerConnection) {
+    /// Accepts an inbound connection if under the cap, else cancels it. Each
+    /// accepted peer decrements the count when it closes, freeing the slot.
+    private func accept(_ nwConnection: NWConnection) async {
+        guard activeConnections < maxConnections else {
+            FipleLog.discovery.notice("connection refused — at capacity (\(self.maxConnections) open)")
+            nwConnection.cancel()
+            return
+        }
+        activeConnections += 1
+        FipleLog.discovery.info("inbound connection accepted (\(self.activeConnections)/\(self.maxConnections))")
+        let peer = PeerConnection(connection: nwConnection)
+        await peer.onClose { [weak self] in
+            Task { await self?.connectionClosed() }
+        }
+        await peer.start()
         continuation.yield(peer)
+    }
+
+    private func connectionClosed() {
+        if activeConnections > 0 { activeConnections -= 1 }
     }
 }
