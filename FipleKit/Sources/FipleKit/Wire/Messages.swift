@@ -9,13 +9,16 @@ public enum ClientMessage: Sendable, Equatable {
     case reconnect(token: String)
     /// Trigger a tile by id.
     case run(tileID: UUID)
-    /// Trigger a single Fiple Bar action (app / website / file).
-    case runAction(Action)
+    /// Trigger a single Fiple Bar action by id. The client sends only the id;
+    /// the Mac resolves it against its own saved Fiple Bar / tiles and runs it
+    /// only if it exists — so a client can never have the Mac execute an
+    /// arbitrary, client-supplied action.
+    case runAction(actionID: UUID)
 }
 
 extension ClientMessage: Codable {
     private enum Tag: String, Codable { case pair, reconnect, run, runAction }
-    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, action }
+    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -23,7 +26,7 @@ extension ClientMessage: Codable {
         case .pair: self = .pair(code: try c.decode(String.self, forKey: .code))
         case .reconnect: self = .reconnect(token: try c.decode(String.self, forKey: .token))
         case .run: self = .run(tileID: try c.decode(UUID.self, forKey: .tileID))
-        case .runAction: self = .runAction(try c.decode(Action.self, forKey: .action))
+        case .runAction: self = .runAction(actionID: try c.decode(UUID.self, forKey: .actionID))
         }
     }
 
@@ -39,9 +42,9 @@ extension ClientMessage: Codable {
         case let .run(tileID):
             try c.encode(Tag.run, forKey: .type)
             try c.encode(tileID, forKey: .tileID)
-        case let .runAction(action):
+        case let .runAction(actionID):
             try c.encode(Tag.runAction, forKey: .type)
-            try c.encode(action, forKey: .action)
+            try c.encode(actionID, forKey: .actionID)
         }
     }
 }
