@@ -123,7 +123,7 @@ struct WorkspacesView: View {
 
     private var summaries: some View {
         Panel(title: "Recent", icon: "clock", actionTitle: "View all") { section = .recent } content: {
-            RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet", onRun: runByID)
+            RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet", onRun: runRecord)
         }
     }
 
@@ -131,9 +131,12 @@ struct WorkspacesView: View {
         Task { await server.run(tile) }
     }
 
-    private func runByID(_ tileID: UUID) {
-        guard let tile = store.tiles.first(where: { $0.id == tileID }) else { return }
-        Task { await server.run(tile) }
+    private func runRecord(_ record: RunRecord) {
+        if let action = record.replayAction {
+            Task { await server.run(action) }
+        } else if let tile = store.tiles.first(where: { $0.id == record.tileID }) {
+            Task { await server.run(tile) }
+        }
     }
 
     private var emptyState: some View {

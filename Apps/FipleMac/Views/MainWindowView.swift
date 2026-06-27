@@ -41,10 +41,14 @@ struct MainWindowView: View {
         .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
     }
 
-    /// Re-run a workspace by id (used by Recent), looked up against current tiles.
-    private func run(tileID: UUID) {
-        guard let tile = store.tiles.first(where: { $0.id == tileID }) else { return }
-        Task { await server.run(tile) }
+    /// Re-run a Recent entry: re-dispatch a single action, or look up the
+    /// workspace tile by id against the current tiles.
+    private func run(record: RunRecord) {
+        if let action = record.replayAction {
+            Task { await server.run(action) }
+        } else if let tile = store.tiles.first(where: { $0.id == record.tileID }) {
+            Task { await server.run(tile) }
+        }
     }
 
     @ViewBuilder private var detail: some View {
@@ -58,7 +62,7 @@ struct MainWindowView: View {
         case .shortcuts:
             ActionCatalogView(store: store, pinned: pinned, kind: .shortcuts)
         case .recent:
-            RecentView(recents: recents, onRun: run(tileID:))
+            RecentView(recents: recents, onRun: run(record:))
         case .devices:
             DevicesView(server: server)
         case .settings:

@@ -88,7 +88,8 @@ struct ModelCodingTests {
         let id = UUID()
         let messages: [ServerMessage] = [
             .paired(macID: "mac-1", macName: "Maksat's MacBook", token: "tok-abc"),
-            .pairRejected(reason: "wrong code"),
+            .pairRejected(reason: .incorrectCode),
+            .pairRejected(reason: .tooManyAttempts),
             .tilesSnapshot(tiles: [Tile(name: "Deep Work")]),
             .runResult(RunResult(tileID: id, actions: [.success(UUID()), .failure(UUID(), "not installed")])),
         ]
