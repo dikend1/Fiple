@@ -204,7 +204,8 @@ final class RemoteController {
         runningActionID = action.id
         runStartedAt[action.id] = Date()
         recordLaunch(of: action)
-        try? await peer.send(ClientMessage.runAction(action))
+        // Send only the id; the Mac resolves and runs it from its own Fiple Bar.
+        try? await peer.send(ClientMessage.runAction(actionID: action.id))
     }
 
     private func recordLaunch(of tile: Tile) {

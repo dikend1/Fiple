@@ -165,9 +165,20 @@ final class ServerController {
             didRun?(tile)
             try? await peer.send(ServerMessage.runResult(result))
 
-        case let .runAction(action):
+        case let .runAction(actionID):
             guard isPaired else {
                 FipleLog.execution.notice("runAction ignored — not paired")
+                return
+            }
+            // Never execute a client-supplied action. Resolve the id against the
+            // Mac's own saved Fiple Bar / tiles and run only what actually exists
+            // here — so launchApp/runShortcut/openURL payloads are always ours.
+            guard let action = ActionLookup.resolve(actionID, fipleBar: pinned.actions, tiles: store.tiles) else {
+                FipleLog.execution.error("runAction rejected — unknown action id")
+                // Still report a failure so the phone clears its spinner.
+                let rejected = RunResult(tileID: actionID, actions: [.failure(actionID, "Action not available on this Mac")])
+                lastRun = rejected
+                try? await peer.send(ServerMessage.runResult(rejected))
                 return
             }
             let actionResult = await executor.execute(action)
