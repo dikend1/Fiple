@@ -81,6 +81,7 @@ struct ModelCodingTests {
         let id = UUID()
         #expect(try roundTrip(ClientMessage.pair(code: "0427")) == .pair(code: "0427"))
         #expect(try roundTrip(ClientMessage.run(tileID: id)) == .run(tileID: id))
+        #expect(try roundTrip(ClientMessage.runAction(actionID: id)) == .runAction(actionID: id))
     }
 
     @Test("ServerMessage round-trips")
