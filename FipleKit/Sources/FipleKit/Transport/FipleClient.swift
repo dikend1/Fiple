@@ -8,25 +8,40 @@ import Network
 /// and authenticates the right Mac (see PRD `fiple-pairing`).
 public actor FipleClient {
     private var browser: NWBrowser?
+    /// Identities already surfaced this session, so the same Mac is emitted once.
+    private var seenEndpointKeys: Set<String> = []
 
     public init() {}
 
     /// Streams discovered Fiple endpoints as they appear on the local network.
     public func discover() -> AsyncStream<NWEndpoint> {
+        // Tear down any previous browser so it can't keep running (or leak)
+        // behind a new discovery session, and reset the dedupe set.
+        browser?.cancel()
+        browser = nil
+        seenEndpointKeys.removeAll()
+
         let (stream, continuation) = AsyncStream.makeStream(of: NWEndpoint.self)
         let descriptor = NWBrowser.Descriptor.bonjour(type: FipleService.bonjourType, domain: nil)
         let browser = NWBrowser(for: descriptor, using: .tcp)
 
-        browser.browseResultsChangedHandler = { results, _ in
-            FipleLog.discovery.info("browse results changed: \(results.count) endpoint(s)")
-            for result in results {
-                continuation.yield(result.endpoint)
-            }
+        browser.browseResultsChangedHandler = { [weak self] results, _ in
+            // Extract endpoints on the browser queue (read-only), then hop onto
+            // the actor to dedupe and yield.
+            let endpoints = results.map(\.endpoint)
+            guard let self else { return }
+            Task { await self.emitNewEndpoints(endpoints, to: continuation) }
         }
         browser.stateUpdateHandler = { state in
-            if case let .failed(error) = state {
+            switch state {
+            case let .failed(error):
                 FipleLog.discovery.error("browser failed: \(error.localizedDescription)")
                 continuation.finish()
+            case .cancelled:
+                FipleLog.discovery.info("browser cancelled")
+                continuation.finish()
+            default:
+                break
             }
         }
         continuation.onTermination = { _ in browser.cancel() }
@@ -37,10 +52,30 @@ public actor FipleClient {
         return stream
     }
 
+    /// Yields each Mac once: dedupes by service identity (ignoring interface) so
+    /// the same Mac discovered on several interfaces, or re-reported on every
+    /// result change, isn't emitted repeatedly.
+    private func emitNewEndpoints(_ endpoints: [NWEndpoint], to continuation: AsyncStream<NWEndpoint>.Continuation) {
+        for endpoint in endpoints where seenEndpointKeys.insert(Self.dedupeKey(endpoint)).inserted {
+            FipleLog.discovery.info("endpoint discovered")
+            continuation.yield(endpoint)
+        }
+    }
+
+    /// Stable identity for a discovered endpoint — Bonjour name/type/domain,
+    /// ignoring the interface, so one Mac maps to one key.
+    static func dedupeKey(_ endpoint: NWEndpoint) -> String {
+        if case let .service(name, type, domain, _) = endpoint {
+            return "\(name).\(type).\(domain)"
+        }
+        return String(describing: endpoint)
+    }
+
     public func stopDiscovery() {
         FipleLog.discovery.info("discovery stopped")
         browser?.cancel()
         browser = nil
+        seenEndpointKeys.removeAll()
     }
 
     /// Opens a framed connection to an endpoint and waits until it is ready.
