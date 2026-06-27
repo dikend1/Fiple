@@ -38,6 +38,13 @@ struct MacActionExecutor: ActionExecutor {
     }
 
     private func openURL(_ url: URL, actionID: UUID) async -> ActionResult {
+        // A paired peer can send any URL; only open web links. This blocks
+        // file:// (arbitrary local files → possible code execution via the
+        // default handler) and app-specific custom schemes.
+        guard ActionPolicy.allowsOpening(url) else {
+            FipleLog.execution.error("blocked URL scheme: \(url.scheme ?? "none")")
+            return .failure(actionID, "Blocked URL: only http and https are allowed")
+        }
         do {
             _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
             return .success(actionID)
