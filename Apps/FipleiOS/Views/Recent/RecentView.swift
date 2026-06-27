@@ -86,8 +86,13 @@ struct RecentView: View {
     }
 
     private func run(_ item: LaunchRecord) {
-        guard let tile = controller.tiles.first(where: { $0.id == item.tileID }) else { return }
-        Task { await controller.run(tile) }
+        // Single-action launches re-dispatch the action itself; workspace
+        // launches look up the tile by id.
+        if let action = item.replayAction {
+            Task { await controller.runAction(action) }
+        } else if let tile = controller.tiles.first(where: { $0.id == item.tileID }) {
+            Task { await controller.run(tile) }
+        }
     }
 
     private var filterBar: some View {
