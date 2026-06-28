@@ -30,7 +30,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dias.fiple
+        PRODUCT_BUNDLE_IDENTIFIER: com.dias.fipleapp
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleMac/Info.plist
@@ -49,7 +49,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dias.fiple
+        PRODUCT_BUNDLE_IDENTIFIER: com.dias.fipleapp
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleiOS/Info.plist
