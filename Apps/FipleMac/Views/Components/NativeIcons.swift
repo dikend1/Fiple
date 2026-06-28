@@ -117,10 +117,9 @@ final class FaviconCache {
     private var cache: [String: NSImage] = [:]
 
     func icon(for host: String) async -> NSImage? {
-        let key = host.trimmingCharacters(in: .whitespaces)
-        guard !key.isEmpty else { return nil }
+        guard let key = FaviconSource.cacheKey(forHost: host) else { return nil }
         if let cached = cache[key] { return cached }
-        guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(key)&sz=128"),
+        guard let url = FaviconSource.url(forHost: host),
               let (data, _) = try? await URLSession.shared.data(from: url),
               let image = NSImage(data: data) else { return nil }
         cache[key] = image

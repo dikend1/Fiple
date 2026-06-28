@@ -38,7 +38,7 @@ struct ActionDraft: Identifiable {
             guard !bundleID.isEmpty else { return nil }
             return Action(id: id, kind: .launchApp(bundleID: bundleID))
         case .openURL:
-            guard let u = URL(string: url), u.scheme != nil else { return nil }
+            guard let u = URLInput.webURL(from: url) else { return nil }
             return Action(id: id, kind: .openURL(u))
         case .runShortcut:
             let trimmed = shortcutName.trimmingCharacters(in: .whitespaces)
@@ -170,7 +170,7 @@ struct TileEditorView: View {
 
     /// Typing a URL fills in a name from the domain and fetches the site favicon.
     private func applyURLMetadata(_ raw: String) {
-        guard let host = URL(string: raw)?.host(), host.contains(".") else { return }
+        guard let host = URLInput.webURL(from: raw)?.host(), host.contains(".") else { return }
         if isNameAutoFillable {
             let pretty = Self.prettyName(fromHost: host)
             name = pretty; autoFilledName = pretty
@@ -407,7 +407,7 @@ struct ShortcutPickerField: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .task { shortcutsIcon = SystemIcon.shortcutsAppIcon() }
+        .task { shortcutsIcon = AppIconCache.shared.shortcutsIcon() }
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {

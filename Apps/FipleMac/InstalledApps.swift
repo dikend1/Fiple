@@ -8,8 +8,10 @@ struct InstalledApp: Identifiable, Hashable, Sendable {
     let name: String
     let url: URL
 
-    /// The app's Finder icon, for display in the picker.
-    @MainActor var icon: NSImage { NSWorkspace.shared.icon(forFile: url.path) }
+    /// The app's Finder icon, for display in the picker. Resolved through the
+    /// shared session cache so a list redraw (typing in the search field,
+    /// scrolling) reuses the icon instead of hitting NSWorkspace per row.
+    @MainActor var icon: NSImage { AppIconCache.shared.icon(bundleID: bundleID, fileURL: url) }
 
     /// The icon flattened to PNG bytes so it can be embedded in a `Tile` and
     /// shipped to the iPhone remote.
