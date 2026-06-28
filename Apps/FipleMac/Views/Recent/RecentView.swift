@@ -88,13 +88,17 @@ private struct RecentRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            IconTile(
-                iconImageData: record.iconImageData,
-                systemName: record.iconSystemName,
-                colorHex: record.colorHex,
-                size: 32,
-                cornerRadius: 9
-            )
+            if record.iconImageData == nil, let host = record.faviconHost {
+                FaviconView(host: host, size: 32, cornerRadius: 9)
+            } else {
+                IconTile(
+                    iconImageData: record.iconImageData,
+                    systemName: record.iconSystemName,
+                    colorHex: record.colorHex,
+                    size: 32,
+                    cornerRadius: 9
+                )
+            }
             Text(record.tileName).font(.system(size: 14, weight: .medium))
             Spacer()
             Text(Self.format(record.timestamp))

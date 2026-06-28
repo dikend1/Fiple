@@ -130,13 +130,17 @@ private struct RecentRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            TileIcon(
-                iconImageData: item.iconImageData,
-                systemName: item.iconSystemName,
-                colorHex: item.colorHex,
-                size: 44,
-                cornerRadius: 12
-            )
+            if item.iconImageData == nil, let host = item.faviconHost {
+                Favicon(host: host, size: 44, cornerRadius: 12)
+            } else {
+                TileIcon(
+                    iconImageData: item.iconImageData,
+                    systemName: item.iconSystemName,
+                    colorHex: item.colorHex,
+                    size: 44,
+                    cornerRadius: 12
+                )
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
