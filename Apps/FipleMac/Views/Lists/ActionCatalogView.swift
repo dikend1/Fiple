@@ -159,11 +159,11 @@ struct ActionCatalogView: View {
     @ViewBuilder private func icon(for kind: ActionKind) -> some View {
         switch kind {
         case let .launchApp(bundleID):
-            NativeIconTile(image: SystemIcon.app(bundleID: bundleID), fallbackSymbol: "app.dashed")
+            NativeIconTile(image: AppIconCache.shared.icon(bundleID: bundleID), fallbackSymbol: "app.dashed")
         case let .openURL(url):
             FaviconView(host: url.host() ?? "")
         case .runShortcut:
-            NativeIconTile(image: SystemIcon.shortcutsAppIcon(), fallbackSymbol: "bolt.fill")
+            NativeIconTile(image: AppIconCache.shared.shortcutsIcon(), fallbackSymbol: "bolt.fill")
         }
     }
 

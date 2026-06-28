@@ -152,13 +152,7 @@ private struct BarTile: View {
                 .padding(10)
                 .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
         } else if case let .openURL(url) = action.kind, let host = url.host() {
-            AsyncImage(url: URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128")) { phase in
-                if case let .success(image) = phase {
-                    image.resizable().scaledToFit().padding(14)
-                } else {
-                    Image(systemName: "globe").font(.system(size: 24, weight: .semibold)).foregroundStyle(.secondary)
-                }
-            }
+            BarFavicon(host: host)
         } else {
             Image(systemName: fallbackSymbol)
                 .font(.system(size: 24, weight: .semibold))
@@ -166,13 +160,15 @@ private struct BarTile: View {
         }
     }
 
+    /// App and shortcut icons via the session cache, so a tile redraw (hover,
+    /// scroll, neighbouring edits) is a dictionary hit rather than a fresh
+    /// NSWorkspace lookup.
     private var nsIcon: NSImage? {
         switch action.kind {
         case let .launchApp(bundleID):
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
-            return NSWorkspace.shared.icon(forFile: url.path)
+            return AppIconCache.shared.icon(bundleID: bundleID)
         case .runShortcut:
-            return SystemIcon.shortcutsAppIcon()
+            return AppIconCache.shared.shortcutsIcon()
         case .openURL:
             return nil
         }
@@ -181,10 +177,8 @@ private struct BarTile: View {
     private var title: String {
         switch action.kind {
         case let .launchApp(bundleID):
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-                return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-            }
-            return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
+            return AppIconCache.shared.name(bundleID: bundleID)
+                ?? (bundleID.split(separator: ".").last.map(String.init) ?? bundleID)
         case let .openURL(url):
             return (url.host()?.replacingOccurrences(of: "www.", with: "")) ?? url.absoluteString
         case let .runShortcut(name):
@@ -198,6 +192,26 @@ private struct BarTile: View {
         case .openURL: "globe"
         case .runShortcut: "bolt.fill"
         }
+    }
+}
+
+/// A Fiple Bar favicon: loads through the shared session `FaviconCache` (so a
+/// host is fetched at most once, instead of a network request per body redraw)
+/// and renders with the bar tile's own padding and globe fallback — pixel-for-
+/// pixel the same as the former inline `AsyncImage`.
+private struct BarFavicon: View {
+    let host: String
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().scaledToFit().padding(14)
+            } else {
+                Image(systemName: "globe").font(.system(size: 24, weight: .semibold)).foregroundStyle(.secondary)
+            }
+        }
+        .task(id: host) { image = await FaviconCache.shared.icon(for: host) }
     }
 }
 
