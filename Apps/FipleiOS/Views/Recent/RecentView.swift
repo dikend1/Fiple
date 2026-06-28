@@ -79,6 +79,7 @@ struct RecentView: View {
                                 .frame(width: 38, height: 38)
                                 .fipleCard(cornerRadius: Theme.Radius.control)
                         }
+                        .accessibilityLabel("History options")
                     }
                 }
             }

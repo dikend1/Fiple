@@ -52,6 +52,7 @@ struct WorkspaceCardView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isRunning)
+                .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
             }
         }
         .padding(Theme.Spacing.lg)
