@@ -70,7 +70,7 @@ struct SettingsView: View {
             HStack {
                 Text("Launch at Login").font(.system(size: 14, weight: .medium))
                 Spacer()
-                Toggle("", isOn: Binding(
+                Toggle("Launch at Login", isOn: Binding(
                     get: { launchAtLogin },
                     set: { setLaunchAtLogin($0) }
                 ))
