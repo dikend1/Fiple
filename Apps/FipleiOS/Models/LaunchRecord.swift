@@ -56,6 +56,13 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         return Action(id: tileID, kind: actionKind, iconImageData: iconImageData, displayName: name)
     }
 
+    /// Host for a website launch, so the row can show its favicon instead of a
+    /// globe. Nil for apps, shortcuts and multi-action workspaces.
+    var faviconHost: String? {
+        if case let .openURL(url)? = actionKind { return url.host() }
+        return nil
+    }
+
     private static func category(for kind: ActionKind) -> Category {
         switch kind {
         case .launchApp: .app
