@@ -1,6 +1,6 @@
 name: Fiple
 options:
-  bundleIdPrefix: com.fiple
+  bundleIdPrefix: com.dias
   deploymentTarget:
     macOS: "14.0"
     iOS: "17.0"
@@ -30,7 +30,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.Fiple
+        PRODUCT_BUNDLE_IDENTIFIER: com.dias.fiple
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleMac/Info.plist
@@ -49,7 +49,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fiple.Fiple
+        PRODUCT_BUNDLE_IDENTIFIER: com.dias.fiple
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleiOS/Info.plist
