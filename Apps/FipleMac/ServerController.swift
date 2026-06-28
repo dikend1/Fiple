@@ -102,15 +102,12 @@ final class ServerController {
     // MARK: - Connection handling
 
     private func handle(_ peer: PeerConnection) async {
-        // A new connection supersedes the previous one (MVP: a single phone).
-        // Close the stale socket so its message loop ends and it stops lingering
-        // as the "current" peer — otherwise a relaunched phone can't reconnect.
-        if let old = self.peer, old !== peer {
-            FipleLog.connection.info("superseding previous connection")
-            await old.close()
-        }
-        self.peer = peer
-        isPaired = false
+        // Do NOT evict the currently-paired phone here: an unauthenticated socket
+        // must never be able to kick the connected phone or clear `isPaired` just
+        // by opening a TCP connection. The new connection becomes the active peer
+        // only once it actually authenticates — the supersede happens in
+        // `acceptPairing`. Until then it runs on its own auth timeout and cannot
+        // run actions (gated on `peer === self.peer` in `process`).
         // Reap the connection if it never authenticates (pair/reconnect) in time.
         await peer.startAuthTimeout(.seconds(Self.authTimeoutSeconds))
         do {
@@ -131,7 +128,9 @@ final class ServerController {
             switch throttle.register(matches: matches, now: Date()) {
             case .accepted:
                 FipleLog.pairing.info("pair accepted — code matched")
-                await acceptPairing(on: peer)
+                // Fresh code pairing: mint a new token so any previously leaked
+                // token is invalidated and a different phone never inherits one.
+                await acceptPairing(on: peer, rotateToken: true)
             case let .rejected(remaining):
                 FipleLog.pairing.notice("pair rejected — wrong code (\(remaining) attempt(s) left)")
                 try? await peer.send(ServerMessage.pairRejected(reason: .incorrectCode))
@@ -151,15 +150,16 @@ final class ServerController {
         case let .reconnect(token):
             if let saved = sessionToken, token == saved {
                 FipleLog.pairing.info("reconnect accepted — token matched")
-                await acceptPairing(on: peer)
+                // Known phone reconnecting: keep its existing token.
+                await acceptPairing(on: peer, rotateToken: false)
             } else {
                 FipleLog.pairing.notice("reconnect rejected — token expired")
                 try? await peer.send(ServerMessage.pairRejected(reason: .pairingExpired))
             }
 
         case let .run(tileID):
-            guard isPaired, let tile = store.tiles.first(where: { $0.id == tileID }) else {
-                FipleLog.execution.notice("run ignored — \(isPaired ? "unknown tile" : "not paired")")
+            guard peer === self.peer, isPaired, let tile = store.tiles.first(where: { $0.id == tileID }) else {
+                FipleLog.execution.notice("run ignored — \(peer === self.peer && isPaired ? "unknown tile" : "not the authenticated peer")")
                 return
             }
             let result = await TileRunner(executor: executor).run(tile)
@@ -168,8 +168,8 @@ final class ServerController {
             try? await peer.send(ServerMessage.runResult(result))
 
         case let .runAction(actionID):
-            guard isPaired else {
-                FipleLog.execution.notice("runAction ignored — not paired")
+            guard peer === self.peer, isPaired else {
+                FipleLog.execution.notice("runAction ignored — not the authenticated peer")
                 return
             }
             // Never execute a client-supplied action. Resolve the id against the
@@ -192,12 +192,23 @@ final class ServerController {
         }
     }
 
-    private func acceptPairing(on peer: PeerConnection) async {
+    private func acceptPairing(on peer: PeerConnection, rotateToken: Bool) async {
+        // This connection has now proven itself, so it supersedes the previous
+        // peer (MVP: a single phone). Closing the stale socket here — rather than
+        // on raw connect — means an unauthenticated peer can never evict the
+        // connected phone.
+        if let old = self.peer, old !== peer {
+            FipleLog.connection.info("superseding previous connection")
+            await old.close()
+        }
+        self.peer = peer
         await peer.markAuthenticated()
         isPaired = true
         status = .connected
         FipleLog.pairing.info("paired — sending tiles snapshot")
-        let token = sessionToken ?? UUID().uuidString
+        // Fresh code pairing mints a new token (invalidating any prior one);
+        // a token reconnect keeps the credential it just presented.
+        let token = rotateToken ? UUID().uuidString : (sessionToken ?? UUID().uuidString)
         sessionToken = token
         Keychain.set(token, for: Self.tokenKey)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
