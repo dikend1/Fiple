@@ -53,6 +53,10 @@ public actor PeerConnection {
     public func waitUntilReady() async throws {
         if isReady { return }
         if let failure { throw failure }
+        // Already finished via a clean close (no failure recorded): the ready
+        // waiters were drained by `finish` and will never be drained again, so a
+        // late caller must not suspend here — it would leak forever.
+        if didFinish { throw TransportError.notConnected }
         try await withCheckedThrowingContinuation { readyWaiters.append($0) }
     }
 
