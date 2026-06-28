@@ -61,26 +61,22 @@ struct Favicon: View {
     var cornerRadius: CGFloat = 16
     var fallbackSymbol: String = "globe"
 
-    private var url: URL? {
-        URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128")
-    }
+    @State private var image: UIImage?
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(Theme.Palette.surface)
             .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(Theme.Palette.hairline))
             .overlay {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case let .success(image):
-                        image.resizable().scaledToFit().padding(size * 0.22)
-                    default:
-                        Image(systemName: fallbackSymbol)
-                            .font(.system(size: size * 0.38, weight: .semibold))
-                            .foregroundStyle(Theme.Palette.secondary)
-                    }
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFit().padding(size * 0.22)
+                } else {
+                    Image(systemName: fallbackSymbol)
+                        .font(.system(size: size * 0.38, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.secondary)
                 }
             }
             .frame(width: size, height: size)
+            .task(id: host) { image = await FaviconImageCache.shared.icon(for: host) }
     }
 }
