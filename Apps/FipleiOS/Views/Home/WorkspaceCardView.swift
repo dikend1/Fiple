@@ -13,30 +13,39 @@ struct WorkspaceCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            TileIcon(
-                iconImageData: tile.iconImageData,
-                systemName: tile.iconSystemName,
-                colorHex: tile.colorHex,
-                size: 48
-            )
+            Group {
+                TileIcon(
+                    iconImageData: tile.iconImageData,
+                    systemName: tile.iconSystemName,
+                    colorHex: tile.colorHex,
+                    size: 48
+                )
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(tile.name)
-                    .font(Theme.Typography.cardTitle)
-                    .foregroundStyle(Theme.Palette.label)
-                Text(tile.subtitle ?? "\(tile.actions.count) actions")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.Palette.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(tile.name)
+                        .font(Theme.Typography.cardTitle)
+                        .foregroundStyle(Theme.Palette.label)
+                    Text(tile.subtitle ?? "\(tile.actions.count) actions")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Theme.Palette.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .opacity(isLocked ? 0.5 : 1)
 
             Spacer(minLength: Theme.Spacing.sm)
 
-            actionIcons
+            // App-icon row and the Run button share one row with a deliberate gap
+            // so the button never crowds the last icon; the trailing Spacer keeps
+            // them grouped to the left. The button stays full-opacity when locked.
+            HStack(spacing: Theme.Spacing.lg) {
+                actionIcons
+                    .opacity(isLocked ? 0.5 : 1)
+                runButton
+                Spacer(minLength: 0)
+            }
         }
-        .opacity(isLocked ? 0.5 : 1)
-        .overlay(alignment: .bottomTrailing) { runButton }
         .overlay(alignment: .topTrailing) { if isLocked { proBadge } }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
@@ -95,8 +104,11 @@ struct WorkspaceCardView: View {
     /// inside" preview from the mockup, in place of raw stat counts.
     private var actionIcons: some View {
         let actions = tile.actions
-        let maxVisible = 4
-        let visible = actions.count > maxVisible ? Array(actions.prefix(3)) : actions
+        // Cap the row so it always leaves clear space before the floating Run
+        // button (40pt) on the trailing edge — show up to 3 icons, otherwise 2
+        // icons + a "+N" chip.
+        let maxVisible = 3
+        let visible = actions.count > maxVisible ? Array(actions.prefix(2)) : actions
         let overflow = actions.count - visible.count
         return HStack(spacing: 6) {
             ForEach(visible) { action in
