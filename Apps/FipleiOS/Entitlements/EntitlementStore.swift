@@ -67,6 +67,13 @@ final class EntitlementStore {
     /// so the gate/paywall stay exercisable, but an inert backend in Release so a
     /// misconfigured production build never falsely grants Pro.
     private static func makeDefaultBackend() -> ProEntitlementBackend {
+        #if DEBUG
+        // Force the local stub (3 priced products) for paywall screenshots, even
+        // when a real key is present and the Offering is not configured yet.
+        if ProcessInfo.processInfo.arguments.contains("-stubStore") {
+            return LocalProBackend()
+        }
+        #endif
         if let key = apiKey, !key.isEmpty {
             FipleLog.execution.info("entitlements: using RevenueCat backend")
             return RevenueCatProBackend(apiKey: key)
