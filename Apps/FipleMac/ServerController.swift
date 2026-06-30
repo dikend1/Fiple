@@ -293,6 +293,10 @@ final class ServerController {
     /// Loads the session token from the Keychain, migrating a token left in
     /// UserDefaults by an earlier build (then scrubbing the plaintext copy).
     private static func loadToken() -> String? {
+        // Drop any token left in the legacy keychain by an older build. We never
+        // read it (that would trigger the "enter the login keychain password"
+        // prompt); re-pairing recreates it in the data-protection keychain.
+        Keychain.purgeLegacy(tokenKey)
         if let token = Keychain.get(tokenKey) { return token }
         if let legacy = UserDefaults.standard.string(forKey: tokenKey) {
             // Only scrub the plaintext copy once it is safely in the Keychain.
