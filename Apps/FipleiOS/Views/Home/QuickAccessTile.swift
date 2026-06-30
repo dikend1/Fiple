@@ -58,6 +58,22 @@ struct QuickAccessTile: View {
     }
 }
 
+/// An empty placeholder slot that pads a Fiple Bar page out to a full 4×2 grid,
+/// so the bar always reads as a complete grid rather than a ragged last row —
+/// a faint, glassy outlined tile matching the real tiles' footprint.
+struct QuickAccessSlot: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Theme.Palette.surface.opacity(0.35))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Theme.Palette.hairline)
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 120)
+    }
+}
+
 /// A gentle press-scale for tappable tiles — makes the grid feel responsive
 /// without a heavy highlight.
 struct QuickTilePressStyle: ButtonStyle {
