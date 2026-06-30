@@ -64,13 +64,7 @@ struct HomeView: View {
     @ViewBuilder private var workspaces: some View {
         let items = controller.workspaces
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeader(title: "Workspaces") {
-                if !items.isEmpty {
-                    Text("View all")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.brandLink)
-                }
-            }
+            SectionHeader("Workspaces")
 
             if items.isEmpty {
                 EmptyHint(
