@@ -55,12 +55,11 @@ struct PaywallView: View {
 
     private var hero: some View {
         VStack(spacing: Theme.Spacing.md) {
-            ZStack {
-                Circle().fill(Theme.Palette.brand.opacity(0.16)).frame(width: 84, height: 84)
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundStyle(Theme.Palette.brand)
-            }
+            Image("FipleLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88, height: 88)
+                .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
             Text("Fiple Pro")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Theme.Palette.label)
