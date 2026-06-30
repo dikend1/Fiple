@@ -63,10 +63,11 @@ struct PaywallView: View {
             Text("Fiple Pro")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Theme.Palette.label)
-            Text("Unlock every app and workspace on your phone. Keep building on your Mac with no limits.")
+            Text("Run every app and preset from your phone — no limits.")
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.Palette.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.sm)
         }
         .padding(.top, Theme.Spacing.sm)
     }
@@ -191,7 +192,7 @@ struct PaywallView: View {
             } label: {
                 Text("Restore Purchases")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.brandLink)
+                    .foregroundStyle(Theme.Palette.brand)
             }
             .buttonStyle(.plain)
             .disabled(store.isWorking)
