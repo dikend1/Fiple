@@ -24,6 +24,9 @@ struct SettingsView: View {
                     devices
                     preferences
                     about
+                    #if DEBUG
+                    debugTools
+                    #endif
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.bottom, Theme.Spacing.xxl)
@@ -103,6 +106,14 @@ struct SettingsView: View {
             GroupLabel("Preferences")
 
             VStack(spacing: 0) {
+                SettingsRow(
+                    icon: controller.entitlements.isPro ? "checkmark.seal.fill" : "crown.fill",
+                    title: controller.entitlements.isPro ? "Fiple Pro — Active" : "Get Fiple Pro",
+                    value: controller.entitlements.isPro ? nil : "Unlock all"
+                ) {
+                    if !controller.entitlements.isPro { controller.paywallRequested = true }
+                }
+                rowDivider
                 SettingsRow(icon: "clock.arrow.circlepath", title: "Clear Launch History") {
                     confirmingClearHistory = true
                 }
@@ -135,6 +146,49 @@ struct SettingsView: View {
             .fipleCard()
         }
     }
+
+    #if DEBUG
+    /// Debug-only paywall testing aids: flip back to the free tier, and shrink the
+    /// free workspace limit so locked cards appear without 9+ real workspaces.
+    private var debugTools: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            GroupLabel("Debug")
+
+            VStack(spacing: 0) {
+                SettingsRow(icon: "arrow.counterclockwise", title: "Reset Pro (back to free)") {
+                    controller.entitlements.debugReset()
+                }
+                rowDivider
+                HStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: "lock.badge.clock")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Theme.Palette.label)
+                        .frame(width: 26)
+                    Text("Free limit (apps & workspaces)")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.Palette.label)
+                    Spacer()
+                    Stepper(
+                        "\(controller.debugFreeLimitOverride ?? FreeTierGate.defaultFreeLimit)",
+                        value: Binding(
+                            get: { controller.debugFreeLimitOverride ?? FreeTierGate.defaultFreeLimit },
+                            set: { controller.debugFreeLimitOverride = $0 }
+                        ),
+                        in: 0...20
+                    )
+                    .labelsHidden()
+                    Text("\(controller.debugFreeLimitOverride ?? FreeTierGate.defaultFreeLimit)")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.Palette.secondary)
+                        .frame(minWidth: 24)
+                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
+            }
+            .fipleCard()
+        }
+    }
+    #endif
 
     private var rowDivider: some View { Divider().padding(.leading, 56) }
 

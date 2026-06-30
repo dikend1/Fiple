@@ -4,7 +4,7 @@ import SwiftUI
 /// `NavigationStack`. Home / Recent / Settings are driven by the live
 /// `RemoteController`.
 struct MainTabView: View {
-    let controller: RemoteController
+    @Bindable var controller: RemoteController
 
     enum Tab: Hashable { case home, recent, settings }
 
@@ -25,5 +25,8 @@ struct MainTabView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .tint(Theme.Palette.brand)
+        .sheet(isPresented: $controller.paywallRequested) {
+            PaywallView(store: controller.entitlements)
+        }
     }
 }

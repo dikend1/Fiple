@@ -25,10 +25,15 @@ Design docs are idea, design, and target-contract surfaces. They are not current
 | BRD | `brd/fiple-mvp.md` | draft |
 | PRD | `prd/fiple-pairing.md` | draft |
 | PRD | `prd/fiple-remote-tiles.md` | draft |
+| PRD | `prd/fiple-paywall.md` | draft |
 | TRD | `trd/fiple-mvp.md` | draft |
 | ADR | `adr/0001-local-network-topology.md` | draft |
+| ADR | `adr/0002-lan-transport-security-model.md` | draft |
+| ADR | `adr/0003-monetization-entitlement-dependency.md` | draft |
 
-Implementing OpenSpec change: `openspec/changes/add-fiple-mvp/`.
+Implementing OpenSpec changes: `openspec/changes/add-fiple-mvp/`,
+`openspec/changes/harden-pairing-and-execution/`,
+`openspec/changes/add-tile-paywall/`.
 
 ## Consensus / Research
 

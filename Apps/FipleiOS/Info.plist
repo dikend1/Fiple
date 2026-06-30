@@ -28,6 +28,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Fiple finds your Mac on the local network to send tile commands.</string>
+	<key>RevenueCatAPIKey</key>
+	<string>appl_ZunXSCpYnTxDWjlrijeMpiDKaTd</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

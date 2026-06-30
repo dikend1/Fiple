@@ -9,6 +9,9 @@ options:
 packages:
   FipleKit:
     path: FipleKit
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios
+    from: "5.0.0"
 
 settings:
   base:
@@ -47,6 +50,7 @@ targets:
       - Apps/FipleiOS
     dependencies:
       - package: FipleKit
+      - package: RevenueCat
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp

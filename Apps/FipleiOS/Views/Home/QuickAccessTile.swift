@@ -7,6 +7,8 @@ import SwiftUI
 struct QuickAccessTile: View {
     let item: QuickAction
     var isRunning: Bool = false
+    /// Locked behind Fiple Pro — dimmed with a lock; tapping opens the paywall.
+    var isLocked: Bool = false
 
     var body: some View {
         VStack(spacing: 10) {
@@ -16,13 +18,19 @@ struct QuickAccessTile: View {
                         RoundedRectangle(cornerRadius: 13, style: .continuous)
                             .fill(.ultraThinMaterial)
                         ProgressView().controlSize(.small)
+                    } else if isLocked {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Theme.Palette.secondary)
                     }
                 }
                 .animation(.easeOut(duration: 0.15), value: isRunning)
 
             Text(item.title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.Palette.label)
+                .foregroundStyle(isLocked ? Theme.Palette.secondary : Theme.Palette.label)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -36,6 +44,16 @@ struct QuickAccessTile: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Theme.Palette.hairline)
         )
+        .overlay(alignment: .topTrailing) {
+            if isLocked {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(Theme.Palette.label.opacity(0.85), in: Circle())
+                    .padding(6)
+            }
+        }
         .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
     }
 }
