@@ -64,7 +64,7 @@ struct PaywallView: View {
             Text("Fiple Pro")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(Theme.Palette.label)
-            Text("Unlock every workspace on your phone. Keep building presets on your Mac with no limits.")
+            Text("Unlock every app and workspace on your phone. Keep building on your Mac with no limits.")
                 .font(.system(size: 15))
                 .foregroundStyle(Theme.Palette.secondary)
                 .multilineTextAlignment(.center)
@@ -76,7 +76,7 @@ struct PaywallView: View {
 
     private var benefits: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            benefit("square.grid.2x2.fill", "Unlimited workspaces", "Run all your presets, not just the first 8.")
+            benefit("square.grid.2x2.fill", "Unlimited apps & workspaces", "Run everything you set up, past the free limit.")
             benefit("bolt.fill", "One-tap context", "Restore any working setup on your Mac instantly.")
             benefit("lock.open.fill", "One purchase, every device", "Restore Pro on a new phone anytime.")
         }
@@ -100,10 +100,19 @@ struct PaywallView: View {
 
     // MARK: Products
 
-    private var productList: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            ForEach(store.products) { product in
-                productRow(product)
+    @ViewBuilder private var productList: some View {
+        if store.products.isEmpty {
+            Text("Plans are unavailable right now. Please try again later.")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.Palette.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.lg)
+        } else {
+            VStack(spacing: Theme.Spacing.md) {
+                ForEach(store.products) { product in
+                    productRow(product)
+                }
             }
         }
     }
