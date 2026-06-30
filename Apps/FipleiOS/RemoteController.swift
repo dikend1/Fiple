@@ -114,6 +114,10 @@ final class RemoteController {
         // exercised without a paired Mac. Debug builds only.
         if ProcessInfo.processInfo.arguments.contains("-demo") {
             loadDemoFixture()
+            // Auto-present the paywall for App Store review screenshots.
+            if ProcessInfo.processInfo.arguments.contains("-paywall") {
+                paywallRequested = true
+            }
             return
         }
         #endif
