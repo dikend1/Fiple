@@ -31,11 +31,11 @@ dependency are covered by ADR-0003 and OpenSpec change `add-tile-paywall`.
 - **Visible locked items** — Items beyond a surface's free quota appear greyed
   with a lock rather than hidden, so the user sees what Pro unlocks.
 - **Tap-to-unlock** — Tapping a locked item opens the paywall instead of running.
-- **Three ways to buy** — **Fiple Pro Monthly** ($2.99) and **Yearly** ($14.99)
-  auto-renewing subscriptions, and **Fiple Pro Lifetime** ($39.99) one-time. Any
-  of them unlocks everything; the user never has to understand "entitlements,"
-  only "I have Pro." Yearly is framed as the value pick (saves ~58% vs paying
-  monthly).
+- **Two ways to buy** — **Fiple Pro Monthly** ($2.99, auto-renewing) and **Fiple
+  Pro Lifetime** ($29.99, one-time). Either unlocks everything; the user never has
+  to understand "entitlements," only "I have Pro." Lifetime is framed as the value
+  pick (pay once). The product set is data-driven, so a Yearly tier can be added
+  later with no app change.
 - **Instant unlock** — A successful purchase unlocks all tiles immediately, no
   app restart.
 - **Restore** — A Restore Purchases control regains Pro on a new device or after
@@ -50,10 +50,10 @@ dependency are covered by ADR-0003 and OpenSpec change `add-tile-paywall`.
 1. A free user has 10 quick-launch apps in the Fiple Bar; the phone runs the
    first 8 normally and shows the last 2 greyed with a lock. Likewise only the
    first 2 of their workspaces run.
-2. The user taps a locked item. The paywall appears with three options — Monthly,
-   Yearly, and Lifetime — each showing its localized price (subscriptions show
-   their renewal period; Yearly is highlighted as the best value).
-3. The user buys Yearly. The purchase completes; all 11 tiles become runnable
+2. The user taps a locked item. The paywall appears with two options — Monthly
+   and Lifetime — each showing its localized price (the subscription shows its
+   renewal period; Lifetime is highlighted as the best value).
+3. The user buys Lifetime. The purchase completes; all tiles become runnable
    immediately.
 4. Later the user reinstalls on a new phone, opens Fiple, and taps Restore
    Purchases; Pro is restored and all tiles unlock.
@@ -100,7 +100,7 @@ dependency are covered by ADR-0003 and OpenSpec change `add-tile-paywall`.
 
 | Question | Owner | Status |
 | --- | --- | --- |
-| Prices: Monthly $2.99 / Yearly $14.99 / Lifetime $39.99 | maksat | decided |
+| Prices: Monthly $2.99 / Lifetime $29.99 (Yearly dropped) | maksat | decided |
 | Free quotas — Fiple Bar 8 / Workspaces 2 (tunable constants) | maksat | decided |
 | Per-surface quotas vs one combined "N total" pool | maksat | open |
 | Free trial / intro offer on Yearly | maksat | open |

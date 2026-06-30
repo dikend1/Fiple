@@ -90,15 +90,14 @@ the user actually runs remotely:
   | Product | Price | Type |
   | --- | --- | --- |
   | Monthly | $2.99 | auto-renewing subscription |
-  | Yearly | $14.99 | auto-renewing subscription (value pick, ~58% off monthly) |
-  | Lifetime | $39.99 | one-time purchase |
+  | Lifetime | $29.99 | one-time purchase (value pick — pay once) |
 
 **Rationale.** The people who build large preset libraries are exactly the power
-users willing to pay; the 8-tile free tier stays genuinely useful (not crippled)
-so the funnel is "loved it → outgrew the free tier," not "hit a wall on day one."
-Monthly matches the prevailing price point for comparable utilities; Yearly and
-Lifetime anchor it as a deal. Prices are USD base tiers; the App Store localizes
-per region.
+users willing to pay; the free tier stays genuinely useful (not crippled) so the
+funnel is "loved it → outgrew the free tier," not "hit a wall on day one." Monthly
+matches the prevailing price point for comparable utilities; Lifetime gives the
+subscription-averse a one-time path and anchors the deal. Prices are USD base
+tiers; the App Store localizes per region.
 
 **Dependency note.** Charging requires the App Store (StoreKit 2) and uses
 **RevenueCat** for entitlement/restore — a monetization-only cloud dependency

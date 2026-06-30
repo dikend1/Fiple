@@ -185,10 +185,8 @@ struct LocalProBackend: ProEntitlementBackend {
         [
             ProProduct(id: "pro_monthly", kind: .monthly, title: "Monthly",
                        priceText: "$2.99", periodText: "per month"),
-            ProProduct(id: "pro_yearly", kind: .yearly, title: "Yearly",
-                       priceText: "$14.99", periodText: "per year", isBestValue: true),
             ProProduct(id: "pro_lifetime", kind: .lifetime, title: "Lifetime",
-                       priceText: "$39.99", periodText: "one-time"),
+                       priceText: "$29.99", periodText: "one-time", isBestValue: true),
         ]
     }
 

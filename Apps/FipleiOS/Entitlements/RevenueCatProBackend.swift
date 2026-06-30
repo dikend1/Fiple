@@ -98,7 +98,9 @@ final class RevenueCatProBackend: ProEntitlementBackend {
             title: kind.displayTitle,
             priceText: package.storeProduct.localizedPriceString,
             periodText: period,
-            isBestValue: kind == .yearly
+            // Highlight Lifetime ("pay once") as the value pick; falls back to
+            // Yearly when no lifetime product is offered.
+            isBestValue: kind == .lifetime
         )
     }
 }

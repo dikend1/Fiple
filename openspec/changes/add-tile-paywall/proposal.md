@@ -19,10 +19,9 @@ subscription-averse buyers and low-commitment buyers from one entitlement.
   free; tiles beyond index 8 render in a **locked** state and are not runnable
   until `pro` is active.
 - Add a paywall presented when the user taps a locked tile (or from a "Get Pro"
-  entry point), offering three products that all grant `pro`:
+  entry point), offering two products that both grant `pro`:
   - **Fiple Pro — Monthly** ($2.99, auto-renewing subscription)
-  - **Fiple Pro — Yearly** ($14.99, auto-renewing subscription; value pick)
-  - **Fiple Pro — Lifetime** ($39.99, non-consumable one-time purchase)
+  - **Fiple Pro — Lifetime** ($29.99, non-consumable one-time purchase; value pick)
 - Integrate **RevenueCat** (over StoreKit 2) for purchase, entitlement
   resolution, and restore. No first-party receipt server.
 - Add **Restore Purchases** and honest entitlement state (active / not active /
