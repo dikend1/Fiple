@@ -7,6 +7,8 @@ import SwiftUI
 struct WorkspaceCardView: View {
     let tile: Tile
     var isRunning: Bool = false
+    /// Locked behind Fiple Pro — greyed, badged, and the action opens the paywall.
+    var isLocked: Bool = false
     let onRun: () -> Void
 
     var body: some View {
@@ -32,35 +34,60 @@ struct WorkspaceCardView: View {
             Spacer(minLength: Theme.Spacing.sm)
 
             actionIcons
-
-            HStack {
-                Spacer()
-                Button(action: onRun) {
-                    Group {
-                        if isRunning {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(Color(hex: tile.colorHex))
-                        } else {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Color(hex: tile.colorHex))
-                        }
-                    }
-                    .frame(width: 40, height: 40)
-                    .background(Color(hex: tile.colorHex).opacity(0.18), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isRunning)
-                .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
-            }
         }
+        .opacity(isLocked ? 0.5 : 1)
+        .overlay(alignment: .bottomTrailing) { runButton }
+        .overlay(alignment: .topTrailing) { if isLocked { proBadge } }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
         .background(Accent(hex: tile.colorHex).cardGradient)
         .background(Theme.Palette.surface)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Palette.hairline))
+    }
+
+    /// Run (free) or unlock (locked → paywall). Stays tappable when locked.
+    private var runButton: some View {
+        Button(action: onRun) {
+            Group {
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.Palette.secondary)
+                } else if isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color(hex: tile.colorHex))
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color(hex: tile.colorHex))
+                }
+            }
+            .frame(width: 40, height: 40)
+            .background(
+                (isLocked ? Theme.Palette.secondary : Color(hex: tile.colorHex)).opacity(0.18),
+                in: Circle()
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isRunning)
+        .accessibilityLabel(
+            isLocked ? "Unlock \(tile.name) with Fiple Pro"
+                     : (isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
+        )
+    }
+
+    /// Small "PRO" lock chip in the corner of a locked card.
+    private var proBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
+            Text("PRO").font(.system(size: 10, weight: .heavy, design: .rounded))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Theme.Palette.label.opacity(0.85), in: Capsule())
     }
 
     /// The real icons of the apps / sites / files this workspace launches, shown

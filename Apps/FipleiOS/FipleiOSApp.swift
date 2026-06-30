@@ -10,7 +10,10 @@ struct FipleiOSApp: App {
                 .preferredColorScheme(.light) // app uses a fixed light palette; lock the
                                               // scheme so dark-mode devices don't render
                                               // adaptive text (section headers, tab labels) white.
-                .task { controller.begin() }
+                .task {
+                    controller.begin()
+                    await controller.entitlements.refresh()
+                }
         }
     }
 }

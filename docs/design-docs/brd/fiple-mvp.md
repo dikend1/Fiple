@@ -73,7 +73,43 @@ interruption.
 
 ---
 
-## 6. Non-Goals
+## 6. Revenue Model
+
+Fiple is **free to try, paid to scale**. Authoring tiles on the Mac is always
+free and unlimited — the Mac is where the work happens and where the product
+proves its value. Monetization lives on the **phone**, gated on how many tiles
+the user actually runs remotely:
+
+- **Free tier** — the phone runs the first **8 Fiple Bar apps** (quick-launch
+  grid) and the first **2 workspaces** (presets) free, identical to paid. Enough
+  to prove the core "one tap back to flow" loop; heavy users — many apps, several
+  presets — are the ones who convert.
+- **Fiple Pro** — unlocks **unlimited** tiles on the phone. One entitlement,
+  three ways to buy:
+
+  | Product | Price | Type |
+  | --- | --- | --- |
+  | Monthly | $2.99 | auto-renewing subscription |
+  | Yearly | $14.99 | auto-renewing subscription (value pick, ~58% off monthly) |
+  | Lifetime | $39.99 | one-time purchase |
+
+**Rationale.** The people who build large preset libraries are exactly the power
+users willing to pay; the 8-tile free tier stays genuinely useful (not crippled)
+so the funnel is "loved it → outgrew the free tier," not "hit a wall on day one."
+Monthly matches the prevailing price point for comparable utilities; Yearly and
+Lifetime anchor it as a deal. Prices are USD base tiers; the App Store localizes
+per region.
+
+**Dependency note.** Charging requires the App Store (StoreKit 2) and uses
+**RevenueCat** for entitlement/restore — a monetization-only cloud dependency
+that does **not** touch the no-cloud LAN control path. This is a deliberate,
+scoped exception to the no-cloud posture, ratified by
+`adr/0003-monetization-entitlement-dependency.md`. Product behavior is specified
+in `prd/fiple-paywall.md` and delivered by OpenSpec change `add-tile-paywall`.
+
+---
+
+## 7. Non-Goals
 
 - AI voice commands (deferred to v1.1).
 - Editing tiles from the phone (Mac is the only place tiles are managed).
@@ -84,10 +120,10 @@ interruption.
 
 ---
 
-## 7. Open Questions
+## 8. Open Questions
 
 | Question | Owner | Status |
 | --- | --- | --- |
-| Pricing / monetization model for MVP (free vs paid) | maksat | open |
+| Pricing / monetization model — free 8 tiles + Pro (see §6) | maksat | decided |
 | Distribution: Mac App Store vs direct (sandbox limits on `open -a`/Apple Events) | maksat | open |
 | Minimum supported macOS / iOS versions | maksat | open |

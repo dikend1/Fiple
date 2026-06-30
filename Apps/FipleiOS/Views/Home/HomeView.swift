@@ -78,7 +78,8 @@ struct HomeView: View {
                         ForEach(items) { tile in
                             WorkspaceCardView(
                                 tile: tile,
-                                isRunning: controller.runningTileID == tile.id
+                                isRunning: controller.runningTileID == tile.id,
+                                isLocked: controller.lockedWorkspaceIDs.contains(tile.id)
                             ) {
                                 Task { await controller.run(tile) }
                             }
@@ -109,7 +110,8 @@ struct HomeView: View {
                         } label: {
                             QuickAccessTile(
                                 item: QuickAction(action: action, tileID: action.id),
-                                isRunning: controller.runningActionID == action.id
+                                isRunning: controller.runningActionID == action.id,
+                                isLocked: controller.lockedFipleBarActionIDs.contains(action.id)
                             )
                         }
                         .buttonStyle(QuickTilePressStyle())
