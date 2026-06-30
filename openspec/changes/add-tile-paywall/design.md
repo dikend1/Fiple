@@ -76,14 +76,14 @@ The wire protocol, `FipleKit`, and the Mac targets are untouched.
 | Product (App Store Connect id) | Type | Price | Grants |
 | --- | --- | --- | --- |
 | `pro_monthly` | Auto-renewing subscription | $2.99 | entitlement `pro` |
-| `pro_yearly` | Auto-renewing subscription | $14.99 | entitlement `pro` |
-| `pro_lifetime` | Non-consumable | $39.99 | entitlement `pro` |
+| `pro_lifetime` | Non-consumable | $29.99 | entitlement `pro` |
 
-All three map to RevenueCat entitlement `pro`. Code never branches on *which*
-product unlocked — it asks only "is `pro` active?". Monthly and Yearly share one
-subscription group. Prices anchor each other: Yearly ($14.99) saves ~58% vs
-Monthly run-rate ($2.99 × 12 = $35.88); Lifetime ($39.99) ≈ 2.7× Yearly. Prices
-are USD base tiers; the App Store localizes per region automatically.
+Both map to RevenueCat entitlement `pro`. Code never branches on *which* product
+unlocked — it asks only "is `pro` active?". The paywall is fully data-driven from
+`offerings().current.availablePackages`, so configuring a different set (e.g.
+re-adding Yearly) needs no code change. Lifetime ($29.99) is the highlighted
+value pick (pays off vs Monthly in ~10 months); Lifetime carries `isBestValue`.
+Prices are USD base tiers; the App Store localizes per region automatically.
 
 ## RevenueCat over StoreKit 2
 

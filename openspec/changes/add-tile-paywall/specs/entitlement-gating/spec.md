@@ -60,21 +60,16 @@ from RevenueCat.
 
 ### Requirement: Purchase options
 
-The paywall SHALL offer three products that each grant the `pro` entitlement: an
-auto-renewing **Monthly** subscription, an auto-renewing **Yearly** subscription,
-and a non-consumable **Lifetime** purchase. Prices SHALL be presented localized
-from the store, and the app SHALL NOT branch behavior on which product granted
-`pro`.
+The paywall SHALL offer the products configured in the current RevenueCat
+Offering, each granting the `pro` entitlement. The launch set is an auto-renewing
+**Monthly** subscription and a non-consumable **Lifetime** purchase. The list is
+data-driven from the Offering, so the product set can change without code
+changes. Prices SHALL be presented localized from the store, and the app SHALL
+NOT branch behavior on which product granted `pro`.
 
 #### Scenario: Purchase Monthly
 
 - **WHEN** the user buys the Monthly product and the purchase succeeds
-- **THEN** the `pro` entitlement becomes active and all tiles unlock without an
-  app restart
-
-#### Scenario: Purchase Yearly
-
-- **WHEN** the user buys the Yearly product and the purchase succeeds
 - **THEN** the `pro` entitlement becomes active and all tiles unlock without an
   app restart
 

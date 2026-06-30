@@ -10,11 +10,10 @@
 
 ## 1. Store + RevenueCat setup (no app code)
 
-- [ ] 1.1 App Store Connect: create `pro_monthly` ($2.99) and `pro_yearly`
-  ($14.99) auto-renewing in one subscription group, and `pro_lifetime` ($39.99)
-  non-consumable; localized prices; Terms & Privacy URLs.
-- [ ] 1.2 RevenueCat: project + entitlement `pro`; attach all three products;
-  build the default Offering with the three packages (Yearly highlighted).
+- [ ] 1.1 App Store Connect: create `pro_monthly` ($2.99) auto-renewing and
+  `pro_lifetime` ($29.99) non-consumable; localized prices; Terms & Privacy URLs.
+- [ ] 1.2 RevenueCat: project + entitlement `pro`; attach both products; build
+  the default Offering with the two packages (Lifetime highlighted).
 
 ## 2. iOS implementation
 
