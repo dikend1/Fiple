@@ -25,8 +25,10 @@ Design docs are idea, design, and target-contract surfaces. They are not current
 | BRD | `brd/fiple-mvp.md` | draft |
 | PRD | `prd/fiple-pairing.md` | draft |
 | PRD | `prd/fiple-remote-tiles.md` | draft |
+| PRD | `prd/fiple-remote-file-access.md` | draft |
 | TRD | `trd/fiple-mvp.md` | draft |
 | ADR | `adr/0001-local-network-topology.md` | draft |
+| ADR | `adr/0004-offlan-file-access-cloudkit.md` | draft |
 
 Implementing OpenSpec change: `openspec/changes/add-fiple-mvp/`.
 
