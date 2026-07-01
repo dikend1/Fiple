@@ -8,6 +8,7 @@ struct FipleMacApp: App {
     @State private var server: ServerController
     @State private var recents: RecentStore
     @State private var pinned: PinnedAppsStore
+    @State private var remoteFiles: RemoteFilesController
 
     init() {
         let store = TileStore()
@@ -18,6 +19,7 @@ struct FipleMacApp: App {
         _server = State(initialValue: server)
         _recents = State(initialValue: recents)
         _pinned = State(initialValue: pinned)
+        _remoteFiles = State(initialValue: RemoteFilesController())
         // Wire launch history and start advertising on the main actor. Done in a
         // Task because App.init is nonisolated while these touch @MainActor state.
         Task { @MainActor in
@@ -29,7 +31,7 @@ struct FipleMacApp: App {
 
     var body: some Scene {
         Window("Fiple", id: "main") {
-            MainWindowView(store: store, server: server, recents: recents, pinned: pinned)
+            MainWindowView(store: store, server: server, recents: recents, pinned: pinned, remoteFiles: remoteFiles)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1120, height: 780)

@@ -16,6 +16,10 @@ final class RemoteController {
     }
 
     private(set) var phase: Phase = .searching
+    /// Whether this phone has paired with a Mac before (a reconnect token is
+    /// stored). Keeps the tabbed UI — and off-LAN Files access — available when
+    /// away from the Mac's network, instead of falling back to first-run pairing.
+    var hasEverPaired: Bool { storedToken != nil }
     private(set) var macName: String?
     private(set) var tiles: [Tile] = []
     private(set) var pairError: String?
