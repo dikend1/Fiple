@@ -43,15 +43,29 @@ final class RemoteFilesController {
         if isEnabled { start() }
     }
 
-    /// Standard folders we mirror. Missing ones (e.g. no Desktop) are skipped.
+    /// Standard folders we mirror. Missing ones are skipped.
+    ///
+    /// Uses the *real* home directory, not `FileManager.urls(for:in:)`, which a
+    /// sandboxed app redirects to its container (`…/Containers/…/Data/Desktop`,
+    /// which is empty). `getpwuid` returns the true `/Users/<me>` path; the
+    /// home-relative-path read-only entitlement grants access there.
     private var watchedFolders: [(SourceFolder, URL)] {
+        let home = Self.realHomeDirectory
         let fm = FileManager.default
-        let candidates: [(SourceFolder, URL?)] = [
-            (.desktop, fm.urls(for: .desktopDirectory, in: .userDomainMask).first),
-            (.documents, fm.urls(for: .documentDirectory, in: .userDomainMask).first),
-            (.downloads, fm.urls(for: .downloadsDirectory, in: .userDomainMask).first),
+        let candidates: [(SourceFolder, URL)] = [
+            (.desktop, home.appendingPathComponent("Desktop", isDirectory: true)),
+            (.documents, home.appendingPathComponent("Documents", isDirectory: true)),
+            (.downloads, home.appendingPathComponent("Downloads", isDirectory: true)),
         ]
-        return candidates.compactMap { pair in pair.1.map { (pair.0, $0) } }
+        return candidates.filter { fm.fileExists(atPath: $0.1.path) }
+    }
+
+    /// The user's real home directory, bypassing sandbox container redirection.
+    private static var realHomeDirectory: URL {
+        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: dir), isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
     }
 
     func setEnabled(_ on: Bool) {
@@ -64,9 +78,11 @@ final class RemoteFilesController {
     private func start() {
         // iCloud must be signed in; otherwise stay off and tell the user why.
         guard FileManager.default.ubiquityIdentityToken != nil else {
+            FipleLog.remoteFiles.error("start aborted — no iCloud account signed in on this Mac")
             status = "Sign in to iCloud on this Mac to enable remote file access."
             return
         }
+        FipleLog.remoteFiles.info("start — iCloud available, container \(Self.containerID)")
         let store = CloudKitRemoteFileStore(containerIdentifier: Self.containerID)
         self.store = store
         cache = RemoteFileCache(store: store, reader: reader, deviceID: deviceID)
@@ -102,22 +118,45 @@ final class RemoteFilesController {
             defer { reconciling = false }
             let now = Date()
             var liveRecordNames: Set<String> = []
+            var scanned = 0, cached = 0, skipped = 0, excluded = 0, failed = 0
+
+            FipleLog.remoteFiles.info("reconcile start — \(folders.count) folder(s): \(folders.map { $0.1.lastPathComponent }.joined(separator: ", "))")
 
             for (folder, root) in folders {
-                for (url, relativePath) in Self.files(in: root) {
+                let files = Self.files(in: root)
+                FipleLog.remoteFiles.info("scanning \(folder.rawValue): \(files.count) file(s) under \(root.path)")
+                for (url, relativePath) in files {
+                    scanned += 1
                     liveRecordNames.insert(
                         RemoteFile.recordName(deviceID: deviceID, folder: folder, relativePath: relativePath)
                     )
-                    _ = try? await cache.handleChange(at: url, folder: folder, relativePath: relativePath, now: now)
+                    do {
+                        switch try await cache.handleChange(at: url, folder: folder, relativePath: relativePath, now: now) {
+                        case .cached: cached += 1
+                        case .skipped: skipped += 1
+                        case .excluded: excluded += 1
+                        }
+                    } catch {
+                        failed += 1
+                        FipleLog.remoteFiles.error("upload failed for \(relativePath): \(error)")
+                    }
                 }
             }
 
+            FipleLog.remoteFiles.info("reconcile done — scanned \(scanned), cached \(cached), skipped \(skipped), excluded \(excluded), failed \(failed)")
+
             // Deletions: our device's cache copies whose originals are gone.
-            if let existing = try? await store.list() {
+            do {
+                let existing = try await store.list()
                 let stale = existing
                     .filter { $0.sourceDeviceID == deviceID && !liveRecordNames.contains($0.recordName) }
                     .map(\.recordName)
-                if !stale.isEmpty { try? await store.delete(recordNames: stale) }
+                if !stale.isEmpty {
+                    try await store.delete(recordNames: stale)
+                    FipleLog.remoteFiles.info("evicted \(stale.count) stale cache copies")
+                }
+            } catch {
+                FipleLog.remoteFiles.error("list/delete failed: \(error)")
             }
         }
     }

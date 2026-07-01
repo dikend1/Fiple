@@ -29,22 +29,40 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
         var files: [RemoteFile] = []
         var cursor: CKQueryOperation.Cursor?
 
-        repeat {
-            let page: (matchResults: [(CKRecord.ID, Result<CKRecord, Error>)], queryCursor: CKQueryOperation.Cursor?)
-            if let cursor {
-                page = try await database.records(continuingMatchFrom: cursor)
-            } else {
-                page = try await database.records(matching: query)
-            }
-            for (_, result) in page.matchResults {
-                if case let .success(record) = result, let file = Self.file(from: record) {
-                    files.append(file)
+        do {
+            repeat {
+                let page: (matchResults: [(CKRecord.ID, Result<CKRecord, Error>)], queryCursor: CKQueryOperation.Cursor?)
+                if let cursor {
+                    page = try await database.records(continuingMatchFrom: cursor)
+                } else {
+                    page = try await database.records(matching: query)
                 }
-            }
-            cursor = page.queryCursor
-        } while cursor != nil
+                for (_, result) in page.matchResults {
+                    if case let .success(record) = result, let file = Self.file(from: record) {
+                        files.append(file)
+                    }
+                }
+                cursor = page.queryCursor
+            } while cursor != nil
+        } catch let error as CKError where Self.isEmptySchemaError(error) {
+            // The record type doesn't exist yet (nothing uploaded) or the
+            // queryable index isn't configured — treat as an empty cache so the
+            // first upload can proceed and create the type. Full listing (and
+            // eviction) needs the `recordName` QUERYABLE index in the CloudKit
+            // schema; until then this degrades gracefully instead of throwing.
+            return []
+        }
 
         return files
+    }
+
+    /// True for the "record type not found" / "field not queryable" errors that
+    /// simply mean the schema isn't set up yet — not a real failure.
+    private static func isEmptySchemaError(_ error: CKError) -> Bool {
+        switch error.code {
+        case .unknownItem, .invalidArguments: return true
+        default: return false
+        }
     }
 
     public func upload(_ file: RemoteFile, payload: Data, thumbnail: Data?) async throws {
