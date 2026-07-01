@@ -1,44 +1,49 @@
 # Tasks — Add off-LAN remote file access
 
-> New work, **not started**. Blocked on human acceptance of ADR-0004 and PRD
-> `fiple-remote-file-access.md`. Do not implement until accepted. Complete tasks
-> sequentially and record verification evidence before marking a task done.
+> **Status: code implemented ahead of acceptance at the owner's explicit
+> direction** (the acceptance gate below was overridden by the user in-session).
+> The FipleKit core is verified (`swift test`, 75 tests) and both apps build.
+> What remains is genuinely gated on the owner: CloudKit container/entitlement
+> provisioning (0.3) — until then the feature is inert (toggle defaults off,
+> phone shows the iCloud-unavailable state). ADR-0004/PRD acceptance (0.1/0.2)
+> is still formally pending.
 
-## 0. Gate (must clear before any implementation)
+## 0. Gate
 
-- [ ] 0.1 Human accepts ADR-0004 (off-LAN via CloudKit).
-- [ ] 0.2 Human accepts PRD `fiple-remote-file-access.md`.
+- [ ] 0.1 Human accepts ADR-0004 (off-LAN via CloudKit). *(overridden to build early)*
+- [ ] 0.2 Human accepts PRD `fiple-remote-file-access.md`. *(overridden to build early)*
 - [ ] 0.3 CloudKit container + iCloud entitlement provisioned in the Apple
-  Developer account and added to `project.yml` for both apps.
+  Developer account and added to `project.yml`/entitlements for both apps;
+  macOS sandbox folder-read entitlements for Desktop/Documents/Downloads.
+  **Blocking for runtime** — code is written but cannot reach iCloud until done.
 
-## 1. Core model & budget (FipleKit)
+## 1. Core model & budget (FipleKit) — done, tested
 
-- [ ] 1.1 `RemoteFile` record model (fields per design) with stable `recordName`
-  derivation (`sourceDeviceID + sourceFolder + relativePath`).
-- [ ] 1.2 Budget engine: admission + oldest-first eviction for the fresh pool
-  (age/count/size) and a separate pinned pool (count/size), with per-file cap.
-- [ ] 1.3 Exclusion filter (hidden/system, `.app`/`.dmg`, package dirs, user
-  ignore list).
-- [ ] 1.4 Read-only file reader interface (no mutating operations) + guard that
-  eviction targets CloudKit only.
+- [x] 1.1 `RemoteFile` record model + stable SHA-256 `recordName`. — `RemoteFile.swift`
+- [x] 1.2 Budget engine: admission + oldest-first eviction (fresh pool) + separate
+  pinned pool + per-file cap. — `CacheBudget.swift`, `CachePlanner.swift`
+- [x] 1.3 Exclusion filter (hidden/system, bundles, user ignore list). — `FileExclusion.swift`
+- [x] 1.4 Read-only reader (`FileReading`/`DiskFileReader`) + eviction targets
+  CloudKit only (`RemoteFileCache`, `RemoteFileStore`).
 
-## 2. Mac agent (Apps/FipleMac)
+## 2. Mac agent (Apps/FipleMac) — code done; entitlements pending (0.3)
 
-- [ ] 2.1 FSEvents watcher for Desktop / Documents / Downloads → change queue.
-- [ ] 2.2 CloudKit sync: upload/update `RemoteFile` (payload + thumbnail),
-  evict over-budget copies, remove copies for files deleted from disk.
-- [ ] 2.3 Thumbnail generation for supported types.
-- [ ] 2.4 Settings: master toggle (off ⇒ purge cache), budget config, ignore
-  list. iCloud-quota-full surfaced, uploads paused, originals untouched.
+- [x] 2.1 FSEvents watcher for the three folders. — `FolderWatcher.swift`
+- [x] 2.2 CloudKit sync: upload/update, evict over-budget, remove deleted. —
+  `RemoteFilesController.reconcile()`, `CloudKitRemoteFileStore`
+- [ ] 2.3 Thumbnail generation for supported types. *(v1 uploads no thumbnail;
+  phone shows a UTI-based glyph. Follow-up.)*
+- [x] 2.4 Settings master toggle (off ⇒ purge cache). *(Budget-config/ignore-list
+  UI and explicit quota-full surfacing are follow-ups.)*
 
-## 3. Phone Files browser (Apps/FipleiOS)
+## 3. Phone Files browser (Apps/FipleiOS) — code done; entitlements pending (0.3)
 
-- [ ] 3.1 Fetch `RemoteFile` records; list by folder + Favorites section;
-  filename search; type icons/previews.
-- [ ] 3.2 Download `payload` with progress → Open (Quick Look) / Share sheet.
-- [ ] 3.3 Pin/unpin (sets `isPinned`); favorites-limit message.
-- [ ] 3.4 Sync status (last refresh + offline indicator) and unavailable states
-  (feature off; Apple ID mismatch / iCloud off).
+- [x] 3.1 List by folder + Favorites section; filename search; UTI icons. — `FilesView.swift`
+- [x] 3.2 Download → Quick Look (share via the Quick Look share action). *(No
+  determinate progress bar yet — a spinner per file.)*
+- [x] 3.3 Pin/unpin (`isPinned`) with favorites-limit alert.
+- [x] 3.4 Sync status (last-updated) + unavailable states (iCloud off /
+  feature off). — `RemoteFilesStore.State`
 
 ## 4. Governance & privacy
 
@@ -50,15 +55,16 @@
 
 | Check | Command / Method | Result |
 | --- | --- | --- |
-| Budget admission + oldest-first eviction (age/count/size) | `swift test` (BudgetTests) | ⏳ |
-| Pinned pool exempt from eviction; separate quota; limit refuses | `swift test` (PinTests) | ⏳ |
-| Stable `recordName` — re-upload updates, no duplicate | `swift test` (RecordNameTests) | ⏳ |
-| Exclusion filter (hidden/system/bundles/ignore list) | `swift test` (ExclusionTests) | ⏳ |
-| Read-only invariant — no disk-mutating path; eviction hits CloudKit only | `swift test` + code review | ⏳ |
-| Loopback upload → list → download over mocked CloudKit | `swift test` (RemoteFileLoopbackTests) | ⏳ |
-| Both apps build | `xcodebuild -scheme FipleMac` / `-scheme FipleiOS` | ⏳ |
-| Download on a different network; download with Mac off | Manual on-device | ⏳ |
-| Apple ID mismatch / iCloud off shows guidance | Manual on-device | ⏳ |
+| Budget admission + oldest-first eviction (age/count/size) | `swift test` (CachePlannerTests) | ✅ Pass |
+| Pinned pool exempt from eviction; separate quota; limit refuses | `swift test` (CachePlannerTests/RemoteFileCacheTests) | ✅ Pass |
+| Stable `recordName` — re-upload updates, no duplicate | `swift test` (RemoteFileTests) | ✅ Pass |
+| Exclusion filter (hidden/system/bundles/ignore list) | `swift test` (FileExclusionTests) | ✅ Pass |
+| Read-only invariant — deletion hits CloudKit only, never reads disk | `swift test` (RemoteFileCacheTests) + `FileReading` has no mutators | ✅ Pass |
+| Loopback upload → list → download over in-memory store | `swift test` (RemoteFileCacheTests) | ✅ Pass |
+| Full FipleKit suite | `cd FipleKit && swift test` | ✅ 75/75, 17 suites |
+| Both apps build | `xcodebuild -scheme FipleMac` / `-scheme FipleiOS` | ✅ BUILD SUCCEEDED |
+| Download on a different network; download with Mac off | Manual on-device | ⏳ Pending 0.3 provisioning |
+| Apple ID mismatch / iCloud off shows guidance | Manual on-device | ⏳ Pending 0.3 provisioning |
 
 ## 6. Post-acceptance (governance close-out)
 
