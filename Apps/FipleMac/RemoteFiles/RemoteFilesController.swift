@@ -1,3 +1,4 @@
+import CloudKit
 import FipleKit
 import Foundation
 import Observation
@@ -122,7 +123,8 @@ final class RemoteFilesController {
 
             FipleLog.remoteFiles.info("reconcile start — \(folders.count) folder(s): \(folders.map { $0.1.lastPathComponent }.joined(separator: ", "))")
 
-            for (folder, root) in folders {
+            var quotaHit = false
+            outer: for (folder, root) in folders {
                 let files = Self.files(in: root)
                 FipleLog.remoteFiles.info("scanning \(folder.rawValue): \(files.count) file(s) under \(root.path)")
                 for (url, relativePath) in files {
@@ -136,6 +138,13 @@ final class RemoteFilesController {
                         case .skipped: skipped += 1
                         case .excluded: excluded += 1
                         }
+                    } catch let error as CKError where error.code == .quotaExceeded {
+                        // The user's iCloud storage is full. Stop hammering (which
+                        // trips CloudKit's error-rate mitigation) and tell them.
+                        quotaHit = true
+                        FipleLog.remoteFiles.error("iCloud quota exceeded — pausing sync")
+                        status = "iCloud storage full — free up space to sync files."
+                        break outer
                     } catch {
                         failed += 1
                         FipleLog.remoteFiles.error("upload failed for \(relativePath): \(error)")
@@ -143,7 +152,9 @@ final class RemoteFilesController {
                 }
             }
 
-            FipleLog.remoteFiles.info("reconcile done — scanned \(scanned), cached \(cached), skipped \(skipped), excluded \(excluded), failed \(failed)")
+            FipleLog.remoteFiles.info("reconcile done — scanned \(scanned), cached \(cached), skipped \(skipped), excluded \(excluded), failed \(failed)\(quotaHit ? " (paused: iCloud full)" : "")")
+            if !quotaHit, cached > 0 { status = "On — \(cached) file(s) synced" }
+            if quotaHit { return }
 
             // Deletions: our device's cache copies whose originals are gone.
             do {
