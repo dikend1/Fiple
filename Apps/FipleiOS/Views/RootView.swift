@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Gates the app on pairing: until a Mac is connected the remote shows the
-/// code-entry screen; once paired it presents the four-tab interface.
+/// Gates the app on pairing. First-run (never paired) shows the code-entry
+/// screen. Once the phone has paired before, it always presents the tabbed
+/// interface — even away from the Mac's network — so off-LAN Files access keeps
+/// working while the Home/Recent tabs reconnect in the background.
 struct RootView: View {
     let controller: RemoteController
 
     var body: some View {
-        switch controller.phase {
-        case .searching, .readyToPair, .connecting:
-            PairingView(controller: controller)
-        case .connected:
+        if controller.phase == .connected || controller.hasEverPaired {
             MainTabView(controller: controller)
+        } else {
+            PairingView(controller: controller)
         }
     }
 }

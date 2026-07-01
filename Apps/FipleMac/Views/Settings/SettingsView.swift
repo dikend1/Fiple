@@ -7,6 +7,7 @@ import SwiftUI
 /// About). No account by design (Fiple is local-only: no cloud, no backend).
 struct SettingsView: View {
     let server: ServerController
+    let remoteFiles: RemoteFilesController
 
     @Environment(\.openURL) private var openURL
     @State private var launchAtLogin = false
@@ -29,6 +30,10 @@ struct SettingsView: View {
 
                 section("Preferences") {
                     launchAtLoginRow
+                }
+
+                section("Remote File Access") {
+                    remoteFilesRow
                 }
 
                 section("About") {
@@ -83,6 +88,31 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
             }
+        }
+        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.md)
+    }
+
+    private var remoteFilesRow: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack {
+                Text("Keep recent files available on my phone")
+                    .font(.system(size: 14, weight: .medium))
+                Spacer()
+                Toggle("Remote File Access", isOn: Binding(
+                    get: { remoteFiles.isEnabled },
+                    set: { remoteFiles.setEnabled($0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .tint(Theme.Palette.brand)
+            }
+            Text(remoteFiles.status)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            Text("Recent files from Desktop, Documents and Downloads are cached in your private iCloud so you can download them from the phone anywhere — even when this Mac is asleep. Originals are never modified; turning this off clears the cloud cache.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, Theme.Spacing.sm)
         .padding(.horizontal, Theme.Spacing.md)

@@ -9,6 +9,7 @@ struct MainWindowView: View {
     let server: ServerController
     let recents: RecentStore
     let pinned: PinnedAppsStore
+    let remoteFiles: RemoteFilesController
 
     @State private var section: SidebarSection = .workspaces
     @State private var sidebarVisible = true
@@ -66,7 +67,7 @@ struct MainWindowView: View {
         case .devices:
             DevicesView(server: server)
         case .settings:
-            SettingsView(server: server)
+            SettingsView(server: server, remoteFiles: remoteFiles)
         }
     }
 }
