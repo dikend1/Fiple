@@ -2,26 +2,40 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- App Sandbox — required for the Mac App Store / Universal Purchase. -->
+	<key>com.apple.developer.aps-environment</key>
+	<string>development</string>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.com.maksatov.fipleapp</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
-	<!-- Advertise the Bonjour service and accept incoming pairing connections. -->
-	<key>com.apple.security.network.server</key>
-	<true/>
-	<!-- Discover the iPhone and fetch website favicons. -->
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<!-- List the user's Apple Shortcuts via the scriptable "Shortcuts Events"
-	     target (Apple Events). The user is prompted to allow this on first use. -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
-	<!-- Explicit scripting target: required to list the user's Apple Shortcuts
-	     from inside the sandbox. Plain automation.apple-events alone fails with
-	     error -600 for "Shortcuts Events"; whitelisting that helper's bundle id
-	     here is what makes `get name of every shortcut` work. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
 	<key>com.apple.security.temporary-exception.apple-events</key>
 	<array>
 		<string>com.apple.shortcuts.events</string>
+	</array>
+	<!-- Read-only reach to the standard folders the remote-file cache mirrors.
+	     A sandboxed app has no automatic access to ~/Desktop or ~/Documents; a
+	     home-relative temporary exception grants read-only access to exactly
+	     these three. Read-only by design (feature safety invariant). Note:
+	     temporary-exception entitlements draw extra App Store review scrutiny —
+	     revisit with security-scoped bookmarks (user picks folders) before store
+	     submission. -->
+	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+	<array>
+		<string>/Desktop/</string>
+		<string>/Documents/</string>
+		<string>/Downloads/</string>
 	</array>
 </dict>
 </plist>
