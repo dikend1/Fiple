@@ -312,7 +312,6 @@ private struct AddActionSheet: View {
 
     @State private var draft = ActionDraft()
     @State private var apps: [InstalledApp] = []
-    @State private var shortcuts: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -332,7 +331,7 @@ private struct AddActionSheet: View {
                     TextField("https://…", text: $draft.url)
                         .textFieldStyle(.roundedBorder)
                 case .runShortcut:
-                    ShortcutPickerField(shortcuts: shortcuts, name: $draft.shortcutName)
+                    ShortcutPickerField(name: $draft.shortcutName)
                 }
             }
             .formStyle(.grouped)
@@ -351,10 +350,10 @@ private struct AddActionSheet: View {
         .frame(width: 420, height: 340)
         .preferredColorScheme(.light)
         .task {
-            async let appList = InstalledApps.all()
-            async let names = InstalledShortcuts.shared.all()
-            apps = await appList
-            shortcuts = await names
+            // Shortcuts can't be enumerated from the sandbox (App Review rejected
+            // the Apple-events exception); the user types a shortcut's name in the
+            // picker instead.
+            apps = await InstalledApps.all()
         }
     }
 }

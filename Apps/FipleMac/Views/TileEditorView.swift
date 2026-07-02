@@ -60,7 +60,6 @@ struct TileEditorView: View {
     @State private var colorHex: String
     @State private var drafts: [ActionDraft]
     @State private var installedApps: [InstalledApp] = []
-    @State private var shortcuts: [String] = []
     /// The host we last fetched a favicon for, so typing doesn't refetch.
     @State private var faviconHost: String?
     /// The last name we auto-filled, so re-picking another app/URL can replace
@@ -113,7 +112,6 @@ struct TileEditorView: View {
                         ActionDraftRow(
                             draft: $draft,
                             installedApps: installedApps,
-                            shortcuts: shortcuts,
                             onAppChosen: applyAppMetadata,
                             onURLChanged: applyURLMetadata
                         ) {
@@ -139,12 +137,11 @@ struct TileEditorView: View {
         .frame(width: 460, height: 560)
         .preferredColorScheme(.light) // keep the editor light like the rest of the app
         .task {
-            // Load apps (Spotlight) and shortcuts (Apple Events, off-main + cached)
-            // concurrently so the shortcut list doesn't wait behind the app scan.
-            async let apps = InstalledApps.all()
-            async let names = InstalledShortcuts.shared.all()
-            installedApps = await apps
-            shortcuts = await names
+            // Only apps are enumerated (via Spotlight). Shortcuts can't be listed
+            // from the App Sandbox without the Apple-events exception App Review
+            // rejected, so the user types a shortcut's name instead (it still runs
+            // via the `shortcuts://` URL scheme).
+            installedApps = await InstalledApps.all()
         }
     }
 
@@ -268,7 +265,6 @@ struct TileIconPreview: View {
 private struct ActionDraftRow: View {
     @Binding var draft: ActionDraft
     let installedApps: [InstalledApp]
-    let shortcuts: [String]
     let onAppChosen: (InstalledApp) -> Void
     let onURLChanged: (String) -> Void
     let onDelete: () -> Void
@@ -294,7 +290,7 @@ private struct ActionDraftRow: View {
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: draft.url) { _, newValue in onURLChanged(newValue) }
             case .runShortcut:
-                ShortcutPickerField(shortcuts: shortcuts, name: $draft.shortcutName)
+                ShortcutPickerField(name: $draft.shortcutName)
             }
         }
         .padding(.vertical, 4)
@@ -384,11 +380,12 @@ private struct AppPickerField: View {
     }
 }
 
-/// Picks one of the user's Apple Shortcuts (listed via "Shortcuts Events"). The
-/// search field doubles as manual entry: if the shortcut isn't listed, the user
-/// can still type a name and "Use" it.
+/// Names an Apple Shortcut to run. The App Sandbox can't enumerate the user's
+/// shortcuts (that needs the Apple-events exception App Review rejected), so the
+/// user types the shortcut's exact name; it runs via the `shortcuts://` URL
+/// scheme. `shortcuts` is kept for the signature but is empty in the shipping
+/// build.
 struct ShortcutPickerField: View {
-    let shortcuts: [String]
     @Binding var name: String
 
     @State private var showing = false
@@ -406,19 +403,13 @@ struct ShortcutPickerField: View {
         }
     }
 
-    private var filtered: [String] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return shortcuts }
-        return shortcuts.filter { $0.localizedCaseInsensitiveContains(q) }
-    }
-
     private var typedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         Button { showing = true } label: {
             HStack(spacing: 8) {
                 glyph
-                Text(name.isEmpty ? "Choose a shortcut…" : name)
+                Text(name.isEmpty ? "Name a shortcut…" : name)
                     .foregroundStyle(name.isEmpty ? .secondary : .primary)
                 Spacer()
                 Image(systemName: "chevron.up.chevron.down")
@@ -434,40 +425,39 @@ struct ShortcutPickerField: View {
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("Search or type a name", text: $query).textFieldStyle(.plain)
+                    Image(systemName: "bolt.fill").foregroundStyle(.secondary)
+                    TextField("Type the shortcut's exact name", text: $query)
+                        .textFieldStyle(.plain)
+                        .onSubmit { if !typedQuery.isEmpty { commit(typedQuery) } }
                 }
                 .padding(10)
                 Divider()
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        // Manual fallback: use exactly what was typed.
-                        if !typedQuery.isEmpty && !shortcuts.contains(where: { $0.caseInsensitiveCompare(typedQuery) == .orderedSame }) {
-                            row(label: "Use “\(typedQuery)”", value: typedQuery, manual: true)
-                        }
-                        ForEach(filtered, id: \.self) { shortcut in
-                            row(label: shortcut, value: shortcut, manual: false)
-                        }
-                        if shortcuts.isEmpty && typedQuery.isEmpty {
-                            Text("No shortcuts found.\nType a name above to use it.")
-                                .font(.caption2).foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.vertical, 18).padding(.horizontal, 10)
-                        }
+                Group {
+                    if typedQuery.isEmpty {
+                        Text("Type the exact name of a shortcut as it\nappears in the Shortcuts app on your Mac.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20).padding(.horizontal, 10)
+                    } else {
+                        row(label: "Use “\(typedQuery)”", value: typedQuery, manual: true)
+                            .padding(6)
                     }
-                    .padding(6)
                 }
-                .frame(height: 280)
             }
             .frame(width: 320)
         }
         .onChange(of: showing) { _, isShowing in if !isShowing { query = "" } }
     }
 
+    private func commit(_ value: String) {
+        name = value
+        showing = false
+    }
+
     private func row(label: String, value: String, manual: Bool) -> some View {
         Button {
-            name = value
-            showing = false
+            commit(value)
         } label: {
             HStack(spacing: 10) {
                 if manual {

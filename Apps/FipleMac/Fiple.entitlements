@@ -10,17 +10,17 @@
 	     the iCloud entitlements AND replace folder access with security-scoped
 	     bookmarks (user picks folders) rather than the home-relative-path
 	     temporary exception, which draws heavy App Store review scrutiny. -->
+	<!-- No Apple-events entitlements: App Review rejected the temporary
+	     exception for `com.apple.shortcuts.events` (Guideline 2.4.5(i)), and the
+	     plain automation entitlement can't reach Shortcuts Events from the
+	     sandbox anyway (-600). Shortcuts are now RUN via the sandbox-safe
+	     `shortcuts://run-shortcut` URL scheme (no entitlement needed); the user
+	     types a shortcut's name instead of picking from an enumerated list. -->
 	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.automation.apple-events</key>
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
-	<key>com.apple.security.temporary-exception.apple-events</key>
-	<array>
-		<string>com.apple.shortcuts.events</string>
-	</array>
 </dict>
 </plist>
