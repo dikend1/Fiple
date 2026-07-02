@@ -74,7 +74,7 @@ struct RecentView: View {
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.bottom, Theme.Spacing.xxl)
+                .padding(.bottom, Theme.Spacing.tabBarClearance)
             }
             .background(Theme.Palette.background)
             .overlay(alignment: .bottom) {
@@ -132,7 +132,8 @@ struct RecentView: View {
             .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
             .shadow(color: .black.opacity(0.10), radius: 12, y: 4)
             .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.bottom, Theme.Spacing.xl)
+            // Float clear of the floating tab bar, not behind it.
+            .padding(.bottom, Theme.Spacing.tabBarClearance)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .accessibilityAddTraits(.updatesFrequently)
     }

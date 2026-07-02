@@ -29,7 +29,7 @@ struct HomeView: View {
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.top, Theme.Spacing.sm)
-                .padding(.bottom, Theme.Spacing.xxl)
+                .padding(.bottom, Theme.Spacing.tabBarClearance)
             }
             .background(Theme.Palette.background)
             .toolbar(.hidden, for: .navigationBar)

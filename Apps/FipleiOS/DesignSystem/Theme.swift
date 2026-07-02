@@ -11,6 +11,10 @@ enum Theme {
         static let lg: CGFloat = 16
         static let xl: CGFloat = 20
         static let xxl: CGFloat = 28
+        /// Bottom inset that clears the iOS 26 floating (Liquid Glass) tab bar so
+        /// the last row/section of a scroll view is never tucked underneath it.
+        /// Every tabbed scroll screen uses this so clearance is consistent.
+        static let tabBarClearance: CGFloat = 96
     }
 
     enum Radius {
