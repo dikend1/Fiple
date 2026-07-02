@@ -16,9 +16,15 @@ public enum ClientMessage: Sendable, Equatable {
     case runAction(actionID: UUID)
 }
 
+extension ClientMessage: WireTypeTagged {
+    /// Message types this build understands. A peer running a newer protocol
+    /// may send types outside this set; they are skipped, not treated as fatal.
+    public static let knownTypes: Set<String> = Set(Tag.allCases.map(\.rawValue))
+}
+
 extension ClientMessage: Codable {
-    private enum Tag: String, Codable { case pair, reconnect, run, runAction }
-    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID }
+    private enum Tag: String, Codable, CaseIterable { case pair, reconnect, run, runAction }
+    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID, version }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -36,9 +42,11 @@ extension ClientMessage: Codable {
         case let .pair(code):
             try c.encode(Tag.pair, forKey: .type)
             try c.encode(code, forKey: .code)
+            try c.encode(FipleService.protocolVersion, forKey: .version)
         case let .reconnect(token):
             try c.encode(Tag.reconnect, forKey: .type)
             try c.encode(token, forKey: .token)
+            try c.encode(FipleService.protocolVersion, forKey: .version)
         case let .run(tileID):
             try c.encode(Tag.run, forKey: .type)
             try c.encode(tileID, forKey: .tileID)
@@ -77,10 +85,15 @@ public enum ServerMessage: Sendable, Equatable {
     case runResult(RunResult)
 }
 
+extension ServerMessage: WireTypeTagged {
+    /// Message types this build understands (see ``ClientMessage/knownTypes``).
+    public static let knownTypes: Set<String> = Set(Tag.allCases.map(\.rawValue))
+}
+
 extension ServerMessage: Codable {
-    private enum Tag: String, Codable { case paired, pairRejected, tilesSnapshot, fipleBar, runResult }
+    private enum Tag: String, Codable, CaseIterable { case paired, pairRejected, tilesSnapshot, fipleBar, runResult }
     private enum CodingKeys: String, CodingKey {
-        case type, macID, macName, token, reason, tiles, actions, result
+        case type, macID, macName, token, reason, tiles, actions, result, version
     }
 
     public init(from decoder: Decoder) throws {
@@ -114,6 +127,7 @@ extension ServerMessage: Codable {
             try c.encode(macID, forKey: .macID)
             try c.encode(macName, forKey: .macName)
             try c.encode(token, forKey: .token)
+            try c.encode(FipleService.protocolVersion, forKey: .version)
         case let .pairRejected(reason):
             try c.encode(Tag.pairRejected, forKey: .type)
             try c.encode(reason.rawValue, forKey: .reason)
