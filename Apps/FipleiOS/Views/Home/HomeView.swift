@@ -259,7 +259,8 @@ private struct PlaceholderTileGrid: View {
     }
 }
 
-/// A single empty Fiple Bar slot: a soft dashed well the same size as a tile.
+/// A single empty Fiple Bar slot: a plain soft well the same size as a tile,
+/// matching the Mac's empty slots — no icon, just a subtle filled card.
 private struct PlaceholderSlot: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -267,15 +268,7 @@ private struct PlaceholderSlot: View {
             .frame(height: tileSlotHeight)
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(
-                        Theme.Palette.hairline,
-                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])
-                    )
-            )
-            .overlay(
-                Image(systemName: "app.dashed")
-                    .font(.fiple(22))
-                    .foregroundStyle(Theme.Palette.secondary.opacity(0.35))
+                    .strokeBorder(Theme.Palette.hairline)
             )
     }
 }
