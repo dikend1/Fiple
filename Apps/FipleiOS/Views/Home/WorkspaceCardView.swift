@@ -18,14 +18,11 @@ struct WorkspaceCardView: View {
                 iconImageData: tile.iconImageData,
                 systemName: tile.iconSystemName,
                 colorHex: tile.colorHex,
-                size: 52
+                size: 48
             )
-            // A soft halo of the workspace's colour so the icon feels lit rather
-            // than pasted on.
-            .background(
-                Circle().fill(base.opacity(0.22)).blur(radius: 18).frame(width: 76, height: 76)
-            )
-            .shadow(color: base.opacity(0.28), radius: 10, y: 5)
+            // A crisp coloured drop-shadow lifts the icon off the card without
+            // the muddy halo a blurred backing plate created.
+            .shadow(color: base.opacity(0.35), radius: 8, y: 4)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(tile.name)
@@ -42,14 +39,17 @@ struct WorkspaceCardView: View {
 
             Spacer(minLength: Theme.Spacing.md)
 
-            HStack(alignment: .bottom) {
+            HStack(alignment: .center) {
                 actionIcons
                 Spacer(minLength: Theme.Spacing.sm)
                 runButton
             }
         }
         .padding(Theme.Spacing.lg)
-        .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
+        // A tighter minimum so short cards don't leave a dead band of empty
+        // space in the middle; two cards in a grid row still equalise to the
+        // taller one.
+        .frame(maxWidth: .infinity, minHeight: 196, alignment: .topLeading)
         .background {
             ZStack {
                 Theme.Palette.surface
