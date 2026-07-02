@@ -1,8 +1,10 @@
+import FipleKit
 import SwiftUI
 
 /// Root of the remote: flat sections in a tab bar. Each tab owns its own
 /// `NavigationStack`. Home / Recent / Settings are driven by the live
-/// `RemoteController`.
+/// `RemoteController`. The Files tab appears only when `AppFeatures.remoteFiles`
+/// is on (off for the 1.0 LAN-only release).
 struct MainTabView: View {
     let controller: RemoteController
 
@@ -20,9 +22,11 @@ struct MainTabView: View {
             .tag(Tab.home)
             .tabItem { Label("Home", systemImage: "house.fill") }
 
-            FilesView()
-                .tag(Tab.files)
-                .tabItem { Label("Files", systemImage: "folder.fill") }
+            if AppFeatures.remoteFiles {
+                FilesView()
+                    .tag(Tab.files)
+                    .tabItem { Label("Files", systemImage: "folder.fill") }
+            }
 
             RecentView(controller: controller)
                 .tag(Tab.recent)

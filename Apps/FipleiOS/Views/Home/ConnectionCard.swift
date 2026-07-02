@@ -1,3 +1,4 @@
+import FipleKit
 import SwiftUI
 
 /// The "Connected · MacBook Pro M3" hero card at the top of Home, driven by the
@@ -40,7 +41,8 @@ struct ConnectionCard: View {
 
             // Reassure (and make clear to a reviewer) that files still work
             // off-network — the app isn't broken, it just has two modes.
-            if !connected {
+            // Only shown when the Files feature is enabled (off in 1.0).
+            if !connected && AppFeatures.remoteFiles {
                 Button(action: onOpenFiles) {
                     HStack(spacing: 8) {
                         Image(systemName: "folder.fill")

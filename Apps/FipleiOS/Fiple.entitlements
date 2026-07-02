@@ -4,13 +4,9 @@
 <dict>
 	<!-- No aps-environment: the app registers no push/CloudKit subscriptions,
 	     and a hardcoded `development` value would fail App Store validation. -->
-	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array>
-		<string>iCloud.com.maksatov.fipleapp</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudKit</string>
-	</array>
+	<!-- iCloud/CloudKit entitlements are intentionally absent for the 1.0
+	     LAN-only release (off-LAN Files is disabled via AppFeatures.remoteFiles).
+	     Restore com.apple.developer.icloud-container-identifiers and
+	     com.apple.developer.icloud-services (CloudKit) for the 1.1 Files release. -->
 </dict>
 </plist>
