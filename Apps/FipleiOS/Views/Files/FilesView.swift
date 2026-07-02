@@ -11,6 +11,7 @@ struct FilesView: View {
     @State private var query = ""
     @State private var previewURL: URL?
     @State private var favoritesFull = false
+    @State private var downloadFailed = false
 
     var body: some View {
         NavigationStack {
@@ -36,6 +37,11 @@ struct FilesView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text("Unpin a file to add a new favorite.")
+            }
+            .alert("Couldn't download", isPresented: $downloadFailed) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Check your connection and try again.")
             }
         }
     }
@@ -89,7 +95,10 @@ struct FilesView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
                         Button { open(file) } label: {
-                            FileRow(file: file, downloading: store.downloading.contains(file.recordName))
+                            FileRow(
+                                file: file,
+                                downloadProgress: store.isDownloading(file.recordName) ? store.progress(for: file.recordName) : nil
+                            )
                         }
                         .buttonStyle(.plain)
                         .contextMenu { menu(for: file) }
@@ -120,7 +129,11 @@ struct FilesView: View {
 
     private func open(_ file: RemoteFile) {
         Task {
-            if let url = await store.download(file) { previewURL = url }
+            if let url = await store.download(file) {
+                previewURL = url
+            } else {
+                downloadFailed = true
+            }
         }
     }
 }
@@ -128,7 +141,8 @@ struct FilesView: View {
 /// One file row: type glyph, name, size · date, favorite star / spinner.
 private struct FileRow: View {
     let file: RemoteFile
-    let downloading: Bool
+    /// Non-nil while downloading (0…1); shows a determinate progress ring.
+    let downloadProgress: Double?
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -147,16 +161,27 @@ private struct FileRow: View {
 
             Spacer()
 
-            if downloading {
-                ProgressView()
-            } else if file.isPinned {
-                Image(systemName: "star.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.Palette.brand)
+            if let downloadProgress {
+                ZStack {
+                    Circle()
+                        .stroke(Theme.Palette.hairline, lineWidth: 3)
+                    Circle()
+                        .trim(from: 0, to: max(0.02, downloadProgress))
+                        .stroke(Theme.Palette.brand, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut(duration: 0.15), value: downloadProgress)
+                }
+                .frame(width: 22, height: 22)
+            } else {
+                if file.isPinned {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.Palette.brand)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.secondary.opacity(0.6))
             }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.Palette.secondary.opacity(0.6))
         }
         .padding(Theme.Spacing.md)
         .contentShape(Rectangle())

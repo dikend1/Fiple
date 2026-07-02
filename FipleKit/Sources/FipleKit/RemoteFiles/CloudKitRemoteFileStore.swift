@@ -99,12 +99,30 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
         _ = try await database.save(record)
     }
 
-    public func download(recordName: String) async throws -> Data {
-        let record = try await database.record(for: CKRecord.ID(recordName: recordName))
-        guard let asset = record["payload"] as? CKAsset, let url = asset.fileURL else {
-            throw CKError(.assetFileNotFound)
+    public func download(recordName: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> Data {
+        let recordID = CKRecord.ID(recordName: recordName)
+        return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Error>) in
+            let op = CKFetchRecordsOperation(recordIDs: [recordID])
+            op.desiredKeys = ["payload"]
+            if let onProgress {
+                op.perRecordProgressBlock = { _, progress in onProgress(progress) }
+            }
+            op.perRecordResultBlock = { _, result in
+                switch result {
+                case .success(let record):
+                    if let asset = record["payload"] as? CKAsset, let url = asset.fileURL,
+                       let data = try? Data(contentsOf: url) {
+                        onProgress?(1.0)
+                        cont.resume(returning: data)
+                    } else {
+                        cont.resume(throwing: CKError(.assetFileNotFound))
+                    }
+                case .failure(let error):
+                    cont.resume(throwing: error)
+                }
+            }
+            database.add(op)
         }
-        return try Data(contentsOf: url)
     }
 
     public func delete(recordNames: [String]) async throws {

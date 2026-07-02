@@ -22,10 +22,11 @@ actor InMemoryRemoteFileStore: RemoteFileStore {
         payloads[file.recordName] = payload
     }
 
-    func download(recordName: String) async throws -> Data {
+    func download(recordName: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> Data {
         guard let data = payloads[recordName] else {
             throw NSError(domain: "InMemoryRemoteFileStore", code: 404)
         }
+        onProgress?(1.0)
         return data
     }
 

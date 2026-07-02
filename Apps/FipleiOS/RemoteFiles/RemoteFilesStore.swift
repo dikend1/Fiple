@@ -24,7 +24,11 @@ final class RemoteFilesStore {
 
     private(set) var state: State = .idle
     private(set) var files: [RemoteFile] = []
-    private(set) var downloading: Set<String> = []
+    /// Download progress (0…1) keyed by recordName; absent when not downloading.
+    private(set) var progress: [String: Double] = [:]
+
+    func isDownloading(_ recordName: String) -> Bool { progress[recordName] != nil }
+    func progress(for recordName: String) -> Double { progress[recordName] ?? 0 }
     /// When the newest cached file was last modified — a proxy for "last synced",
     /// shown so the user knows how fresh the list is.
     var lastModified: Date? { files.map(\.modifiedAt).max() }
@@ -73,10 +77,13 @@ final class RemoteFilesStore {
     /// Download a file's contents to a local URL for Quick Look / sharing.
     func download(_ file: RemoteFile) async -> URL? {
         guard let (store, _) = await ensureStore() else { return nil }
-        downloading.insert(file.recordName)
-        defer { downloading.remove(file.recordName) }
+        let name = file.recordName
+        progress[name] = 0
+        defer { progress[name] = nil }
         do {
-            let data = try await store.download(recordName: file.recordName)
+            let data = try await store.download(recordName: name, onProgress: { [weak self] fraction in
+                Task { @MainActor in self?.progress[name] = fraction }
+            })
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("FipleDownloads", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let url = dir.appendingPathComponent(file.fileName)
