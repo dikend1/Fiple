@@ -20,9 +20,9 @@ struct WorkspaceCardView: View {
                 colorHex: tile.colorHex,
                 size: 48
             )
-            // A crisp coloured drop-shadow lifts the icon off the card without
+            // A soft coloured drop-shadow lifts the icon off the card without
             // the muddy halo a blurred backing plate created.
-            .shadow(color: base.opacity(0.35), radius: 8, y: 4)
+            .shadow(color: base.opacity(0.25), radius: 6, y: 3)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(tile.name)
@@ -106,34 +106,30 @@ struct WorkspaceCardView: View {
         .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
     }
 
-    /// The real icons of the apps / sites / files this workspace launches, each
-    /// in a uniform white chip so a row of mismatched app icons reads as one tidy
-    /// set — the at-a-glance "what's inside" preview.
+    /// The real icons of the apps / sites / files this workspace launches — the
+    /// at-a-glance "what's inside" preview. Shown as the raw app icons (which
+    /// carry their own shape and colour) with just a soft lift, rather than boxed
+    /// in white chips that fought the icons' own backgrounds.
     private var actionIcons: some View {
         let actions = tile.actions
         let maxVisible = 4
         let visible = actions.count > maxVisible ? Array(actions.prefix(3)) : actions
         let overflow = actions.count - visible.count
-        return HStack(spacing: 7) {
+        return HStack(spacing: 9) {
             ForEach(visible) { action in
                 QuickActionIcon(
                     action: QuickAction(action: action, tileID: tile.id),
-                    size: 26,
-                    cornerRadius: 7
+                    size: 34,
+                    cornerRadius: 9
                 )
-                .padding(5)
-                .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.Palette.hairline))
-                .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+                .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
             }
             if overflow > 0 {
                 Text("+\(overflow)")
                     .font(.fiple(13, .semibold, design: .rounded))
-                    .foregroundStyle(Theme.Palette.secondary)
-                    .frame(width: 36, height: 36)
-                    .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.Palette.hairline))
-                    .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+                    .foregroundStyle(base)
+                    .frame(width: 34, height: 34)
+                    .background(base.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
         }
     }
