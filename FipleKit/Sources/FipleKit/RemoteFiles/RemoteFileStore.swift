@@ -15,8 +15,9 @@ public protocol RemoteFileStore: Sendable {
     /// optional thumbnail. Overwrites the record with the same `recordName`.
     func upload(_ file: RemoteFile, payload: Data, thumbnail: Data?) async throws
 
-    /// Fetch the payload bytes for a cached file (the phone's download path).
-    func download(recordName: String) async throws -> Data
+    /// Fetch the payload bytes for a cached file (the phone's download path),
+    /// reporting fetch progress (0…1) if a handler is given.
+    func download(recordName: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> Data
 
     /// Remove cache copies by `recordName`. This is the *only* deletion in the
     /// system and it targets the cloud cache exclusively — never disk originals.
@@ -27,4 +28,11 @@ public protocol RemoteFileStore: Sendable {
 
     /// Remove every cached copy (used when the feature is turned off on the Mac).
     func purgeAll() async throws
+}
+
+public extension RemoteFileStore {
+    /// Convenience: download without progress reporting.
+    func download(recordName: String) async throws -> Data {
+        try await download(recordName: recordName, onProgress: nil)
+    }
 }
