@@ -64,7 +64,6 @@ final class PinnedAppsStore {
         switch kind {
         case let .launchApp(bundleID): "app:\(bundleID)"
         case let .openURL(url): "url:\(url.host() ?? url.absoluteString)"
-        case let .runShortcut(name): "shortcut:\(name)"
         }
     }
 }

@@ -26,9 +26,6 @@ struct ActionDraft: Identifiable {
         switch action.kind {
         case let .launchApp(bundleID): kind = .launchApp; self.bundleID = bundleID
         case let .openURL(u): kind = .openURL; url = u.absoluteString
-        // Shortcuts are no longer creatable in the UI; show any legacy shortcut
-        // action as an empty App draft so the editor still opens cleanly.
-        case .runShortcut: kind = .launchApp
         }
     }
 

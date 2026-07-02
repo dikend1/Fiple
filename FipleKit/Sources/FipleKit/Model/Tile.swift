@@ -56,9 +56,4 @@ public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
     public var websiteCount: Int {
         actions.filter { if case .openURL = $0.kind { true } else { false } }.count
     }
-
-    /// Number of Shortcut actions — the "Shortcuts" stat on a workspace card.
-    public var shortcutCount: Int {
-        actions.filter { if case .runShortcut = $0.kind { true } else { false } }.count
-    }
 }

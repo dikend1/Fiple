@@ -9,15 +9,12 @@ public enum ActionKind: Sendable, Equatable, Hashable {
     case launchApp(bundleID: String)
     /// Open a URL in the system default handler.
     case openURL(URL)
-    /// Run an Apple Shortcut by name (triggered via the `shortcuts://` URL
-    /// scheme on the Mac — sandbox-safe, no file-system access required).
-    case runShortcut(name: String)
 }
 
 extension ActionKind: Codable {
-    private enum Tag: String, Codable { case launchApp, openURL, runShortcut }
+    private enum Tag: String, Codable { case launchApp, openURL }
     private enum CodingKeys: String, CodingKey {
-        case type, bundleID, url, name
+        case type, bundleID, url
     }
 
     public init(from decoder: Decoder) throws {
@@ -27,8 +24,6 @@ extension ActionKind: Codable {
             self = .launchApp(bundleID: try c.decode(String.self, forKey: .bundleID))
         case .openURL:
             self = .openURL(try c.decode(URL.self, forKey: .url))
-        case .runShortcut:
-            self = .runShortcut(name: try c.decode(String.self, forKey: .name))
         }
     }
 
@@ -41,9 +36,6 @@ extension ActionKind: Codable {
         case let .openURL(url):
             try c.encode(Tag.openURL, forKey: .type)
             try c.encode(url, forKey: .url)
-        case let .runShortcut(name):
-            try c.encode(Tag.runShortcut, forKey: .type)
-            try c.encode(name, forKey: .name)
         }
     }
 }
@@ -78,7 +70,6 @@ public struct Action: Identifiable, Sendable, Equatable, Hashable, Codable {
         switch kind {
         case let .launchApp(bundleID): "Launch \(bundleID)"
         case let .openURL(url): "Open \(url.absoluteString)"
-        case let .runShortcut(name): "Run shortcut \(name)"
         }
     }
 }

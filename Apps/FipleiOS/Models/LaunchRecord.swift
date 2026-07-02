@@ -7,7 +7,7 @@ import Foundation
 /// is not sent over the wire.
 struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
     enum Category: String, Codable {
-        case app, website, shortcut, workspace
+        case app, website, workspace
     }
 
     let id: UUID
@@ -57,7 +57,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
     }
 
     /// Host for a website launch, so the row can show its favicon instead of a
-    /// globe. Nil for apps, shortcuts and multi-action workspaces.
+    /// globe. Nil for apps and multi-action workspaces.
     var faviconHost: String? {
         if case let .openURL(url)? = actionKind { return url.host() }
         return nil
@@ -67,7 +67,6 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         switch kind {
         case .launchApp: .app
         case .openURL: .website
-        case .runShortcut: .shortcut
         }
     }
 
@@ -78,7 +77,6 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         switch tile.actions.first?.kind {
         case .launchApp: return .app
         case .openURL: return .website
-        case .runShortcut: return .shortcut
         case .none: return .app
         }
     }
@@ -99,7 +97,6 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         switch category {
         case .app: "Application"
         case .website: "Website"
-        case .shortcut: "Shortcut"
         case .workspace: "Workspace"
         }
     }
@@ -146,11 +143,10 @@ struct QuickAction: Identifiable, Hashable {
         switch kind {
         case let .launchApp(bundleID): "app:\(bundleID)"
         case let .openURL(url): "url:\(url.host() ?? url.absoluteString)"
-        case let .runShortcut(name): "shortcut:\(name)"
         }
     }
 
-    /// Short human label ("Xcode", "YouTube", "Morning Routine").
+    /// Short human label ("Xcode", "YouTube").
     var title: String {
         switch kind {
         case let .launchApp(bundleID):
@@ -159,8 +155,6 @@ struct QuickAction: Identifiable, Hashable {
             return appTitle(for: bundleID)
         case let .openURL(url):
             return websiteTitle(for: url)
-        case let .runShortcut(name):
-            return name
         }
     }
 
@@ -230,7 +224,6 @@ struct QuickAction: Identifiable, Hashable {
         switch kind {
         case .launchApp: "app.fill"
         case .openURL: "globe"
-        case .runShortcut: "bolt.fill"
         }
     }
 }
