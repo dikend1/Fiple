@@ -13,6 +13,7 @@ struct WorkspacesView: View {
     @State private var layout: Layout = .grid
     @State private var editingTile: Tile?
     @State private var isCreating = false
+    @State private var deletingTile: Tile?
 
     var body: some View {
         ScrollView {
@@ -46,6 +47,16 @@ struct WorkspacesView: View {
         }
         .sheet(item: $editingTile) { TileEditorView(store: store, tile: $0) }
         .sheet(isPresented: $isCreating) { TileEditorView(store: store, tile: nil) }
+        .alert(
+            "Delete workspace?",
+            isPresented: Binding(get: { deletingTile != nil }, set: { if !$0 { deletingTile = nil } }),
+            presenting: deletingTile
+        ) { tile in
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) { store.delete(tile.id) }
+        } message: { tile in
+            Text("Delete “\(tile.name)”? This can't be undone.")
+        }
     }
 
     private var controls: some View {
@@ -100,7 +111,7 @@ struct WorkspacesView: View {
                     WorkspaceCard(
                         tile: tile,
                         onEdit: { editingTile = tile },
-                        onDelete: { store.delete(tile.id) }
+                        onDelete: { deletingTile = tile }
                     )
                 }
             }
@@ -110,7 +121,7 @@ struct WorkspacesView: View {
                     WorkspaceListRow(
                         tile: tile,
                         onEdit: { editingTile = tile },
-                        onDelete: { store.delete(tile.id) }
+                        onDelete: { deletingTile = tile }
                     )
                 }
             }
