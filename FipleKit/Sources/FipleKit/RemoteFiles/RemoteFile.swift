@@ -40,6 +40,10 @@ public struct RemoteFile: Identifiable, Sendable, Equatable, Codable {
     public var isPinned: Bool
     /// Which Mac produced this record (future multi-Mac; single-Mac in v1 UX).
     public let sourceDeviceID: String
+    /// Small preview bytes, populated when listing (from the thumbnail asset) so
+    /// the phone can show a real image without downloading the full file. Not a
+    /// stored CloudKit field — the thumbnail travels as its own asset.
+    public var thumbnailData: Data?
 
     public var id: String { recordName }
 
@@ -52,7 +56,8 @@ public struct RemoteFile: Identifiable, Sendable, Equatable, Codable {
         modifiedAt: Date,
         contentType: String,
         isPinned: Bool = false,
-        sourceDeviceID: String
+        sourceDeviceID: String,
+        thumbnailData: Data? = nil
     ) {
         self.recordName = recordName
         self.fileName = fileName
@@ -63,6 +68,7 @@ public struct RemoteFile: Identifiable, Sendable, Equatable, Codable {
         self.contentType = contentType
         self.isPinned = isPinned
         self.sourceDeviceID = sourceDeviceID
+        self.thumbnailData = thumbnailData
     }
 
     /// Convenience initializer that computes the stable ``recordName`` from

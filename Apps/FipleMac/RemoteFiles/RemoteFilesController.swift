@@ -1,7 +1,9 @@
+import AppKit
 import CloudKit
 import FipleKit
 import Foundation
 import Observation
+import QuickLookThumbnailing
 
 /// Drives the Mac side of off-LAN file access: owns the on/off toggle, the
 /// folder watcher, and the read-only mirror into the private CloudKit cache.
@@ -61,6 +63,23 @@ final class RemoteFilesController {
         return candidates.filter { fm.fileExists(atPath: $0.1.path) }
     }
 
+    /// Generate a small JPEG preview for a file via Quick Look, uploaded as the
+    /// thumbnail so the phone shows a real image instead of a generic glyph.
+    /// Returns nil for types Quick Look can't render (falls back to a glyph).
+    @Sendable private static func makeThumbnail(for url: URL) async -> Data? {
+        let request = QLThumbnailGenerator.Request(
+            fileAt: url,
+            size: CGSize(width: 240, height: 240),
+            scale: 2,
+            representationTypes: .thumbnail
+        )
+        guard let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) else {
+            return nil
+        }
+        let bitmap = NSBitmapImageRep(cgImage: rep.cgImage)
+        return bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.6])
+    }
+
     /// The user's real home directory, bypassing sandbox container redirection.
     private static var realHomeDirectory: URL {
         if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir {
@@ -86,7 +105,12 @@ final class RemoteFilesController {
         FipleLog.remoteFiles.info("start — iCloud available, container \(Self.containerID)")
         let store = CloudKitRemoteFileStore(containerIdentifier: Self.containerID)
         self.store = store
-        cache = RemoteFileCache(store: store, reader: reader, deviceID: deviceID)
+        cache = RemoteFileCache(
+            store: store,
+            reader: reader,
+            deviceID: deviceID,
+            thumbnailProvider: Self.makeThumbnail
+        )
 
         watcher = FolderWatcher(urls: watchedFolders.map(\.1)) { [weak self] in
             Task { @MainActor in self?.reconcile() }

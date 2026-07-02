@@ -24,6 +24,14 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
         self.database = container.privateCloudDatabase
     }
 
+    /// Fields fetched when listing — everything except `payload`, so the phone's
+    /// list is cheap: it downloads small metadata + thumbnail assets, never the
+    /// full files. Full bytes come later, on demand, via ``download(recordName:)``.
+    private static let listKeys = [
+        "fileName", "sourceFolder", "relativePath", "sizeBytes",
+        "modifiedAt", "contentType", "isPinned", "sourceDeviceID", "thumbnail",
+    ]
+
     public func list() async throws -> [RemoteFile] {
         let query = CKQuery(recordType: Self.recordType, predicate: NSPredicate(value: true))
         var files: [RemoteFile] = []
@@ -33,9 +41,9 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
             repeat {
                 let page: (matchResults: [(CKRecord.ID, Result<CKRecord, Error>)], queryCursor: CKQueryOperation.Cursor?)
                 if let cursor {
-                    page = try await database.records(continuingMatchFrom: cursor)
+                    page = try await database.records(continuingMatchFrom: cursor, desiredKeys: Self.listKeys)
                 } else {
-                    page = try await database.records(matching: query)
+                    page = try await database.records(matching: query, desiredKeys: Self.listKeys)
                 }
                 for (_, result) in page.matchResults {
                     if case let .success(record) = result, let file = Self.file(from: record) {
@@ -141,6 +149,10 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
             let deviceID = record["sourceDeviceID"] as? String
         else { return nil }
         let pinned = (record["isPinned"] as? Int64 ?? 0) != 0
+        var thumbnail: Data?
+        if let asset = record["thumbnail"] as? CKAsset, let url = asset.fileURL {
+            thumbnail = try? Data(contentsOf: url)
+        }
         return RemoteFile(
             recordName: record.recordID.recordName,
             fileName: fileName,
@@ -150,7 +162,8 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
             modifiedAt: modifiedAt,
             contentType: contentType,
             isPinned: pinned,
-            sourceDeviceID: deviceID
+            sourceDeviceID: deviceID,
+            thumbnailData: thumbnail
         )
     }
 

@@ -24,19 +24,25 @@ public struct RemoteFileCache: Sendable {
     private let planner: CachePlanner
     private let deviceID: String
     private let ignoredSubfolders: [String]
+    /// Optional platform-specific preview generator (Quick Look on the Mac).
+    /// When present, its output is uploaded as the file's thumbnail so the phone
+    /// can show a real image. Nil in tests / where thumbnails aren't wanted.
+    private let thumbnailProvider: (@Sendable (URL) async -> Data?)?
 
     public init(
         store: RemoteFileStore,
         reader: FileReading,
         planner: CachePlanner = CachePlanner(),
         deviceID: String,
-        ignoredSubfolders: [String] = []
+        ignoredSubfolders: [String] = [],
+        thumbnailProvider: (@Sendable (URL) async -> Data?)? = nil
     ) {
         self.store = store
         self.reader = reader
         self.planner = planner
         self.deviceID = deviceID
         self.ignoredSubfolders = ignoredSubfolders
+        self.thumbnailProvider = thumbnailProvider
     }
 
     /// Process a created/modified file. Reads its metadata, applies exclusion and
@@ -78,7 +84,8 @@ public struct RemoteFileCache: Sendable {
             var pinned = candidate
             pinned.isPinned = true
             let data = try reader.readData(at: url)
-            try await store.upload(pinned, payload: data, thumbnail: nil)
+            let thumb = await thumbnailProvider?(url)
+            try await store.upload(pinned, payload: data, thumbnail: thumb)
             return .cached(evicted: [])
         }
 
@@ -88,7 +95,8 @@ public struct RemoteFileCache: Sendable {
         }
 
         let data = try reader.readData(at: url)
-        try await store.upload(candidate, payload: data, thumbnail: nil)
+        let thumb = await thumbnailProvider?(url)
+        try await store.upload(candidate, payload: data, thumbnail: thumb)
         if !plan.evict.isEmpty {
             try await store.delete(recordNames: plan.evict)
         }
