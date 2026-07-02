@@ -100,7 +100,6 @@ struct WorkspacesView: View {
                 ForEach(store.tiles) { tile in
                     WorkspaceCard(
                         tile: tile,
-                        onRun: { run(tile) },
                         onEdit: { editingTile = tile },
                         onDelete: { store.delete(tile.id) }
                     )
@@ -111,7 +110,6 @@ struct WorkspacesView: View {
                 ForEach(store.tiles) { tile in
                     WorkspaceListRow(
                         tile: tile,
-                        onRun: { run(tile) },
                         onEdit: { editingTile = tile },
                         onDelete: { store.delete(tile.id) }
                     )
@@ -126,10 +124,6 @@ struct WorkspacesView: View {
         Panel(title: "Recent", icon: "clock", actionTitle: "View all") { section = .recent } content: {
             RecentList(records: Array(recents.records.prefix(4)), emptyHint: "No launches yet", onRun: runRecord)
         }
-    }
-
-    private func run(_ tile: Tile) {
-        Task { await server.run(tile) }
     }
 
     private func runRecord(_ record: RunRecord) {
@@ -164,7 +158,6 @@ struct WorkspacesView: View {
 /// Compact row used by the Workspaces list layout.
 private struct WorkspaceListRow: View {
     let tile: Tile
-    let onRun: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -179,13 +172,14 @@ private struct WorkspaceListRow: View {
             Spacer()
             Text("\(tile.appCount) apps · \(tile.websiteCount) sites")
                 .font(.caption).foregroundStyle(.secondary)
-            Button(action: onRun) {
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 20))
+            Button(action: onEdit) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color(hex: tile.colorHex))
+                    .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
-            .help("Run \(tile.name)")
+            .help("Edit \(tile.name)")
             Menu {
                 Button("Edit", action: onEdit)
                 Divider()
