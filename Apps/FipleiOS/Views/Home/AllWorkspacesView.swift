@@ -7,13 +7,13 @@ struct AllWorkspacesView: View {
     let controller: RemoteController
 
     private let columns = Array(
-        repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
+        repeating: GridItem(.flexible(), spacing: 14),
         count: 2
     )
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
+            LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(controller.workspaces) { tile in
                     WorkspaceCardView(
                         tile: tile,
@@ -23,8 +23,8 @@ struct AllWorkspacesView: View {
                     }
                 }
             }
-            .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.top, Theme.Spacing.sm)
+            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.top, Theme.Spacing.md)
             // Clear the floating tab bar so the last row of cards stays tappable.
             .padding(.bottom, Theme.Spacing.tabBarClearance)
         }
