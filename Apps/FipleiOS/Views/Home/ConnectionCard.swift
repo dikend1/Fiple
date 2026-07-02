@@ -4,32 +4,61 @@ import SwiftUI
 /// live connection.
 struct ConnectionCard: View {
     let controller: RemoteController
+    /// Opens the Files tab from the off-network hint.
+    var onOpenFiles: () -> Void = {}
 
     private var connected: Bool { controller.phase == .connected }
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Spacing.lg) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(connected ? Theme.Palette.connected : Theme.Palette.secondary)
-                        .frame(width: 8, height: 8)
-                    Text(connected ? "Connected" : "Connecting…")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(connected ? Theme.Palette.connected : Theme.Palette.secondary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .center, spacing: Theme.Spacing.lg) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(connected ? Theme.Palette.connected : Theme.Palette.secondary)
+                            .frame(width: 8, height: 8)
+                        Text(connected ? "Connected" : "Not on this network")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(connected ? Theme.Palette.connected : Theme.Palette.secondary)
+                    }
+                    Text(controller.macName ?? "Your Mac")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Theme.Palette.label)
+                    Text(connected
+                         ? "Last active just now"
+                         : "Workspaces need your Mac on the same Wi-Fi.")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Theme.Palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(controller.macName ?? "Your Mac")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(Theme.Palette.label)
-                Text(connected ? "Last active just now" : "Reconnecting")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.Palette.secondary)
+
+                Spacer(minLength: 0)
+
+                MacBookGlyph()
+                    .frame(width: 116, height: 84)
             }
 
-            Spacer(minLength: 0)
-
-            MacBookGlyph()
-                .frame(width: 116, height: 84)
+            // Reassure (and make clear to a reviewer) that files still work
+            // off-network — the app isn't broken, it just has two modes.
+            if !connected {
+                Button(action: onOpenFiles) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Your files are available anywhere")
+                            .font(.system(size: 14, weight: .semibold))
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.Palette.brand)
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.vertical, Theme.Spacing.sm + 2)
+                    .frame(maxWidth: .infinity)
+                    .background(Theme.Palette.brand.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity)

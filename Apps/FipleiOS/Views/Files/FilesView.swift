@@ -67,7 +67,8 @@ struct FilesView: View {
                 section("Downloads", files: filter(store.files(in: .downloads)))
             }
             .padding(.vertical, Theme.Spacing.lg)
-            .padding(.bottom, Theme.Spacing.xxl)
+            // Clear the floating tab bar so the last row isn't tucked underneath.
+            .padding(.bottom, 96)
         }
     }
 
@@ -131,17 +132,14 @@ private struct FileRow: View {
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Image(systemName: Self.symbol(for: file.contentType))
-                .font(.system(size: 20))
-                .foregroundStyle(Theme.Palette.brand)
-                .frame(width: 44, height: 44)
-                .background(Theme.Palette.brand.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+            thumbnail
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.fileName)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.Palette.label)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                 Text("\(Self.size(file.sizeBytes)) · \(file.modifiedAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.Palette.secondary)
@@ -162,6 +160,24 @@ private struct FileRow: View {
         }
         .padding(Theme.Spacing.md)
         .contentShape(Rectangle())
+    }
+
+    /// Real preview if the Mac uploaded one, else a type glyph.
+    @ViewBuilder private var thumbnail: some View {
+        if let data = file.thumbnailData, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.Palette.hairline))
+        } else {
+            Image(systemName: Self.symbol(for: file.contentType))
+                .font(.system(size: 20))
+                .foregroundStyle(Theme.Palette.brand)
+                .frame(width: 44, height: 44)
+                .background(Theme.Palette.brand.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        }
     }
 
     private static func size(_ bytes: Int64) -> String {

@@ -12,9 +12,13 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            HomeView(controller: controller) { selection = .settings }
-                .tag(Tab.home)
-                .tabItem { Label("Home", systemImage: "house.fill") }
+            HomeView(
+                controller: controller,
+                onOpenSettings: { selection = .settings },
+                onOpenFiles: { selection = .files }
+            )
+            .tag(Tab.home)
+            .tabItem { Label("Home", systemImage: "house.fill") }
 
             FilesView()
                 .tag(Tab.files)
