@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The tabbed interface is **always** shown — Files works over iCloud without any
-/// LAN pairing, so pairing must never gate the whole app. Code entry is a
+/// The tabbed interface is **always** shown — pairing never gates the whole app
+/// (Recent and Settings remain browsable off-network). Code entry is a
 /// dismissible sheet that appears when a Mac is found on the network and closes
-/// itself once paired; the user can swipe it away to use Files instead.
+/// itself once paired; the user can swipe it away and come back later.
 struct RootView: View {
     let controller: RemoteController
 

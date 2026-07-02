@@ -5,8 +5,6 @@ import SwiftUI
 /// live connection.
 struct ConnectionCard: View {
     let controller: RemoteController
-    /// Opens the Files tab from the off-network hint.
-    var onOpenFiles: () -> Void = {}
 
     private var connected: Bool { controller.phase == .connected }
 
@@ -37,29 +35,6 @@ struct ConnectionCard: View {
 
                 MacBookGlyph()
                     .frame(width: 116, height: 84)
-            }
-
-            // Reassure (and make clear to a reviewer) that files still work
-            // off-network — the app isn't broken, it just has two modes.
-            // Only shown when the Files feature is enabled (off in 1.0).
-            if !connected && AppFeatures.remoteFiles {
-                Button(action: onOpenFiles) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder.fill")
-                            .font(.fiple(14, .semibold))
-                        Text("Your files are available anywhere")
-                            .font(.fiple(14, .semibold))
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.fiple(12, .semibold))
-                    }
-                    .foregroundStyle(Theme.Palette.brand)
-                    .padding(.horizontal, Theme.Spacing.md)
-                    .padding(.vertical, Theme.Spacing.sm + 2)
-                    .frame(maxWidth: .infinity)
-                    .background(Theme.Palette.brand.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.Radius.control))
-                }
-                .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.xl)

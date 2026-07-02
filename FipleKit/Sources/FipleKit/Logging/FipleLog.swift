@@ -27,8 +27,6 @@ public enum FipleLog {
     public static let pairing = FipleLogger(category: "pairing")
     /// Running tiles and individual actions on the Mac.
     public static let execution = FipleLogger(category: "execution")
-    /// Off-LAN file mirror: folder scan, CloudKit upload/evict, downloads.
-    public static let remoteFiles = FipleLogger(category: "remoteFiles")
 }
 
 /// Thin wrapper over `os.Logger` that logs messages `.public` so they're
