@@ -81,18 +81,20 @@ BRD → (Consensus) → PRD → TRD → (ADR) → OpenSpec change → implementa
 ## Current state
 
 - **Implemented** (code + tests in-tree): `add-fiple-mvp` (pairing,
-  tile-management, tile-execution), `harden-pairing-and-execution` (Keychain
-  token, pairing throttle/lockout, `ActionPolicy`/`ActionLookup`), and
-  `add-remote-file-access` (off-LAN file browsing via CloudKit private DB).
-  All three changes still sit in `openspec/changes/` — **not archived** because
+  tile-management, tile-execution) and `harden-pairing-and-execution` (Keychain
+  token, pairing throttle/lockout, `ActionPolicy`/`ActionLookup`).
+  Both changes still sit in `openspec/changes/` — **not archived** because
   the human-acceptance gate (BRD/PRD/TRD/ADR are all `draft`) has not been
   closed; `openspec/specs/` stays empty until then. See each change's
   `tasks.md` for status and verification evidence.
+- `add-remote-file-access` (off-LAN file browsing via CloudKit private DB,
+  ADR-0004) was implemented, then **removed from `main`** for the LAN-only 1.0
+  App Store release. The code lives on the `feat/remote-file-access` branch;
+  the openspec change and ADR-0004 stay in-tree as parked intent for 1.1.
 - **Actual stack:** two native SwiftUI apps (macOS menu-bar companion + iOS
   remote). LAN transport is Bonjour discovery + **raw TCP** with 4-byte
   length-prefixed JSON frames (`FipleKit/Wire/FrameCodec.swift`) — *not*
-  WebSocket (see ADR-0002). Off-LAN file access uses the user's **CloudKit
-  private database** (ADR-0004). No backend, no accounts, no third-party deps.
+  WebSocket (see ADR-0002). No backend, no accounts, no third-party deps.
 - ADR numbering: 0003 is reserved by a not-yet-committed draft (parked pending
   human acceptance); in-tree ADRs are 0001, 0002, 0004.
 
