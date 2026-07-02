@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @State private var launchAtLogin = false
     @State private var launchAtLoginError: String?
+    @State private var newIgnoredSubfolder = ""
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -34,6 +35,8 @@ struct SettingsView: View {
 
                 section("Remote File Access") {
                     remoteFilesRow
+                    Divider().padding(.leading, Theme.Spacing.md)
+                    ignoredSubfoldersRow
                 }
 
                 section("About") {
@@ -116,6 +119,46 @@ struct SettingsView: View {
         }
         .padding(.vertical, Theme.Spacing.sm)
         .padding(.horizontal, Theme.Spacing.md)
+    }
+
+    private var ignoredSubfoldersRow: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text("Ignored Subfolders").font(.system(size: 14, weight: .medium))
+            Text("Files inside these subfolders of Desktop, Documents and Downloads are never cached. Adding one removes its files from the cloud cache.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            ForEach(remoteFiles.ignoredSubfolders, id: \.self) { name in
+                HStack {
+                    Text(name).font(.system(size: 13))
+                    Spacer()
+                    Button {
+                        remoteFiles.removeIgnoredSubfolder(name)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop ignoring \(name)")
+                }
+                .padding(.vertical, 2)
+            }
+            HStack(spacing: Theme.Spacing.sm) {
+                TextField("Subfolder name, e.g. Private or Work/Secret", text: $newIgnoredSubfolder)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 13))
+                    .onSubmit(addIgnoredSubfolder)
+                Button("Add", action: addIgnoredSubfolder)
+                    .disabled(newIgnoredSubfolder.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.md)
+    }
+
+    private func addIgnoredSubfolder() {
+        remoteFiles.addIgnoredSubfolder(newIgnoredSubfolder)
+        newIgnoredSubfolder = ""
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

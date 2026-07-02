@@ -22,10 +22,14 @@ final class RemoteFilesController {
     private(set) var isEnabled: Bool
     /// Human-readable last state for the Settings UI.
     private(set) var status: String = "Off"
+    /// Subfolder names (relative to a watched folder) the user excluded from
+    /// mirroring, e.g. `Private` or `Work/Secret`. Persisted; edited in Settings.
+    private(set) var ignoredSubfolders: [String]
 
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let enabledKey = "remoteFiles.enabled"
     @ObservationIgnored private let deviceIDKey = "remoteFiles.deviceID"
+    @ObservationIgnored private let ignoredSubfoldersKey = "remoteFiles.ignoredSubfolders"
 
     @ObservationIgnored private let reader = DiskFileReader()
     @ObservationIgnored private var store: CloudKitRemoteFileStore?
@@ -36,6 +40,7 @@ final class RemoteFilesController {
 
     init() {
         isEnabled = defaults.bool(forKey: enabledKey)
+        ignoredSubfolders = defaults.stringArray(forKey: ignoredSubfoldersKey) ?? []
         if let saved = defaults.string(forKey: deviceIDKey) {
             deviceID = saved
         } else {
@@ -105,18 +110,53 @@ final class RemoteFilesController {
         FipleLog.remoteFiles.info("start — iCloud available, container \(Self.containerID)")
         let store = CloudKitRemoteFileStore(containerIdentifier: Self.containerID)
         self.store = store
-        cache = RemoteFileCache(
-            store: store,
-            reader: reader,
-            deviceID: deviceID,
-            thumbnailProvider: Self.makeThumbnail
-        )
+        cache = makeCache(store: store)
 
         watcher = FolderWatcher(urls: watchedFolders.map(\.1)) { [weak self] in
             Task { @MainActor in self?.reconcile() }
         }
         watcher?.start()
         status = "On — syncing recent files"
+        reconcile()
+    }
+
+    /// The exclusion list is baked into the cache at construction, so both
+    /// `start()` and ignore-list edits build it through this one place.
+    private func makeCache(store: CloudKitRemoteFileStore) -> RemoteFileCache {
+        RemoteFileCache(
+            store: store,
+            reader: reader,
+            deviceID: deviceID,
+            ignoredSubfolders: ignoredSubfolders,
+            thumbnailProvider: Self.makeThumbnail
+        )
+    }
+
+    /// Add a user-ignored subfolder (name relative to a watched folder).
+    /// Duplicates (case-insensitive) and empty input are dropped silently.
+    func addIgnoredSubfolder(_ name: String) {
+        let trimmed = name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty,
+              !ignoredSubfolders.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame })
+        else { return }
+        ignoredSubfolders.append(trimmed)
+        persistIgnoredSubfoldersAndReconcile()
+    }
+
+    func removeIgnoredSubfolder(_ name: String) {
+        ignoredSubfolders.removeAll { $0.caseInsensitiveCompare(name) == .orderedSame }
+        persistIgnoredSubfoldersAndReconcile()
+    }
+
+    private func persistIgnoredSubfoldersAndReconcile() {
+        defaults.set(ignoredSubfolders, forKey: ignoredSubfoldersKey)
+        guard let store else { return } // feature off — applies on next start()
+        // Rebuild the cache so the new list takes effect, then reconcile: files
+        // in newly-ignored subfolders come back .excluded and their cloud copies
+        // are dropped as stale.
+        cache = makeCache(store: store)
         reconcile()
     }
 
@@ -143,9 +183,21 @@ final class RemoteFilesController {
             defer { reconciling = false }
             let now = Date()
             var liveRecordNames: Set<String> = []
-            var scanned = 0, cached = 0, skipped = 0, excluded = 0, failed = 0
+            var scanned = 0, cached = 0, unchanged = 0, skipped = 0, excluded = 0, failed = 0
 
             FipleLog.remoteFiles.info("reconcile start — \(folders.count) folder(s): \(folders.map { $0.1.lastPathComponent }.joined(separator: ", "))")
+
+            // One CloudKit listing per reconcile: handleChange keeps this
+            // snapshot in sync with its own uploads/evictions, so scanning N
+            // files no longer costs N full queries (which tripped CloudKit's
+            // rate limits on every FSEvent).
+            var snapshot: [RemoteFile]
+            do {
+                snapshot = try await store.list()
+            } catch {
+                FipleLog.remoteFiles.error("reconcile aborted — listing the cache failed: \(error)")
+                return
+            }
 
             var quotaHit = false
             outer: for (folder, root) in folders {
@@ -153,14 +205,18 @@ final class RemoteFilesController {
                 FipleLog.remoteFiles.info("scanning \(folder.rawValue): \(files.count) file(s) under \(root.path)")
                 for (url, relativePath) in files {
                     scanned += 1
-                    liveRecordNames.insert(
-                        RemoteFile.recordName(deviceID: deviceID, folder: folder, relativePath: relativePath)
-                    )
+                    let recordName = RemoteFile.recordName(deviceID: deviceID, folder: folder, relativePath: relativePath)
+                    liveRecordNames.insert(recordName)
                     do {
-                        switch try await cache.handleChange(at: url, folder: folder, relativePath: relativePath, now: now) {
+                        switch try await cache.handleChange(at: url, folder: folder, relativePath: relativePath, snapshot: &snapshot, now: now) {
                         case .cached: cached += 1
+                        case .unchanged: unchanged += 1
                         case .skipped: skipped += 1
-                        case .excluded: excluded += 1
+                        case .excluded:
+                            // Not live: if the user just ignored this subfolder,
+                            // its existing cloud copy becomes stale below.
+                            excluded += 1
+                            liveRecordNames.remove(recordName)
                         }
                     } catch let error as CKError where error.code == .quotaExceeded {
                         // The user's iCloud storage is full. Stop hammering (which
@@ -176,22 +232,23 @@ final class RemoteFilesController {
                 }
             }
 
-            FipleLog.remoteFiles.info("reconcile done — scanned \(scanned), cached \(cached), skipped \(skipped), excluded \(excluded), failed \(failed)\(quotaHit ? " (paused: iCloud full)" : "")")
-            if !quotaHit, cached > 0 { status = "On — \(cached) file(s) synced" }
+            FipleLog.remoteFiles.info("reconcile done — scanned \(scanned), cached \(cached), unchanged \(unchanged), skipped \(skipped), excluded \(excluded), failed \(failed)\(quotaHit ? " (paused: iCloud full)" : "")")
+            if !quotaHit, cached + unchanged > 0 { status = "On — \(cached + unchanged) file(s) synced" }
             if quotaHit { return }
 
-            // Deletions: our device's cache copies whose originals are gone.
-            do {
-                let existing = try await store.list()
-                let stale = existing
-                    .filter { $0.sourceDeviceID == deviceID && !liveRecordNames.contains($0.recordName) }
-                    .map(\.recordName)
-                if !stale.isEmpty {
+            // Deletions: our device's cache copies whose originals are gone (or
+            // just became excluded). The maintained snapshot already reflects
+            // this reconcile's uploads, so no second listing is needed.
+            let stale = snapshot
+                .filter { $0.sourceDeviceID == deviceID && !liveRecordNames.contains($0.recordName) }
+                .map(\.recordName)
+            if !stale.isEmpty {
+                do {
                     try await store.delete(recordNames: stale)
                     FipleLog.remoteFiles.info("evicted \(stale.count) stale cache copies")
+                } catch {
+                    FipleLog.remoteFiles.error("stale delete failed: \(error)")
                 }
-            } catch {
-                FipleLog.remoteFiles.error("list/delete failed: \(error)")
             }
         }
     }

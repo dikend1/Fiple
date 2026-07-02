@@ -57,6 +57,131 @@ struct RemoteFileCacheTests {
         await #expect(store.count == 0)
     }
 
+    @Test("batch reconcile with a shared snapshot lists the store once")
+    func sharedSnapshotListsOnce() async throws {
+        let store = InMemoryRemoteFileStore()
+        let names = ["a.txt", "b.txt", "c.txt"]
+        var entries: [String: StubFileReader.Entry] = [:]
+        for name in names {
+            entries[url(name).path] = .init(
+                meta: FileMetadata(sizeBytes: mb, modifiedAt: t0, contentType: "public.plain-text"),
+                data: Data(name.utf8)
+            )
+        }
+        let cache = RemoteFileCache(store: store, reader: StubFileReader(entries), deviceID: "mac-1")
+
+        var snapshot = try await store.list()
+        for name in names {
+            let outcome = try await cache.handleChange(
+                at: url(name), folder: .documents, relativePath: name, snapshot: &snapshot, now: t0
+            )
+            #expect(outcome == .cached(evicted: []))
+        }
+
+        await #expect(store.listCalls == 1) // one listing for the whole batch
+        await #expect(store.count == 3)
+    }
+
+    @Test("a shared snapshot stays coherent: the eviction budget holds across the batch")
+    func sharedSnapshotEvictionCoherent() async throws {
+        let store = InMemoryRemoteFileStore()
+        let planner = CachePlanner(
+            freshBudget: CacheBudget(maxAge: 30 * 24 * 60 * 60, maxCount: 2, maxTotalBytes: 100 * mb, maxFileBytes: 50 * mb),
+            pinnedBudget: .pinnedDefault
+        )
+        // a is oldest, c newest — caching all three against a count budget of 2
+        // must evict exactly a, which only works if each call sees the uploads
+        // the previous ones mirrored into the snapshot.
+        let batch: [(String, Date)] = [
+            ("a.txt", t0.addingTimeInterval(-20)),
+            ("b.txt", t0.addingTimeInterval(-10)),
+            ("c.txt", t0),
+        ]
+        var entries: [String: StubFileReader.Entry] = [:]
+        for (name, mtime) in batch {
+            entries[url(name).path] = .init(
+                meta: FileMetadata(sizeBytes: mb, modifiedAt: mtime, contentType: "public.plain-text"),
+                data: Data(name.utf8)
+            )
+        }
+        let cache = RemoteFileCache(store: store, reader: StubFileReader(entries), planner: planner, deviceID: "mac-1")
+
+        var snapshot = try await store.list()
+        for (name, _) in batch {
+            try await cache.handleChange(
+                at: url(name), folder: .documents, relativePath: name, snapshot: &snapshot, now: t0
+            )
+        }
+
+        await #expect(store.count == 2)
+        let oldest = RemoteFile.recordName(deviceID: "mac-1", folder: .documents, relativePath: "a.txt")
+        await #expect(store.contains(oldest) == false)
+        await #expect(store.listCalls == 1)
+    }
+
+    @Test("an unchanged file (same size and mtime) is not re-uploaded")
+    func unchangedSkipsUpload() async throws {
+        let store = InMemoryRemoteFileStore()
+        await store.seed(
+            .fixture(name: "a.txt", path: "a.txt", size: mb, modifiedAt: t0),
+            payload: Data("v1".utf8)
+        )
+        let reader = StubFileReader([
+            url("a.txt").path: .init(
+                meta: FileMetadata(sizeBytes: mb, modifiedAt: t0, contentType: "public.data"),
+                data: Data("v1".utf8)
+            )
+        ])
+        let cache = RemoteFileCache(store: store, reader: reader, deviceID: "mac-1")
+
+        let outcome = try await cache.handleChange(at: url("a.txt"), folder: .documents, relativePath: "a.txt", now: t0)
+        #expect(outcome == .unchanged)
+        let uploads = await store.uploadedRecordNames
+        #expect(uploads.isEmpty) // the payload never left the Mac again
+    }
+
+    @Test("a modified file (new mtime) is re-uploaded in place")
+    func modifiedFileReuploaded() async throws {
+        let store = InMemoryRemoteFileStore()
+        let old = RemoteFile.fixture(name: "a.txt", path: "a.txt", size: mb, modifiedAt: t0.addingTimeInterval(-60))
+        await store.seed(old, payload: Data("v1".utf8))
+        let reader = StubFileReader([
+            url("a.txt").path: .init(
+                meta: FileMetadata(sizeBytes: mb, modifiedAt: t0, contentType: "public.data"),
+                data: Data("v2".utf8)
+            )
+        ])
+        let cache = RemoteFileCache(store: store, reader: reader, deviceID: "mac-1")
+
+        let outcome = try await cache.handleChange(at: url("a.txt"), folder: .documents, relativePath: "a.txt", now: t0)
+        #expect(outcome == .cached(evicted: []))
+        let uploads = await store.uploadedRecordNames
+        #expect(uploads == [old.recordName])
+        let data = try await store.download(recordName: old.recordName)
+        #expect(String(decoding: data, as: UTF8.self) == "v2")
+    }
+
+    @Test("an unchanged pinned file is not re-uploaded and stays pinned")
+    func unchangedPinnedSkipsUpload() async throws {
+        let store = InMemoryRemoteFileStore()
+        let pinned = RemoteFile.fixture(name: "keep", path: "keep", size: mb, modifiedAt: t0, pinned: true)
+        await store.seed(pinned, payload: Data("v1".utf8))
+        let reader = StubFileReader([
+            url("keep").path: .init(
+                meta: FileMetadata(sizeBytes: mb, modifiedAt: t0, contentType: "public.data"),
+                data: Data("v1".utf8)
+            )
+        ])
+        let cache = RemoteFileCache(store: store, reader: reader, deviceID: "mac-1")
+
+        let outcome = try await cache.handleChange(at: url("keep"), folder: .documents, relativePath: "keep", now: t0)
+        #expect(outcome == .unchanged)
+        let uploads = await store.uploadedRecordNames
+        #expect(uploads.isEmpty)
+        let still = await store.file(pinned.recordName)
+        #expect(still?.isPinned == true)
+    }
+
     @Test("deletion removes only the cloud copy and never reads disk")
     func deletionTargetsCloudOnly() async throws {
         let store = InMemoryRemoteFileStore()

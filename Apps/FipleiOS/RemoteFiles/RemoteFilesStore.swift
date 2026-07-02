@@ -35,6 +35,11 @@ final class RemoteFilesStore {
 
     @ObservationIgnored private var backing: CloudKitRemoteFileStore?
     @ObservationIgnored private var cache: RemoteFileCache?
+    /// Monotonic token per record: progress callbacks hop through a `Task`, so a
+    /// late one can land *after* the download finished and resurrect the bar
+    /// forever. Only callbacks carrying the current generation may touch
+    /// `progress`.
+    @ObservationIgnored private var downloadGeneration: [String: Int] = [:]
 
     /// Files grouped for display: pinned first, then by folder, newest first.
     var pinned: [RemoteFile] { files.filter(\.isPinned).sorted { $0.modifiedAt > $1.modifiedAt } }
@@ -78,15 +83,33 @@ final class RemoteFilesStore {
     func download(_ file: RemoteFile) async -> URL? {
         guard let (store, _) = await ensureStore() else { return nil }
         let name = file.recordName
+        let generation = (downloadGeneration[name] ?? 0) + 1
+        downloadGeneration[name] = generation
         progress[name] = 0
-        defer { progress[name] = nil }
+        defer {
+            // Invalidate the token *before* clearing so in-flight callbacks
+            // scheduled earlier can't re-show a finished download.
+            if downloadGeneration[name] == generation {
+                downloadGeneration[name] = generation + 1
+                progress[name] = nil
+            }
+        }
         do {
             let data = try await store.download(recordName: name, onProgress: { [weak self] fraction in
-                Task { @MainActor in self?.progress[name] = fraction }
+                Task { @MainActor in
+                    guard let self, self.downloadGeneration[name] == generation else { return }
+                    self.progress[name] = fraction
+                }
             })
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("FipleDownloads", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let url = dir.appendingPathComponent(file.fileName)
+            // The record's fileName was written by another device — treat it as
+            // untrusted and keep only the last path component so a crafted name
+            // can't escape the downloads folder.
+            let safeName = (file.fileName as NSString).lastPathComponent
+            let url = dir.appendingPathComponent(
+                safeName.isEmpty || safeName == "." || safeName == ".." ? name : safeName
+            )
             try data.write(to: url, options: .atomic)
             return url
         } catch {

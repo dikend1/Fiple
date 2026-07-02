@@ -9,17 +9,26 @@ actor InMemoryRemoteFileStore: RemoteFileStore {
     /// Records every deletion so tests can assert eviction targets the cloud
     /// cache (and nothing else).
     private(set) var deletedRecordNames: [String] = []
+    /// Counts full listings so tests can assert a batch reconcile queries the
+    /// store once, not once per file.
+    private(set) var listCalls = 0
+    /// Records every upload so tests can assert unchanged files aren't re-sent.
+    private(set) var uploadedRecordNames: [String] = []
 
     func seed(_ file: RemoteFile, payload: Data = Data()) {
         files[file.recordName] = file
         payloads[file.recordName] = payload
     }
 
-    func list() async throws -> [RemoteFile] { Array(files.values) }
+    func list() async throws -> [RemoteFile] {
+        listCalls += 1
+        return Array(files.values)
+    }
 
     func upload(_ file: RemoteFile, payload: Data, thumbnail: Data?) async throws {
         files[file.recordName] = file
         payloads[file.recordName] = payload
+        uploadedRecordNames.append(file.recordName)
     }
 
     func download(recordName: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> Data {

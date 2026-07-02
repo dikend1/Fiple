@@ -13,11 +13,21 @@ public enum FileExclusion {
         "xcodeproj", "xcworkspace", "download", "part", "crdownload",
     ]
 
+    /// Credential-bearing extensions that must **never** reach the cloud cache,
+    /// whatever the user configures — leaking a private key or keychain export
+    /// through a compromised Apple ID would be far worse than a missing file.
+    /// Note `key` also blocks Keynote decks: an accepted false positive, since
+    /// there is no cheap way to tell a presentation from a private key by name.
+    public static let sensitiveExtensions: Set<String> = [
+        "pem", "p12", "key", "keychain", "mobileprovision", "p8",
+        "cer", "der", "pfx", "ovpn", "kdbx", "wallet",
+    ]
+
     /// Whether a file should be excluded from the cache.
     ///
     /// - Parameters:
-    ///   - fileName: the last path component (e.g. `Q3.key`).
-    ///   - relativePath: path within its source folder (e.g. `Decks/Q3.key`).
+    ///   - fileName: the last path component (e.g. `report.pdf`).
+    ///   - relativePath: path within its source folder (e.g. `Reports/report.pdf`).
     ///   - ignoredSubfolders: relative subfolder prefixes the user excluded
     ///     (e.g. `Private`, `Work/Secret`). Matched case-insensitively on a path
     ///     boundary so `Work` doesn't accidentally match `Workshop`.
@@ -29,9 +39,11 @@ public enum FileExclusion {
         // Hidden / system files (dotfiles, .DS_Store).
         if fileName.hasPrefix(".") { return true }
 
-        // Opaque bundles / installers by extension.
+        // Opaque bundles / installers, and credential material, by extension.
         let ext = (fileName as NSString).pathExtension.lowercased()
-        if !ext.isEmpty, excludedExtensions.contains(ext) { return true }
+        if !ext.isEmpty, excludedExtensions.contains(ext) || sensitiveExtensions.contains(ext) {
+            return true
+        }
 
         // User-ignored subfolders, matched on a path-component boundary.
         let normalized = relativePath.lowercased()
