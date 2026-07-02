@@ -98,7 +98,8 @@ private struct RunFailureToast: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 24)
-        .padding(.bottom, 70)
+        // Float clear of the floating tab bar, not behind it.
+        .padding(.bottom, Theme.Spacing.tabBarClearance)
         .accessibilityLabel("Launch failed. \(message). Double tap to dismiss.")
     }
 }

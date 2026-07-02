@@ -104,7 +104,7 @@ struct FilesView: View {
             }
             .padding(.vertical, Theme.Spacing.lg)
             // Clear the floating tab bar so the last row isn't tucked underneath.
-            .padding(.bottom, 96)
+            .padding(.bottom, Theme.Spacing.tabBarClearance)
         }
     }
 

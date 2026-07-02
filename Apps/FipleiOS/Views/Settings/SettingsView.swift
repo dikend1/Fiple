@@ -26,7 +26,7 @@ struct SettingsView: View {
                     about
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.bottom, Theme.Spacing.xxl)
+                .padding(.bottom, Theme.Spacing.tabBarClearance)
             }
             .background(Theme.Palette.background)
             .navigationTitle("Settings")

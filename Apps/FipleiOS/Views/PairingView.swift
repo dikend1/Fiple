@@ -14,17 +14,28 @@ struct PairingView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header.padding(.top, 20)
-                statusCard.padding(.top, 30)
-                if controller.phase == .searching {
-                    infoHint.padding(.top, 18)
+            // A ScrollView (not a fixed VStack) so the Connect button and footer
+            // stay reachable when the keyboard is up or Dynamic Type is large —
+            // otherwise the button gets pushed under the keyboard and can't be
+            // tapped. `minHeight` keeps the vertical spread on tall screens.
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        header.padding(.top, 20)
+                        statusCard.padding(.top, 30)
+                        if controller.phase == .searching {
+                            infoHint.padding(.top, 18)
+                        }
+                        codeSection.padding(.top, 26)
+                        Spacer(minLength: 24)
+                        footer.padding(.top, 24).padding(.bottom, 12)
+                    }
+                    .padding(.horizontal, 24)
+                    .frame(minHeight: proxy.size.height)
                 }
-                codeSection.padding(.top, 26)
-                Spacer(minLength: 16)
-                footer.padding(.bottom, 12)
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollIndicators(.hidden)
             }
-            .padding(.horizontal, 24)
         }
     }
 
