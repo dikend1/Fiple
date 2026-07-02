@@ -2,16 +2,13 @@ import AppKit
 import FipleKit
 import SwiftUI
 
-/// The "Fiple Bar": an editable grid of quick actions (apps, websites,
-/// shortcuts), 8 per page (4×2). Hovering a filled tile reveals Remove; hovering
-/// an empty slot reveals Add, which opens an App / URL / Shortcut chooser.
+/// The "Fiple Bar": an editable grid of apps and websites, 8 per page (4×2).
+/// The Mac only *curates* the bar — hovering a filled tile reveals Remove, and
+/// hovering an empty slot reveals Add. Launching happens from the iPhone.
 struct PinnedAppsSection: View {
     let store: TileStore
     let bar: PinnedAppsStore
     var onViewAll: () -> Void
-    /// Launches an action locally. Injected so the click goes through the same
-    /// path as phone-triggered runs (and lands in Recent history).
-    var onRun: (Action) -> Void
 
     @State private var scrolledPage: Int?
     @State private var isAdding = false
@@ -83,7 +80,7 @@ struct PinnedAppsSection: View {
             ForEach(slots) { slot in
                 switch slot {
                 case let .action(action):
-                    BarTile(action: action, onRun: { onRun(action) }, onRemove: { bar.remove(action.id) })
+                    BarTile(action: action, onRemove: { bar.remove(action.id) })
                 case .empty:
                     EmptyBarSlot { isAdding = true }
                 }
@@ -109,13 +106,11 @@ struct PinnedAppsSection: View {
 
 // MARK: - Tiles
 
-/// A filled Fiple Bar tile: the action's real icon over its name. Clicking
-/// launches the action locally (mirroring what a tap does on the phone);
-/// removal lives behind a small hover ✕ and the context menu — never the
-/// primary click.
+/// A filled Fiple Bar tile: the action's real icon over its name. The Mac is
+/// for setup only — the tile does not launch anything (that happens from the
+/// iPhone). Hovering reveals a ✕ to remove it; the context menu removes it too.
 private struct BarTile: View {
     let action: Action
-    let onRun: () -> Void
     let onRemove: () -> Void
     @State private var hovering = false
 
@@ -124,19 +119,14 @@ private struct BarTile: View {
 
     var body: some View {
         VStack(spacing: 7) {
-            Button(action: run) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(Color.primary.opacity(0.04))
-                        .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.Palette.hairline))
+            ZStack {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Color.primary.opacity(0.04))
+                    .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.Palette.hairline))
 
-                    icon
-                }
-                .frame(width: tileSize, height: tileSize)
-                .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                icon
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Launch \(title)")
+            .frame(width: tileSize, height: tileSize)
             .overlay(alignment: .topTrailing) {
                 if hovering {
                     Button(action: onRemove) {
@@ -166,14 +156,8 @@ private struct BarTile: View {
         .contextMenu {
             Button("Remove from Fiple Bar", role: .destructive, action: onRemove)
         }
-        .help("Launch \(title)")
-    }
-
-    /// Runs the action on this Mac via the injected launcher, so it goes
-    /// through `ServerController.run` and lands in Recent history like a
-    /// phone-triggered launch.
-    private func run() {
-        onRun()
+        .help(title)
+        .accessibilityLabel("\(title), in Fiple Bar")
     }
 
     @ViewBuilder private var icon: some View {
