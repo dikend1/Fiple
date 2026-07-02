@@ -2,13 +2,25 @@ import FipleKit
 import SwiftUI
 
 /// The "Connected · MacBook Pro M3" hero card at the top of Home, driven by the
-/// live connection.
+/// live connection. When not connected the whole card is a button that reopens
+/// the pairing sheet — so a user who swiped the sheet away always has an obvious
+/// way back into pairing (the sheet only auto-presents on a first run).
 struct ConnectionCard: View {
     let controller: RemoteController
 
     private var connected: Bool { controller.phase == .connected }
 
     var body: some View {
+        if connected {
+            card
+        } else {
+            Button { controller.requestPairing() } label: { card }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens pairing to connect to your Mac.")
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .center, spacing: Theme.Spacing.lg) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -35,6 +47,24 @@ struct ConnectionCard: View {
 
                 MacBookGlyph()
                     .frame(width: 116, height: 84)
+            }
+
+            // Obvious re-entry into pairing after the sheet has been dismissed.
+            if !connected {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.fiple(15, .semibold))
+                    Text("Tap to connect")
+                        .font(.fiple(14, .semibold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.fiple(12, .semibold))
+                }
+                .foregroundStyle(Theme.Palette.brand)
+                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.vertical, Theme.Spacing.sm + 2)
+                .frame(maxWidth: .infinity)
+                .background(Theme.Palette.brand.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.Radius.control))
             }
         }
         .padding(Theme.Spacing.xl)
