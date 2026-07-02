@@ -171,53 +171,77 @@ struct HomeView: View {
     }
 }
 
-/// Lays icon tiles out four-across, **two rows per page**, and pages
-/// horizontally when there are more than eight — so a section with many items
-/// never grows past two rows; the rest are a swipe to the right, like the iOS
-/// Home Screen. A row of page dots appears once there's more than one page.
+/// Height of one icon tile (icon + label + padding), so empty placeholder slots
+/// line up exactly with real tiles when a page is padded out.
+private let tileSlotHeight: CGFloat = 120
+
+/// Lays icon tiles out **eight per page** (4×2) and pages horizontally, exactly
+/// like the Mac's Fiple Bar: the last page is padded with empty slots so every
+/// page is a full grid, and a row of page dots appears once there's more than
+/// one page. This keeps the section a fixed two rows tall no matter how many
+/// items there are.
 private struct PagedTileGrid<Item: Identifiable, Tile: View>: View {
     let items: [Item]
     @ViewBuilder let tile: (Item) -> Tile
 
-    /// Items grouped into columns of two, preserving order (top row then bottom).
-    /// A short overflow adds one more column that peeks in from the right rather
-    /// than a whole extra page — so nine items don't strand one icon on a blank
-    /// second page.
-    private var columns: [[Item]] {
-        stride(from: 0, to: items.count, by: 2).map {
-            Array(items[$0 ..< min($0 + 2, items.count)])
+    @State private var currentPage: Int?
+
+    private let perPage = 8
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
+        count: 4
+    )
+
+    /// Items split into pages of eight, preserving order (row-major per page).
+    private var pages: [[Item]] {
+        stride(from: 0, to: items.count, by: perPage).map {
+            Array(items[$0 ..< min($0 + perPage, items.count)])
         }
     }
 
     var body: some View {
-        // With overflow, show four-and-a-third columns so the next column peeks
-        // in from the right — an obvious "swipe for more" cue. When everything
-        // fits, four columns fill the width exactly.
-        let overflow = items.count > 8
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: Theme.Spacing.md) {
-                ForEach(Array(columns.enumerated()), id: \.offset) { _, column in
-                    VStack(spacing: Theme.Spacing.md) {
-                        ForEach(column) { item in
-                            tile(item)
-                                .containerRelativeFrame(
-                                    .horizontal,
-                                    count: overflow ? 13 : 4,
-                                    span: overflow ? 3 : 1,
-                                    spacing: Theme.Spacing.md
-                                )
+        let pages = pages
+
+        VStack(spacing: Theme.Spacing.md) {
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                        LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
+                            ForEach(page) { item in tile(item) }
+                            // Pad the last page with empty slots so every page is
+                            // a full 4×2 grid, matching the Mac's Fiple Bar.
+                            ForEach(0 ..< (perPage - page.count), id: \.self) { _ in
+                                PlaceholderSlot()
+                            }
                         }
+                        .containerRelativeFrame(.horizontal)
+                        .id(index)
                     }
                 }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $currentPage)
+            .scrollIndicators(.hidden)
+            .scrollDisabled(pages.count <= 1)
+
+            if pages.count > 1 {
+                HStack(spacing: 7) {
+                    ForEach(pages.indices, id: \.self) { i in
+                        Circle()
+                            .fill((currentPage ?? 0) == i ? Theme.Palette.brand : Theme.Palette.secondary.opacity(0.25))
+                            .frame(width: 7, height: 7)
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: currentPage)
+                .accessibilityHidden(true)
             }
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize)
     }
 }
 
 /// The empty-state for an icon section: a grid of soft dashed "slots" in the
-/// same 2×4 shape a full page uses, so the area reads as "apps go here" (like
+/// same 4×2 shape a full page uses, so the area reads as "apps go here" (like
 /// the Mac's Fiple Bar) rather than collapsing into blank white space.
 private struct PlaceholderTileGrid: View {
     var count = 8
@@ -229,15 +253,18 @@ private struct PlaceholderTileGrid: View {
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
-            ForEach(0 ..< count, id: \.self) { _ in slot }
+            ForEach(0 ..< count, id: \.self) { _ in PlaceholderSlot() }
         }
         .accessibilityHidden(true)
     }
+}
 
-    private var slot: some View {
+/// A single empty Fiple Bar slot: a soft dashed well the same size as a tile.
+private struct PlaceholderSlot: View {
+    var body: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .fill(Theme.Palette.secondary.opacity(0.05))
-            .frame(height: 96)
+            .frame(height: tileSlotHeight)
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(
