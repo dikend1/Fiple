@@ -179,59 +179,40 @@ private struct PagedTileGrid<Item: Identifiable, Tile: View>: View {
     let items: [Item]
     @ViewBuilder let tile: (Item) -> Tile
 
-    @State private var currentPage: Int?
-
-    private let columnCount = 4
-    private let rowsPerPage = 2
-
-    /// Items split into pages of `columnCount * rowsPerPage`, preserving order
-    /// (row-major within each page).
-    private var pages: [[Item]] {
-        let perPage = columnCount * rowsPerPage
-        return stride(from: 0, to: items.count, by: perPage).map {
-            Array(items[$0 ..< min($0 + perPage, items.count)])
+    /// Items grouped into columns of two, preserving order (top row then bottom).
+    /// A short overflow adds one more column that peeks in from the right rather
+    /// than a whole extra page — so nine items don't strand one icon on a blank
+    /// second page.
+    private var columns: [[Item]] {
+        stride(from: 0, to: items.count, by: 2).map {
+            Array(items[$0 ..< min($0 + 2, items.count)])
         }
     }
 
     var body: some View {
-        let pages = pages
-        let columns = Array(
-            repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
-            count: columnCount
-        )
-
-        VStack(spacing: Theme.Spacing.md) {
-            ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 0) {
-                    ForEach(Array(pages.enumerated()), id: \.offset) { index, chunk in
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Spacing.md) {
-                            ForEach(chunk) { item in tile(item) }
+        // With overflow, show four-and-a-third columns so the next column peeks
+        // in from the right — an obvious "swipe for more" cue. When everything
+        // fits, four columns fill the width exactly.
+        let overflow = items.count > 8
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                ForEach(Array(columns.enumerated()), id: \.offset) { _, column in
+                    VStack(spacing: Theme.Spacing.md) {
+                        ForEach(column) { item in
+                            tile(item)
+                                .containerRelativeFrame(
+                                    .horizontal,
+                                    count: overflow ? 13 : 4,
+                                    span: overflow ? 3 : 1,
+                                    spacing: Theme.Spacing.md
+                                )
                         }
-                        // Each page is exactly the width of the scroll area so
-                        // the paging snaps cleanly to a full 2×4 grid.
-                        .containerRelativeFrame(.horizontal)
-                        .id(index)
                     }
                 }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $currentPage)
-            .scrollIndicators(.hidden)
-            .scrollDisabled(pages.count <= 1)
-
-            if pages.count > 1 {
-                HStack(spacing: 7) {
-                    ForEach(pages.indices, id: \.self) { i in
-                        Circle()
-                            .fill((currentPage ?? 0) == i ? Theme.Palette.brand : Theme.Palette.secondary.opacity(0.25))
-                            .frame(width: 7, height: 7)
-                    }
-                }
-                .animation(.easeOut(duration: 0.2), value: currentPage)
-                .accessibilityHidden(true)
             }
         }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
     }
 }
 
