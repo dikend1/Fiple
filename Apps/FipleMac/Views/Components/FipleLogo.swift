@@ -42,11 +42,21 @@ struct FipleAppIcon: View {
 
     private var corner: CGFloat { size * 0.235 }
 
+    /// The mark is drawn in the brand blue (not `.primary`) so it stays visible
+    /// on the white squircle in both light and dark appearances — a `.primary`
+    /// mark turns white in dark mode and vanishes into the tile.
+    private var markStyle: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: "#6FA0F4"), Color(hex: "#2F6BFF")],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
+
     var body: some View {
         RoundedRectangle(cornerRadius: corner, style: .continuous)
             .fill(.white)
             .frame(width: size, height: size)
-            .overlay { FipleMark(size: size * 0.5) }
+            .overlay { FipleMark(size: size * 0.5, style: markStyle) }
             .overlay {
                 RoundedRectangle(cornerRadius: corner, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.05))
