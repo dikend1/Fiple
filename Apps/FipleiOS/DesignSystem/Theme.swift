@@ -79,6 +79,27 @@ struct Accent {
             endPoint: .bottomTrailing
         )
     }
+
+    /// A soft radial glow, placed top-leading behind the icon, that gives the
+    /// workspace card a single light source instead of a flat wash.
+    var cardGlow: RadialGradient {
+        RadialGradient(
+            colors: [base.opacity(0.28), base.opacity(0)],
+            center: .topLeading,
+            startRadius: 0,
+            endRadius: 240
+        )
+    }
+
+    /// Solid accent gradient for the primary run button — the card's one bold,
+    /// tactile element.
+    var buttonGradient: LinearGradient {
+        LinearGradient(
+            colors: [base.opacity(0.95), base],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 }
 
 extension View {
