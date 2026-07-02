@@ -74,6 +74,10 @@ public enum ServerMessage: Sendable, Equatable {
     /// Pairing succeeded; identifies the Mac and returns the session token the
     /// phone stores to reconnect later without re-entering the code.
     case paired(macID: String, macName: String, token: String)
+    /// The Mac's hardware family, sent right after `paired` (on every connect)
+    /// so the remote can show the right device icon. A separate message rather
+    /// than a field on `paired` so older peers simply skip it.
+    case deviceInfo(macKind: MacKind)
     /// Pairing rejected, with a typed reason.
     case pairRejected(reason: PairRejectReason)
     /// The current tile list (sent on connect and whenever tiles change).
@@ -91,9 +95,9 @@ extension ServerMessage: WireTypeTagged {
 }
 
 extension ServerMessage: Codable {
-    private enum Tag: String, Codable, CaseIterable { case paired, pairRejected, tilesSnapshot, fipleBar, runResult }
+    private enum Tag: String, Codable, CaseIterable { case paired, deviceInfo, pairRejected, tilesSnapshot, fipleBar, runResult }
     private enum CodingKeys: String, CodingKey {
-        case type, macID, macName, token, reason, tiles, actions, result, version
+        case type, macID, macName, macKind, token, reason, tiles, actions, result, version
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +109,11 @@ extension ServerMessage: Codable {
                 macName: try c.decode(String.self, forKey: .macName),
                 token: try c.decode(String.self, forKey: .token)
             )
+        case .deviceInfo:
+            // Tolerate an unknown family from a newer peer rather than failing
+            // to decode; fall back to the app's original laptop assumption.
+            let raw = try c.decode(String.self, forKey: .macKind)
+            self = .deviceInfo(macKind: MacKind(rawValue: raw) ?? .laptop)
         case .pairRejected:
             // Tolerate an unknown reason from a newer peer rather than failing
             // to decode the whole message.
@@ -128,6 +137,9 @@ extension ServerMessage: Codable {
             try c.encode(macName, forKey: .macName)
             try c.encode(token, forKey: .token)
             try c.encode(FipleService.protocolVersion, forKey: .version)
+        case let .deviceInfo(macKind):
+            try c.encode(Tag.deviceInfo, forKey: .type)
+            try c.encode(macKind.rawValue, forKey: .macKind)
         case let .pairRejected(reason):
             try c.encode(Tag.pairRejected, forKey: .type)
             try c.encode(reason.rawValue, forKey: .reason)

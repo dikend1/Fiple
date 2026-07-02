@@ -282,6 +282,9 @@ final class ServerController {
         sessionToken = token
         Keychain.set(token, for: Self.tokenKey)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
+        // Follow the pairing ack with the hardware family so the remote shows
+        // the right device icon. Older remotes skip this unknown message type.
+        try? await peer.send(ServerMessage.deviceInfo(macKind: MacDeviceInfo.current))
         await sendTilesSnapshot(to: peer)
         await sendFipleBar(to: peer)
     }

@@ -21,6 +21,10 @@ final class RemoteController {
     /// away from the Mac's network, instead of falling back to first-run pairing.
     var hasEverPaired: Bool { storedToken != nil }
     private(set) var macName: String?
+    /// The connected Mac's hardware family, reported by the Mac so the connection
+    /// card shows the right device icon. Defaults to `.laptop` (the common case,
+    /// and what an older Mac that doesn't report it implies).
+    private(set) var macKind: MacKind = .laptop
     private(set) var tiles: [Tile] = []
     private(set) var pairError: String?
     private(set) var runningTileID: UUID?
@@ -224,6 +228,9 @@ final class RemoteController {
             pairError = nil
             phase = .connected
 
+        case let .deviceInfo(kind):
+            macKind = kind
+
         case let .pairRejected(reason):
             // a rejected reconnect means the remembered pairing is stale
             FipleLog.pairing.notice("pair rejected: \(reason.rawValue)")
@@ -348,6 +355,7 @@ final class RemoteController {
         peer = nil
         tiles = []
         macName = nil
+        macKind = .laptop
         runningTileID = nil
         runningActionID = nil
         runStartedAt.removeAll()
