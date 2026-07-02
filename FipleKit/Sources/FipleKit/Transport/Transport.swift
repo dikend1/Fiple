@@ -12,4 +12,8 @@ public enum TransportError: Error, Equatable {
     case notConnected
     case connectionFailed(String)
     case decodingFailed
+    /// The peer produced messages faster than the consumer drained them and the
+    /// inbound buffer overflowed. Silently dropping protocol messages would
+    /// desynchronise a stateful session, so the connection is closed instead.
+    case inboundOverflow
 }

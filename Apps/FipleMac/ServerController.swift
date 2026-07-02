@@ -33,6 +33,9 @@ final class ServerController {
     @ObservationIgnored private var peer: PeerConnection?
     @ObservationIgnored private var isPaired = false
     @ObservationIgnored private var acceptTask: Task<Void, Never>?
+    @ObservationIgnored private var failureWatchTask: Task<Void, Never>?
+    @ObservationIgnored private var connectionTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    @ObservationIgnored private var wakeObserver: (any NSObjectProtocol)?
 
     /// Persistent token for the currently remembered phone. Survives Mac app
     /// restarts so a known phone reconnects silently; cleared on explicit
@@ -71,6 +74,7 @@ final class ServerController {
             status = .idle
             return
         }
+        acceptTask?.cancel()
         acceptTask = Task { [weak self] in
             guard let self else { return }
             for await peer in await self.server.newConnections {
@@ -80,8 +84,55 @@ final class ServerController {
                 // socket not yet torn down on our side) never gets served: the
                 // new connection sits unhandled and the phone hangs on
                 // "Connecting…". Spawning a task lets us accept it immediately.
-                Task { [weak self] in await self?.handle(peer) }
+                self.track(peer)
             }
+        }
+        watchForListenerFailure()
+        observeWake()
+    }
+
+    /// Runs a connection's message loop in a tracked task so it can be
+    /// cancelled on teardown instead of living detached forever.
+    private func track(_ peer: PeerConnection) {
+        let key = ObjectIdentifier(peer)
+        connectionTasks[key] = Task { [weak self] in
+            await self?.handle(peer)
+            self?.connectionTasks[key] = nil
+        }
+    }
+
+    /// A listener that dies after start (interface change, network reset) would
+    /// otherwise leave the UI claiming "advertising" over a dead socket.
+    private func watchForListenerFailure() {
+        guard failureWatchTask == nil else { return }
+        failureWatchTask = Task { [weak self] in
+            guard let self else { return }
+            for await _ in await self.server.listenerFailures {
+                FipleLog.discovery.notice("listener died — restarting advertising")
+                await self.restartAdvertising()
+            }
+        }
+    }
+
+    /// Bonjour advertising often doesn't come back by itself after sleep, so
+    /// re-assert it on wake. Established peer connections are untouched.
+    private func observeWake() {
+        guard wakeObserver == nil else { return }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.restartAdvertising() }
+        }
+    }
+
+    private func restartAdvertising() async {
+        guard status != .idle else { return } // never started; nothing to restore
+        do {
+            _ = try await server.start(deviceName: macName)
+            status = (peer != nil && isPaired) ? .connected : .advertising
+            FipleLog.discovery.info("advertising restored")
+        } catch {
+            FipleLog.discovery.error("failed to restore advertising: \(error.localizedDescription)")
         }
     }
 
@@ -112,11 +163,21 @@ final class ServerController {
         await peer.startAuthTimeout(.seconds(Self.authTimeoutSeconds))
         do {
             for try await payload in await peer.messages {
-                let message = try MessageCodec.decode(ClientMessage.self, from: payload)
+                // A newer phone may send message types this build doesn't know;
+                // skipping them keeps the session alive instead of tearing it
+                // down (and looping: reconnect → same message → drop again).
+                guard let message = try MessageCodec.decodeIfKnown(ClientMessage.self, from: payload) else {
+                    FipleLog.connection.notice("skipping unknown message type from peer")
+                    continue
+                }
                 await process(message, on: peer)
             }
         } catch {
             FipleLog.connection.notice("peer stream ended: \(error.localizedDescription)")
+            // A malformed payload of a known type is fatal for this session.
+            // Close explicitly — otherwise the socket stays open and the phone
+            // keeps talking to a Mac that stopped listening.
+            await peer.close()
         }
         if self.peer === peer { resetToAdvertising() }
     }
@@ -148,7 +209,7 @@ final class ServerController {
             }
 
         case let .reconnect(token):
-            if let saved = sessionToken, token == saved {
+            if let saved = sessionToken, Self.constantTimeEquals(token, saved) {
                 FipleLog.pairing.info("reconnect accepted — token matched")
                 // Known phone reconnecting: keep its existing token.
                 await acceptPairing(on: peer, rotateToken: false)
@@ -158,8 +219,17 @@ final class ServerController {
             }
 
         case let .run(tileID):
-            guard peer === self.peer, isPaired, let tile = store.tiles.first(where: { $0.id == tileID }) else {
-                FipleLog.execution.notice("run ignored — \(peer === self.peer && isPaired ? "unknown tile" : "not the authenticated peer")")
+            guard peer === self.peer, isPaired else {
+                FipleLog.execution.notice("run ignored — not the authenticated peer")
+                return
+            }
+            guard let tile = store.tiles.first(where: { $0.id == tileID }) else {
+                // A tile deleted between snapshots: report a failure so the
+                // phone clears its spinner instead of waiting forever.
+                FipleLog.execution.notice("run rejected — unknown tile id")
+                let rejected = RunResult(tileID: tileID, actions: [.failure(tileID, "This workspace no longer exists on the Mac")])
+                lastRun = rejected
+                try? await peer.send(ServerMessage.runResult(rejected))
                 return
             }
             let result = await TileRunner(executor: executor).run(tile)
@@ -212,8 +282,18 @@ final class ServerController {
         sessionToken = token
         Keychain.set(token, for: Self.tokenKey)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
-        try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
-        try? await peer.send(ServerMessage.fipleBar(actions: snapshotFipleBar()))
+        await sendTilesSnapshot(to: peer)
+        await sendFipleBar(to: peer)
+    }
+
+    /// Compares bearer tokens without early exit, so a mismatch's timing leaks
+    /// nothing about how many leading characters were right.
+    private static func constantTimeEquals(_ a: String, _ b: String) -> Bool {
+        let lhs = Array(a.utf8), rhs = Array(b.utf8)
+        guard lhs.count == rhs.count else { return false }
+        var diff: UInt8 = 0
+        for i in lhs.indices { diff |= lhs[i] ^ rhs[i] }
+        return diff == 0
     }
 
     /// Run a tile locally from the Mac (one-click preset launch). Recorded in
@@ -234,12 +314,42 @@ final class ServerController {
 
     private func pushSnapshot() async {
         guard isPaired, let peer else { return }
-        try? await peer.send(ServerMessage.tilesSnapshot(tiles: snapshotTiles()))
+        await sendTilesSnapshot(to: peer)
     }
 
     private func pushFipleBar() async {
         guard isPaired, let peer else { return }
-        try? await peer.send(ServerMessage.fipleBar(actions: snapshotFipleBar()))
+        await sendFipleBar(to: peer)
+    }
+
+    /// Snapshots carry PNG icons, so enough tiles can outgrow the frame cap.
+    /// The receiver would kill the connection and reconnect — which resends the
+    /// same snapshot, forever. Better a snapshot without icons than no session.
+    private func sendTilesSnapshot(to peer: PeerConnection) async {
+        var tiles = snapshotTiles()
+        if exceedsFrameLimit(ServerMessage.tilesSnapshot(tiles: tiles)) {
+            FipleLog.connection.notice("tiles snapshot over frame limit — sending without icons")
+            tiles = tiles.map { tile in
+                var tile = tile
+                tile.actions = tile.actions.map { var a = $0; a.iconImageData = nil; return a }
+                return tile
+            }
+        }
+        try? await peer.send(ServerMessage.tilesSnapshot(tiles: tiles))
+    }
+
+    private func sendFipleBar(to peer: PeerConnection) async {
+        var actions = snapshotFipleBar()
+        if exceedsFrameLimit(ServerMessage.fipleBar(actions: actions)) {
+            FipleLog.connection.notice("fiple bar over frame limit — sending without icons")
+            actions = actions.map { var a = $0; a.iconImageData = nil; return a }
+        }
+        try? await peer.send(ServerMessage.fipleBar(actions: actions))
+    }
+
+    private func exceedsFrameLimit(_ message: ServerMessage) -> Bool {
+        guard let data = try? MessageCodec.encode(message) else { return false }
+        return data.count > FrameCodec.maxFrameSize
     }
 
     /// Enriches an outgoing action with the data only the Mac can resolve: the

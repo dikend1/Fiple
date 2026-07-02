@@ -28,6 +28,11 @@ public actor PeerConnection {
     /// can't grow memory without limit (the consumer is the only drain).
     private static let inboundBufferLimit = 64
 
+    /// Frame cap applied to peers that haven't authenticated yet. `pair` and
+    /// `reconnect` are tiny; anything larger from a stranger is hostile, so a
+    /// server shrinks the limit until pairing succeeds (see ``FipleServer``).
+    public static let preAuthInboundFrameLimit = 4096
+
     public init(connection: NWConnection) {
         self.connection = connection
         (inbound, inboundContinuation) = AsyncThrowingStream.makeStream(
@@ -66,7 +71,7 @@ public actor PeerConnection {
     }
 
     public func sendRaw(_ payload: Data) async throws {
-        let framed = FrameCodec.frame(payload)
+        let framed = try FrameCodec.frame(payload)
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             connection.send(content: framed, completion: .contentProcessed { error in
                 if let error { cont.resume(throwing: error) } else { cont.resume() }
@@ -98,11 +103,20 @@ public actor PeerConnection {
         }
     }
 
-    /// Marks the connection authenticated, cancelling the auth timeout.
+    /// Caps the size of inbound frames this peer will accept. A frame whose
+    /// length prefix exceeds the cap closes the connection.
+    public func limitInboundFrames(to bytes: Int) {
+        decoder.maxFrameSize = bytes
+    }
+
+    /// Marks the connection authenticated, cancelling the auth timeout and
+    /// restoring the full inbound frame limit for a peer that was capped
+    /// pre-auth.
     public func markAuthenticated() {
         isAuthenticated = true
         authTimeoutTask?.cancel()
         authTimeoutTask = nil
+        decoder.maxFrameSize = FrameCodec.maxFrameSize
     }
 
     private func enforceAuthTimeout() {
@@ -149,7 +163,14 @@ public actor PeerConnection {
             do {
                 for payload in try decoder.append(data) {
                     FipleLog.connection.debug("recv frame: \(payload.count) bytes")
-                    inboundContinuation.yield(payload)
+                    if case .dropped = inboundContinuation.yield(payload) {
+                        // Dropping a protocol message would silently desync a
+                        // stateful session; close so both sides see it.
+                        FipleLog.connection.error("inbound buffer overflow — closing connection")
+                        connection.cancel()
+                        finish(throwing: TransportError.inboundOverflow)
+                        return
+                    }
                 }
             } catch {
                 FipleLog.connection.error("frame decode failed: \(error.localizedDescription)")

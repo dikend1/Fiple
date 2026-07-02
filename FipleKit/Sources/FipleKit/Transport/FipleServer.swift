@@ -15,13 +15,22 @@ public actor FipleServer {
     private let maxConnections: Int
     private var activeConnections = 0
 
+    private let failureStream: AsyncStream<Void>
+    private let failureContinuation: AsyncStream<Void>.Continuation
+
     public init(maxConnections: Int = 4) {
         self.maxConnections = maxConnections
         (stream, continuation) = AsyncStream.makeStream()
+        (failureStream, failureContinuation) = AsyncStream.makeStream()
     }
 
     /// Connections as they arrive (already started).
     public var newConnections: AsyncStream<PeerConnection> { stream }
+
+    /// Fires when the listener dies after a successful start (interface change,
+    /// network reset). The owner should restart the server — otherwise the app
+    /// keeps reporting "advertising" over a dead listener.
+    public var listenerFailures: AsyncStream<Void> { failureStream }
 
     /// Number of currently-open accepted connections (diagnostics / tests).
     public var connectionCount: Int { activeConnections }
@@ -30,6 +39,10 @@ public actor FipleServer {
     /// Pass `port: .any` (default) to let the OS choose.
     @discardableResult
     public func start(deviceName: String, port: NWEndpoint.Port = .any) async throws -> UInt16 {
+        // Restarting (after wake or a listener failure) must not leak the old
+        // listener; cancelling it leaves established connections untouched.
+        self.listener?.cancel()
+        self.listener = nil
         let listener = try NWListener(using: .tcp, on: port)
         listener.service = NWListener.Service(name: deviceName, type: FipleService.bonjourType)
 
@@ -48,9 +61,10 @@ public actor FipleServer {
             listener.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    listener.stateUpdateHandler = { state in
+                    listener.stateUpdateHandler = { [weak self] state in
                         if case let .failed(error) = state {
                             FipleLog.discovery.error("listener failed after start: \(error.localizedDescription)")
+                            Task { await self?.reportListenerFailure() }
                         }
                     }
                     cont.resume(returning: listener.port?.rawValue ?? 0)
@@ -87,6 +101,9 @@ public actor FipleServer {
         activeConnections += 1
         FipleLog.discovery.info("inbound connection accepted (\(self.activeConnections)/\(self.maxConnections))")
         let peer = PeerConnection(connection: nwConnection)
+        // Strangers get a tiny frame cap until they pair; `markAuthenticated()`
+        // restores the full limit.
+        await peer.limitInboundFrames(to: PeerConnection.preAuthInboundFrameLimit)
         await peer.onClose { [weak self] in
             Task { await self?.connectionClosed() }
         }
@@ -96,5 +113,12 @@ public actor FipleServer {
 
     private func connectionClosed() {
         if activeConnections > 0 { activeConnections -= 1 }
+    }
+
+    private func reportListenerFailure() {
+        // Drop the dead listener so a subsequent `start()` begins clean.
+        listener?.cancel()
+        listener = nil
+        failureContinuation.yield(())
     }
 }

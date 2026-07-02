@@ -9,7 +9,13 @@ public enum FrameCodec {
     /// Hard cap to reject absurd/hostile length prefixes (8 MB).
     public static let maxFrameSize = 8 * 1024 * 1024
 
-    public static func frame(_ payload: Data) -> Data {
+    /// Frames a payload, refusing anything the receiver is guaranteed to
+    /// reject — otherwise a too-large message would be sent, dropped by the
+    /// peer's decoder, and the session would die in a reconnect loop.
+    public static func frame(_ payload: Data) throws -> Data {
+        guard payload.count <= maxFrameSize else {
+            throw FrameError.frameTooLarge(payload.count)
+        }
         var out = Data(capacity: 4 + payload.count)
         var length = UInt32(payload.count).bigEndian
         withUnsafeBytes(of: &length) { out.append(contentsOf: $0) }
@@ -28,7 +34,14 @@ public enum FrameError: Error, Equatable {
 public struct FrameDecoder {
     private var buffer = Data()
 
-    public init() {}
+    /// Largest frame this decoder will accept. Defaults to the global cap;
+    /// a server lowers it for unauthenticated peers so a stranger on the LAN
+    /// can't make it buffer megabytes before pairing.
+    public var maxFrameSize: Int
+
+    public init(maxFrameSize: Int = FrameCodec.maxFrameSize) {
+        self.maxFrameSize = maxFrameSize
+    }
 
     /// Append newly received bytes and return any complete payloads.
     public mutating func append(_ data: Data) throws -> [Data] {
@@ -38,7 +51,7 @@ public struct FrameDecoder {
         while buffer.count >= 4 {
             let length = buffer.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
             let len = Int(length)
-            if len > FrameCodec.maxFrameSize {
+            if len > maxFrameSize {
                 throw FrameError.frameTooLarge(len)
             }
             guard buffer.count >= 4 + len else { break } // wait for more bytes

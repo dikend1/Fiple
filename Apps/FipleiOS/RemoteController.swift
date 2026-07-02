@@ -25,6 +25,12 @@ final class RemoteController {
     private(set) var pairError: String?
     private(set) var runningTileID: UUID?
     private(set) var runningActionID: UUID?
+    /// A user-visible launch failure (the Mac reported it, the send failed, or
+    /// the Mac never confirmed). The UI shows it transiently and dismisses it.
+    private(set) var runFailureMessage: String?
+    /// Set by UI (e.g. "Pair New Mac" in Settings) to force the pairing sheet
+    /// open even in phases where it wouldn't auto-present. Consumed by RootView.
+    var pairingRequested = false
     /// The Mac's curated Fiple Bar — quick actions synced from the Mac (apps,
     /// websites, files), tapped here to launch on the Mac.
     private(set) var fipleBar: [Action] = []
@@ -56,6 +62,11 @@ final class RemoteController {
     @ObservationIgnored private var endpoint: NWEndpoint?
     @ObservationIgnored private var discoverTask: Task<Void, Never>?
     @ObservationIgnored private var receiveTask: Task<Void, Never>?
+    @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    /// Whether the in-flight handshake presented a stored token (vs a fresh
+    /// code). Only a token reconnect verifies the Mac's identity — a fresh code
+    /// pair legitimately targets a new Mac.
+    @ObservationIgnored private var pendingAuthIsReconnect = false
 
     /// When each in-flight tile/action was triggered, so we can log the
     /// round-trip latency (tap → Mac confirms) when the result returns. This is
@@ -78,12 +89,31 @@ final class RemoteController {
         }
         #endif
         phase = .searching
+        startDiscovery()
+    }
+
+    private func startDiscovery() {
+        discoverTask?.cancel()
         discoverTask = Task { [weak self] in
             guard let self else { return }
             for await endpoint in await self.client.discover() {
                 await self.found(endpoint)
             }
         }
+    }
+
+    /// Forgets the pinned endpoint and re-browses. Used when the remembered
+    /// address stops answering — the Mac may be back under a new address, which
+    /// discovery only re-emits on a fresh browse.
+    private func restartDiscovery() {
+        endpoint = nil
+        startDiscovery()
+    }
+
+    /// UI entry point for explicitly opening the pairing flow (Settings, or a
+    /// first run where no Mac has been found yet).
+    func requestPairing() {
+        pairingRequested = true
     }
 
     /// A code the user typed while we were still searching. We hold it and pair
@@ -96,7 +126,7 @@ final class RemoteController {
         FipleLog.discovery.info("Mac found on LAN")
         if let token = storedToken {
             FipleLog.pairing.info("auto-reconnecting with stored token")
-            await authenticate(.reconnect(token: token))
+            await authenticate(.reconnect(token: token), silent: true)
         } else if let pending = pendingCode {
             pendingCode = nil
             await authenticate(.pair(code: pending.value))
@@ -121,8 +151,12 @@ final class RemoteController {
         await authenticate(.pair(code: parsed.value))
     }
 
-    private func authenticate(_ auth: ClientMessage) async {
+    /// `silent` marks background auto-reconnect attempts: their failures must
+    /// not bounce the UI into the pairing flow or surface an error — the phone
+    /// may simply be off the Mac's network, which the tabbed UI already handles.
+    private func authenticate(_ auth: ClientMessage, silent: Bool = false) async {
         guard let endpoint else { return }
+        if case .reconnect = auth { pendingAuthIsReconnect = true } else { pendingAuthIsReconnect = false }
         phase = .connecting
         pairError = nil
         do {
@@ -132,8 +166,12 @@ final class RemoteController {
             try await peer.send(auth)
         } catch {
             FipleLog.pairing.error("authenticate failed: \(error.localizedDescription)")
-            pairError = "Couldn't reach your Mac"
-            phase = .readyToPair
+            if silent {
+                phase = .searching
+            } else {
+                pairError = "Couldn't reach your Mac"
+                phase = .readyToPair
+            }
         }
     }
 
@@ -143,7 +181,13 @@ final class RemoteController {
             guard let self else { return }
             do {
                 for try await payload in await peer.messages {
-                    let message = try MessageCodec.decode(ServerMessage.self, from: payload)
+                    // A newer Mac may send message types this build doesn't
+                    // know; skip them instead of dropping the session (which
+                    // would reconnect into the same message forever).
+                    guard let message = try MessageCodec.decodeIfKnown(ServerMessage.self, from: payload) else {
+                        FipleLog.connection.notice("skipping unknown message type from Mac")
+                        continue
+                    }
                     await self.handle(message)
                 }
             } catch {
@@ -156,7 +200,24 @@ final class RemoteController {
     private func handle(_ message: ServerMessage) async {
         switch message {
         case let .paired(macID, macName, token):
+            // On a token reconnect the responder must be the Mac we remember.
+            // Anyone can advertise `_fiple._tcp`; without this check a spoofed
+            // "paired" reply would be accepted silently after we've already
+            // sent the bearer token. Drop the pairing entirely so the token
+            // (now potentially exposed) stops being valid grounds for trust.
+            if pendingAuthIsReconnect, let expected = storedMacID, expected != macID {
+                FipleLog.pairing.error("paired reply from an unexpected Mac — clearing pairing")
+                storedToken = nil
+                storedMacID = nil
+                await peer?.close()
+                peer = nil
+                pairError = "This isn't the Mac you paired with. Enter the code shown on your Mac."
+                phase = .readyToPair
+                return
+            }
             FipleLog.pairing.info("paired with '\(macName)'")
+            reconnectTask?.cancel()
+            reconnectTask = nil
             self.macName = macName
             storedToken = token
             storedMacID = macID
@@ -182,11 +243,18 @@ final class RemoteController {
         case let .runResult(result):
             if let started = runStartedAt.removeValue(forKey: result.tileID) {
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
-                let ok = result.actions.allSatisfy(\.ok)
-                FipleLog.execution.info("round-trip \(ms)ms — \(ok ? "ok" : "had failures")")
+                FipleLog.execution.info("round-trip \(ms)ms — \(result.actions.allSatisfy(\.ok) ? "ok" : "had failures")")
             }
             if runningTileID == result.tileID { runningTileID = nil }
             if runningActionID == result.tileID { runningActionID = nil }
+            // A launch that failed on the Mac looks like success from the couch
+            // unless we say something.
+            if !result.actions.allSatisfy(\.ok) {
+                let name = tiles.first { $0.id == result.tileID }?.name
+                    ?? fipleBar.first { $0.id == result.tileID }?.displayLabel
+                runFailureMessage = name.map { "Couldn't launch “\($0)” on your Mac" }
+                    ?? "Something didn't launch on your Mac"
+            }
         }
     }
 
@@ -198,7 +266,14 @@ final class RemoteController {
         runningTileID = tile.id
         runStartedAt[tile.id] = Date()
         recordLaunch(of: tile)
-        try? await peer.send(ClientMessage.run(tileID: tile.id))
+        do {
+            try await peer.send(ClientMessage.run(tileID: tile.id))
+            startRunTimeout(for: tile.id)
+        } catch {
+            FipleLog.execution.error("run send failed: \(error.localizedDescription)")
+            clearRunState(for: tile.id)
+            runFailureMessage = "Couldn't reach your Mac — “\(tile.name)” wasn't launched"
+        }
     }
 
     /// Trigger a single Fiple Bar action on the Mac.
@@ -209,8 +284,41 @@ final class RemoteController {
         runStartedAt[action.id] = Date()
         recordLaunch(of: action)
         // Send only the id; the Mac resolves and runs it from its own Fiple Bar.
-        try? await peer.send(ClientMessage.runAction(actionID: action.id))
+        do {
+            try await peer.send(ClientMessage.runAction(actionID: action.id))
+            startRunTimeout(for: action.id)
+        } catch {
+            FipleLog.execution.error("runAction send failed: \(error.localizedDescription)")
+            clearRunState(for: action.id)
+            runFailureMessage = "Couldn't reach your Mac — “\(action.displayLabel)” wasn't launched"
+        }
     }
+
+    /// The Mac normally answers in well under a second; if nothing comes back,
+    /// stop the spinner and say so instead of letting it spin forever (dropped
+    /// result, Mac asleep, tile deleted on an old build that never replies).
+    private func startRunTimeout(for id: UUID) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.runTimeoutSeconds))
+            guard let self, self.runStartedAt[id] != nil else { return }
+            FipleLog.execution.notice("run timed out — no result from the Mac")
+            self.clearRunState(for: id)
+            self.runFailureMessage = "The Mac didn't confirm the launch"
+        }
+    }
+
+    private func clearRunState(for id: UUID) {
+        runStartedAt[id] = nil
+        if runningTileID == id { runningTileID = nil }
+        if runningActionID == id { runningActionID = nil }
+    }
+
+    /// Dismisses the transient launch-failure message (called by the UI).
+    func dismissRunFailure() {
+        runFailureMessage = nil
+    }
+
+    private static let runTimeoutSeconds = 6
 
     private func recordLaunch(of tile: Tile) {
         recents.insert(LaunchRecord(tile: tile, at: Date()), at: 0)
@@ -232,24 +340,60 @@ final class RemoteController {
     // MARK: - Disconnect
 
     func disconnect() async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
         storedToken = nil
         storedMacID = nil
         await peer?.close()
         peer = nil
         tiles = []
         macName = nil
+        runningTileID = nil
+        runningActionID = nil
+        runStartedAt.removeAll()
         phase = endpoint == nil ? .searching : .readyToPair
     }
 
     private func handleDrop(_ peer: PeerConnection) async {
         guard self.peer === peer else { return }
         self.peer = nil
+        // Nothing in flight will ever be answered on this socket; a spinner
+        // left up here would spin forever.
+        runningTileID = nil
+        runningActionID = nil
+        runStartedAt.removeAll()
         // Transient drop: auto-reconnect silently if we still trust this Mac.
-        if let token = storedToken, endpoint != nil {
+        if storedToken != nil {
             FipleLog.connection.notice("connection dropped — auto-reconnecting")
-            await authenticate(.reconnect(token: token))
+            scheduleReconnect()
         } else {
             phase = endpoint == nil ? .searching : .readyToPair
+        }
+    }
+
+    /// Retries the token reconnect with exponential backoff instead of giving
+    /// up after one attempt (the Mac may still be waking, or Wi-Fi still
+    /// re-associating). After a couple of misses the pinned endpoint is treated
+    /// as stale and discovery is restarted, since the Mac may be back under a
+    /// different address. Cancelled by a successful pair or explicit disconnect.
+    private func scheduleReconnect() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var delay: Duration = .milliseconds(400)
+            var misses = 0
+            while !Task.isCancelled {
+                guard let self else { return }
+                guard self.storedToken != nil else { return }
+                if self.phase == .connected { return }
+                if let token = self.storedToken, self.endpoint != nil, self.peer == nil {
+                    await self.authenticate(.reconnect(token: token), silent: true)
+                    if self.phase == .connected { return }
+                    misses += 1
+                    if misses == 2 { self.restartDiscovery() }
+                }
+                try? await Task.sleep(for: delay)
+                delay = min(delay * 2, .seconds(30))
+            }
         }
     }
 
