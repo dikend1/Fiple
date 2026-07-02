@@ -126,44 +126,37 @@ struct PinnedAppsSection: View {
 // MARK: - Tiles
 
 /// A filled Fiple Bar tile: the action's real icon over its name. The Mac is
-/// for setup only — the tile does not launch anything (that happens from the
-/// iPhone). Hovering reveals a ✕ to remove it; the context menu removes it too.
+/// for setup only — the tile doesn't launch anything (that happens from the
+/// iPhone). Hovering reveals a full-tile "Remove" affordance (matching the
+/// empty slot's "Add"); clicking it asks to confirm before removing.
 private struct BarTile: View {
     let action: Action
     let onRemove: () -> Void
     @State private var hovering = false
+    @State private var confirming = false
 
     private let radius: CGFloat = 16
     private let tileSize: CGFloat = 64
 
     var body: some View {
         VStack(spacing: 7) {
-            ZStack {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
-                    .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.Palette.hairline))
+            Button { confirming = true } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Color.primary.opacity(hovering ? 0.07 : 0.04))
+                        .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.Palette.hairline))
 
-                icon
-            }
-            .frame(width: tileSize, height: tileSize)
-            .overlay(alignment: .topTrailing) {
-                if hovering {
-                    Button(action: onRemove) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 18, height: 18)
-                            .background(Color.black.opacity(0.6), in: Circle())
+                    icon
+
+                    if hovering {
+                        EditOverlay(symbol: "minus", label: "Remove", radius: radius)
                     }
-                    .buttonStyle(.plain)
-                    // Tucked inside the tile corner so the paging ScrollView
-                    // doesn't clip it.
-                    .padding(3)
-                    .transition(.opacity)
-                    .help("Remove \(title) from Fiple Bar")
-                    .accessibilityLabel("Remove \(title) from Fiple Bar")
                 }
+                .frame(width: tileSize, height: tileSize)
+                .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(title) from Fiple Bar")
 
             Text(title)
                 .font(.system(size: 11, weight: .medium))
@@ -171,12 +164,17 @@ private struct BarTile: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
-        .onHover { hovering = $0 }
+        .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hovering = h } }
         .contextMenu {
-            Button("Remove from Fiple Bar", role: .destructive, action: onRemove)
+            Button("Remove from Fiple Bar", role: .destructive) { confirming = true }
         }
-        .help(title)
-        .accessibilityLabel("\(title), in Fiple Bar")
+        .help("Remove \(title) from Fiple Bar")
+        .alert("Remove from Fiple Bar?", isPresented: $confirming) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive, action: onRemove)
+        } message: {
+            Text("Remove \(title) from your Fiple Bar?")
+        }
     }
 
     @ViewBuilder private var icon: some View {
