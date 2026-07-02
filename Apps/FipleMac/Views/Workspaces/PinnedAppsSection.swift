@@ -308,46 +308,123 @@ private struct AddActionSheet: View {
     @State private var draft = ActionDraft()
     @State private var apps: [InstalledApp] = []
 
+    private var brand: Color { Theme.Palette.brand }
+
     var body: some View {
         VStack(spacing: 0) {
-            Text("Add to Fiple Bar").font(.headline).padding()
-            Divider()
-            Form {
-                Picker("Type", selection: $draft.kind) {
-                    ForEach(ActionDraft.Kind.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+            header
 
-                switch draft.kind {
-                case .launchApp:
-                    BarAppField(apps: apps, bundleID: $draft.bundleID)
-                case .openURL:
-                    TextField("https://…", text: $draft.url)
-                        .textFieldStyle(.roundedBorder)
-                }
+            HStack(spacing: 10) {
+                TypeTile(title: "App", subtitle: "An installed Mac app",
+                         systemImage: "square.grid.2x2.fill",
+                         selected: draft.kind == .launchApp) { draft.kind = .launchApp }
+                TypeTile(title: "Website", subtitle: "Any link",
+                         systemImage: "globe",
+                         selected: draft.kind == .openURL) { draft.kind = .openURL }
             }
-            .formStyle(.grouped)
+            .padding(.horizontal, 20)
+
+            input
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+            Spacer(minLength: 0)
             Divider()
-            HStack {
-                Button("Cancel") { dismiss() }
-                Spacer()
-                Button("Add") {
-                    if let action = draft.toAction() { onAdd(action.kind) }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(draft.toAction() == nil)
-            }
-            .padding()
+            footer
         }
-        .frame(width: 420, height: 340)
+        .frame(width: 460, height: 400)
+        .background(Color.white)
         .preferredColorScheme(.light)
-        .task {
-            // Shortcuts can't be enumerated from the sandbox (App Review rejected
-            // the Apple-events exception); the user types a shortcut's name in the
-            // picker instead.
-            apps = await InstalledApps.all()
+        .task { apps = await InstalledApps.all() }
+    }
+
+    private var header: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(brand.opacity(0.14))
+                    .frame(width: 54, height: 54)
+                Image(systemName: "plus")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(brand)
+            }
+            Text("Add to Fiple Bar").font(.system(size: 18, weight: .bold))
+            Text("Pin an app or a website here, then open it from your iPhone with one tap.")
+                .font(.callout).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 28)
         }
+        .padding(.top, 26).padding(.bottom, 20)
+    }
+
+    @ViewBuilder private var input: some View {
+        switch draft.kind {
+        case .launchApp:
+            BarAppField(apps: apps, bundleID: $draft.bundleID)
+        case .openURL:
+            HStack(spacing: 8) {
+                Image(systemName: "globe").foregroundStyle(.secondary)
+                TextField("example.com", text: $draft.url).textFieldStyle(.plain)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(.black.opacity(0.1)))
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            Button("Cancel") { dismiss() }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                if let action = draft.toAction() { onAdd(action.kind) }
+            } label: {
+                Text("Add to Bar").fontWeight(.semibold)
+                    .padding(.horizontal, 18).padding(.vertical, 7)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(brand)
+            .disabled(draft.toAction() == nil)
+        }
+        .padding(18)
+    }
+}
+
+/// A selectable App / Website tile for the add sheet.
+private struct TypeTile: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 14, weight: .semibold))
+                    Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(selected ? Theme.Palette.brand : .primary)
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .frame(maxWidth: .infinity)
+            .background(
+                selected ? Theme.Palette.brand.opacity(0.12) : Color.black.opacity(0.03),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(selected ? Theme.Palette.brand.opacity(0.5) : .black.opacity(0.07))
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 

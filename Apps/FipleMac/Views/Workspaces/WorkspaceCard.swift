@@ -3,10 +3,12 @@ import SwiftUI
 
 /// A workspace tile rendered as a softly tinted card (carousel/grid layout),
 /// matching the iOS remote's cards so both apps read as one product.
-/// Edit and Delete live in the "…" menu; the card surfaces a single Run action.
+///
+/// The Mac is where a workspace is *configured*; launching happens from the
+/// iPhone. So the card's primary action is Edit (add / change the apps and
+/// URLs), not Run — Delete lives in the "…" menu.
 struct WorkspaceCard: View {
     let tile: Tile
-    let onRun: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
 
@@ -54,19 +56,21 @@ struct WorkspaceCard: View {
                 Spacer()
             }
 
-            HStack {
+            HStack(spacing: Theme.Spacing.sm) {
+                Label("Launch from your iPhone", systemImage: "iphone.gen3")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Button(action: onRun) {
+                Button(action: onEdit) {
                     HStack(spacing: 5) {
-                        Image(systemName: "play.fill").font(.system(size: 11, weight: .bold))
-                        Text("Run").font(.system(size: 13, weight: .semibold))
+                        Image(systemName: "slider.horizontal.3").font(.system(size: 11, weight: .bold))
+                        Text("Edit").font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(base)
                     .padding(.horizontal, Theme.Spacing.lg)
                     .padding(.vertical, 8)
-                    .background(accent.buttonGradient, in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
-                    .shadow(color: base.opacity(0.4), radius: 6, y: 3)
+                    .background(base.opacity(0.14), in: Capsule())
+                    .overlay(Capsule().strokeBorder(base.opacity(0.22)))
                 }
                 .buttonStyle(.plain)
             }
