@@ -27,7 +27,7 @@ struct FileExclusionTests {
 
     @Test("credential-bearing extensions never enter the cache")
     func excludesSensitiveExtensions() {
-        for ext in ["pem", "p12", "key", "keychain", "mobileprovision", "p8",
+        for ext in ["pem", "p12", "keychain", "mobileprovision", "p8",
                     "cer", "der", "pfx", "ovpn", "kdbx", "wallet"] {
             #expect(
                 FileExclusion.isExcluded(fileName: "secret.\(ext)", relativePath: "stuff/secret.\(ext)"),
@@ -36,10 +36,10 @@ struct FileExclusionTests {
         }
         // Case-insensitive, like the bundle exclusions.
         #expect(FileExclusion.isExcluded(fileName: "id_rsa.PEM", relativePath: "keys/id_rsa.PEM"))
-        // Accepted false positive: `.key` also blocks Keynote decks — a name
-        // can't distinguish a presentation from a private key, and leaking a
-        // key is the worse failure.
-        #expect(FileExclusion.isExcluded(fileName: "Q3.key", relativePath: "Decks/Q3.key"))
+        // `.key` is intentionally NOT excluded: it is Keynote's extension, and
+        // hiding presentations costs more than the marginal safety (raw keys
+        // usually ship as .pem/.p8, which stay blocked).
+        #expect(!FileExclusion.isExcluded(fileName: "Q3.key", relativePath: "Decks/Q3.key"))
     }
 
     @Test("user-ignored subfolders are excluded on a path boundary")

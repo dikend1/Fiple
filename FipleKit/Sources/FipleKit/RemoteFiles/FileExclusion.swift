@@ -16,10 +16,11 @@ public enum FileExclusion {
     /// Credential-bearing extensions that must **never** reach the cloud cache,
     /// whatever the user configures — leaking a private key or keychain export
     /// through a compromised Apple ID would be far worse than a missing file.
-    /// Note `key` also blocks Keynote decks: an accepted false positive, since
-    /// there is no cheap way to tell a presentation from a private key by name.
+    /// `key` is deliberately absent: it is also Keynote's extension, and hiding
+    /// the user's presentations costs more than the marginal safety (raw
+    /// private keys usually ship as `.pem`/`.p8`, which stay blocked).
     public static let sensitiveExtensions: Set<String> = [
-        "pem", "p12", "key", "keychain", "mobileprovision", "p8",
+        "pem", "p12", "keychain", "mobileprovision", "p8",
         "cer", "der", "pfx", "ovpn", "kdbx", "wallet",
     ]
 
