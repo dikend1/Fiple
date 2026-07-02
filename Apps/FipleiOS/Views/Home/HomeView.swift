@@ -112,22 +112,17 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 SectionHeader("Quick Launch")
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 4),
-                    spacing: Theme.Spacing.md
-                ) {
-                    ForEach(items) { tile in
-                        if let action = tile.actions.first {
-                            Button {
-                                Task { await controller.run(tile) }
-                            } label: {
-                                QuickAccessTile(
-                                    item: QuickAction(action: action, tileID: tile.id),
-                                    isRunning: controller.runningTileID == tile.id
-                                )
-                            }
-                            .buttonStyle(QuickTilePressStyle())
+                PagedTileGrid(items: items) { tile in
+                    if let action = tile.actions.first {
+                        Button {
+                            Task { await controller.run(tile) }
+                        } label: {
+                            QuickAccessTile(
+                                item: QuickAction(action: action, tileID: tile.id),
+                                isRunning: controller.runningTileID == tile.id
+                            )
                         }
+                        .buttonStyle(QuickTilePressStyle())
                     }
                 }
             }
@@ -142,21 +137,16 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 SectionHeader("Fiple Bar")
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 4),
-                    spacing: Theme.Spacing.md
-                ) {
-                    ForEach(items) { action in
-                        Button {
-                            Task { await controller.runAction(action) }
-                        } label: {
-                            QuickAccessTile(
-                                item: QuickAction(action: action, tileID: action.id),
-                                isRunning: controller.runningActionID == action.id
-                            )
-                        }
-                        .buttonStyle(QuickTilePressStyle())
+                PagedTileGrid(items: items) { action in
+                    Button {
+                        Task { await controller.runAction(action) }
+                    } label: {
+                        QuickAccessTile(
+                            item: QuickAction(action: action, tileID: action.id),
+                            isRunning: controller.runningActionID == action.id
+                        )
                     }
+                    .buttonStyle(QuickTilePressStyle())
                 }
             }
         }
@@ -167,6 +157,70 @@ struct HomeView: View {
     private func run(_ item: QuickAction) {
         guard let tile = controller.tiles.first(where: { $0.id == item.tileID }) else { return }
         Task { await controller.run(tile) }
+    }
+}
+
+/// Lays icon tiles out four-across, **two rows per page**, and pages
+/// horizontally when there are more than eight — so a section with many items
+/// never grows past two rows; the rest are a swipe to the right, like the iOS
+/// Home Screen. A row of page dots appears once there's more than one page.
+private struct PagedTileGrid<Item: Identifiable, Tile: View>: View {
+    let items: [Item]
+    @ViewBuilder let tile: (Item) -> Tile
+
+    @State private var currentPage: Int?
+
+    private let columnCount = 4
+    private let rowsPerPage = 2
+
+    /// Items split into pages of `columnCount * rowsPerPage`, preserving order
+    /// (row-major within each page).
+    private var pages: [[Item]] {
+        let perPage = columnCount * rowsPerPage
+        return stride(from: 0, to: items.count, by: perPage).map {
+            Array(items[$0 ..< min($0 + perPage, items.count)])
+        }
+    }
+
+    var body: some View {
+        let pages = pages
+        let columns = Array(
+            repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
+            count: columnCount
+        )
+
+        VStack(spacing: Theme.Spacing.md) {
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(pages.enumerated()), id: \.offset) { index, chunk in
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Spacing.md) {
+                            ForEach(chunk) { item in tile(item) }
+                        }
+                        // Each page is exactly the width of the scroll area so
+                        // the paging snaps cleanly to a full 2×4 grid.
+                        .containerRelativeFrame(.horizontal)
+                        .id(index)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $currentPage)
+            .scrollIndicators(.hidden)
+            .scrollDisabled(pages.count <= 1)
+
+            if pages.count > 1 {
+                HStack(spacing: 7) {
+                    ForEach(pages.indices, id: \.self) { i in
+                        Circle()
+                            .fill((currentPage ?? 0) == i ? Theme.Palette.brand : Theme.Palette.secondary.opacity(0.25))
+                            .frame(width: 7, height: 7)
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: currentPage)
+                .accessibilityHidden(true)
+            }
+        }
     }
 }
 
