@@ -10,10 +10,12 @@ struct MenuContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                // The app-icon squircle renders its own white tile, so the mark
-                // stays visible on the dark menu-bar popover (a flat dark logo
-                // asset disappeared here).
-                FipleAppIcon(size: 24)
+                // The real app icon (dark squircle + white F) — always on-brand
+                // and visible on the dark popover, unlike the flat logo asset.
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 26, height: 26)
                 Text("Fiple").font(.headline)
                 Spacer()
                 statusBadge
