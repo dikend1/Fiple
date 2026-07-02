@@ -10,10 +10,14 @@ struct FipleLinksTests {
         }
     }
 
-    @Test func linksPointAtTheirRespectiveHashRoutes() {
-        // The site is a hash-routed SPA, so the page lives in the URL fragment.
-        #expect(FipleLinks.privacy.fragment == "/privacy")
-        #expect(FipleLinks.terms.fragment == "/terms")
-        #expect(FipleLinks.support.fragment == "/support")
+    @Test func linksPointAtTheirRespectivePaths() {
+        // The site now uses real path routes (the #/ hash route was dropped so
+        // the pages actually load), so the page lives in the URL path.
+        #expect(FipleLinks.privacy.path == "/privacy")
+        #expect(FipleLinks.terms.path == "/terms")
+        #expect(FipleLinks.support.path == "/support")
+        for url in [FipleLinks.privacy, FipleLinks.terms, FipleLinks.support] {
+            #expect(url.fragment == nil)
+        }
     }
 }
