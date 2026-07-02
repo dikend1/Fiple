@@ -18,22 +18,12 @@ enum SystemIcon {
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
     }
 
-    /// The colourful Apple Shortcuts app icon, used for every shortcut (apps,
-    /// tiles, the Fiple Bar, the picker) — individual shortcuts don't expose
-    /// per-item icons we can read.
-    static func shortcutsAppIcon() -> NSImage? {
-        app(bundleID: "com.apple.shortcuts")
-    }
-
     /// A small PNG of an action's real icon for transmission to the remote: the
-    /// app icon, or the Apple Shortcuts icon for a shortcut. Websites return nil
-    /// (the phone fetches the favicon itself).
+    /// app icon. Websites return nil (the phone fetches the favicon itself).
     static func pngData(for kind: ActionKind, maxPixel: CGFloat = 128) -> Data? {
         switch kind {
         case let .launchApp(bundleID):
             return app(bundleID: bundleID)?.pngData(maxPixel: maxPixel)
-        case .runShortcut:
-            return shortcutsAppIcon()?.pngData(maxPixel: maxPixel)
         case .openURL:
             return nil
         }

@@ -6,7 +6,7 @@ import Testing
 struct ActionLookupTests {
     private let safari = Action(kind: .launchApp(bundleID: "com.apple.Safari"))
     private let docs = Action(kind: .openURL(URL(string: "https://docs.example.com")!))
-    private let shortcut = Action(kind: .runShortcut(name: "Morning Routine"))
+    private let notes = Action(kind: .launchApp(bundleID: "com.apple.Notes"))
 
     private func makeTile(_ actions: [Action]) -> Tile {
         Tile(name: "Work", actions: actions)
@@ -22,8 +22,8 @@ struct ActionLookupTests {
 
     @Test("resolves an id present in a tile's actions")
     func resolvesFromTiles() {
-        let tile = makeTile([shortcut])
-        #expect(ActionLookup.resolve(shortcut.id, fipleBar: [], tiles: [tile]) == shortcut)
+        let tile = makeTile([notes])
+        #expect(ActionLookup.resolve(notes.id, fipleBar: [], tiles: [tile]) == notes)
     }
 
     @Test("rejects an unknown id (the attacker case)")
@@ -42,10 +42,10 @@ struct ActionLookupTests {
         #expect(resolved == nil)
     }
 
-    @Test("a foreign shortcut id is rejected")
-    func rejectsForeignShortcut() {
-        let attacker = Action(kind: .runShortcut(name: "Wipe Disk"))
-        #expect(ActionLookup.resolve(attacker.id, fipleBar: [shortcut], tiles: []) == nil)
+    @Test("a foreign URL id is rejected")
+    func rejectsForeignURL() {
+        let attacker = Action(kind: .openURL(URL(string: "https://evil.example.com")!))
+        #expect(ActionLookup.resolve(attacker.id, fipleBar: [notes], tiles: []) == nil)
     }
 
     @Test("Fiple Bar takes precedence over tiles for the same id")

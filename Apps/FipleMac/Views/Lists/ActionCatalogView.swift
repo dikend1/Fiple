@@ -150,16 +150,13 @@ struct ActionCatalogView: View {
         }
     }
 
-    /// A real icon for the action: the app's icon, the site favicon, or a
-    /// lightning symbol for a Shortcut.
+    /// A real icon for the action: the app's icon or the site favicon.
     @ViewBuilder private func icon(for kind: ActionKind) -> some View {
         switch kind {
         case let .launchApp(bundleID):
             NativeIconTile(image: AppIconCache.shared.icon(bundleID: bundleID), fallbackSymbol: "app.dashed")
         case let .openURL(url):
             FaviconView(host: url.host() ?? "")
-        case .runShortcut:
-            NativeIconTile(image: AppIconCache.shared.shortcutsIcon(), fallbackSymbol: "bolt.fill")
         }
     }
 

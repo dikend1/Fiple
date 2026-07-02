@@ -15,7 +15,6 @@ final class AppIconCache {
 
     private var icons: [String: NSImage] = [:]
     private var names: [String: String] = [:]
-    private var shortcuts: NSImage?
 
     private init() {}
 
@@ -45,14 +44,5 @@ final class AppIconCache {
         guard let resolved = SystemIcon.appDisplayName(bundleID: bundleID) else { return nil }
         names[bundleID] = resolved
         return resolved
-    }
-
-    /// The Apple Shortcuts app icon, shared by every shortcut action and resolved
-    /// at most once per session.
-    func shortcutsIcon() -> NSImage? {
-        if let shortcuts { return shortcuts }
-        let image = SystemIcon.shortcutsAppIcon()
-        shortcuts = image
-        return image
     }
 }

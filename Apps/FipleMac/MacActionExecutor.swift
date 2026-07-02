@@ -12,8 +12,6 @@ struct MacActionExecutor: ActionExecutor {
             result = await launchApp(bundleID: bundleID, actionID: action.id)
         case let .openURL(url):
             result = await openURL(url, actionID: action.id)
-        case let .runShortcut(name):
-            result = await runShortcut(named: name, actionID: action.id)
         }
         if result.ok {
             FipleLog.execution.info("ok: \(action.displayLabel)")
@@ -53,27 +51,4 @@ struct MacActionExecutor: ActionExecutor {
         }
     }
 
-    /// Runs an Apple Shortcut by name via the `shortcuts://` URL scheme. Opening
-    /// a URL is permitted under the App Sandbox, so this needs no file-system
-    /// access. The shortcut itself (created by the user in the Shortcuts app)
-    /// carries whatever file/script permissions it requires.
-    private func runShortcut(named name: String, actionID: UUID) async -> ActionResult {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return .failure(actionID, "Shortcut name is empty")
-        }
-        var components = URLComponents()
-        components.scheme = "shortcuts"
-        components.host = "run-shortcut"
-        components.queryItems = [URLQueryItem(name: "name", value: trimmed)]
-        guard let url = components.url else {
-            return .failure(actionID, "Invalid shortcut name: \(trimmed)")
-        }
-        do {
-            _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
-            return .success(actionID)
-        } catch {
-            return .failure(actionID, error.localizedDescription)
-        }
-    }
 }

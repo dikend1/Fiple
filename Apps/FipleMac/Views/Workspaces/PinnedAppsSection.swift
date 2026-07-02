@@ -199,8 +199,6 @@ private struct BarTile: View {
         switch action.kind {
         case let .launchApp(bundleID):
             return AppIconCache.shared.icon(bundleID: bundleID)
-        case .runShortcut:
-            return AppIconCache.shared.shortcutsIcon()
         case .openURL:
             return nil
         }
@@ -213,8 +211,6 @@ private struct BarTile: View {
                 ?? (bundleID.split(separator: ".").last.map(String.init) ?? bundleID)
         case let .openURL(url):
             return (url.host()?.replacingOccurrences(of: "www.", with: "")) ?? url.absoluteString
-        case let .runShortcut(name):
-            return name
         }
     }
 
@@ -222,7 +218,6 @@ private struct BarTile: View {
         switch action.kind {
         case .launchApp: "app.dashed"
         case .openURL: "globe"
-        case .runShortcut: "bolt.fill"
         }
     }
 }

@@ -244,7 +244,7 @@ final class ServerController {
             }
             // Never execute a client-supplied action. Resolve the id against the
             // Mac's own saved Fiple Bar / tiles and run only what actually exists
-            // here — so launchApp/runShortcut/openURL payloads are always ours.
+            // here — so launchApp/openURL payloads are always ours.
             guard let action = ActionLookup.resolve(actionID, fipleBar: pinned.actions, tiles: store.tiles) else {
                 FipleLog.execution.error("runAction rejected — unknown action id")
                 // Still report a failure so the phone clears its spinner.
