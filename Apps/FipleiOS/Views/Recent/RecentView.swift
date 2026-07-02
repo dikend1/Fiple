@@ -18,7 +18,6 @@ struct RecentView: View {
         case all = "All"
         case apps = "Apps"
         case websites = "Websites"
-        case shortcuts = "Shortcuts"
         case workspaces = "Workspaces"
         var id: String { rawValue }
 
@@ -27,7 +26,6 @@ struct RecentView: View {
             case .all: nil
             case .apps: .app
             case .websites: .website
-            case .shortcuts: .shortcut
             case .workspaces: .workspace
             }
         }

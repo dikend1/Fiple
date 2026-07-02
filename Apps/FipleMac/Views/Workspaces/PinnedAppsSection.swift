@@ -275,7 +275,7 @@ private struct EmptyBarSlot: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .help("Add an app, website or shortcut to Fiple Bar")
+        .help("Add an app or website to Fiple Bar")
     }
 }
 
@@ -330,8 +330,6 @@ private struct AddActionSheet: View {
                 case .openURL:
                     TextField("https://…", text: $draft.url)
                         .textFieldStyle(.roundedBorder)
-                case .runShortcut:
-                    ShortcutPickerField(name: $draft.shortcutName)
                 }
             }
             .formStyle(.grouped)

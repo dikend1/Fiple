@@ -177,7 +177,7 @@ private struct WorkspaceListRow: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
-            Text("\(tile.appCount) apps · \(tile.websiteCount) sites · \(tile.shortcutCount) files")
+            Text("\(tile.appCount) apps · \(tile.websiteCount) sites")
                 .font(.caption).foregroundStyle(.secondary)
             Button(action: onRun) {
                 Image(systemName: "play.circle.fill")

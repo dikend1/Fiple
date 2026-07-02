@@ -59,8 +59,6 @@ struct MainWindowView: View {
             ActionCatalogView(store: store, pinned: pinned, kind: .apps)
         case .websites:
             ActionCatalogView(store: store, pinned: pinned, kind: .websites)
-        case .shortcuts:
-            ActionCatalogView(store: store, pinned: pinned, kind: .shortcuts)
         case .recent:
             RecentView(recents: recents, onRun: run(record:))
         case .devices:

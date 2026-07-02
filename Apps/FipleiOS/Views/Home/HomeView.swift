@@ -132,8 +132,8 @@ struct HomeView: View {
             if items.isEmpty {
                 PlaceholderTileGrid()
                 Text(controller.phase == .connected
-                     ? "Apps, websites and shortcuts you add to the Fiple Bar on your Mac appear here."
-                     : "Connect to your Mac on the same Wi-Fi to see your Fiple Bar apps, websites and shortcuts.")
+                     ? "Apps and websites you add to the Fiple Bar on your Mac appear here."
+                     : "Connect to your Mac on the same Wi-Fi to see your Fiple Bar apps and websites.")
                     .font(.fiple(13))
                     .foregroundStyle(Theme.Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)

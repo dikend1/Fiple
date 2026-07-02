@@ -10,34 +10,30 @@ struct ActionCatalogView: View {
     let kind: Kind
 
     enum Kind {
-        case apps, websites, shortcuts
+        case apps, websites
 
         var title: String {
             switch self {
             case .apps: "Apps"
             case .websites: "Websites"
-            case .shortcuts: "Shortcuts"
             }
         }
         var subtitle: String {
             switch self {
             case .apps: "Applications launched by your workspaces."
             case .websites: "Websites opened by your workspaces."
-            case .shortcuts: "Files and folders opened by your workspaces."
             }
         }
         var icon: String {
             switch self {
             case .apps: "shippingbox"
             case .websites: "globe"
-            case .shortcuts: "bolt"
             }
         }
         var color: String {
             switch self {
             case .apps: "#84CC16"
             case .websites: "#0EA5E9"
-            case .shortcuts: "#F59E0B"
             }
         }
     }
@@ -174,8 +170,6 @@ struct ActionCatalogView: View {
             return bundleID.split(separator: ".").last.map(String.init) ?? bundleID
         case let (.websites, .openURL(url)):
             return url.host() ?? url.absoluteString
-        case let (.shortcuts, .runShortcut(name)):
-            return name
         default:
             return nil
         }
