@@ -7,12 +7,10 @@ import SwiftUI
 /// About). No account by design (Fiple is local-only: no cloud, no backend).
 struct SettingsView: View {
     let server: ServerController
-    let remoteFiles: RemoteFilesController
 
     @Environment(\.openURL) private var openURL
     @State private var launchAtLogin = false
     @State private var launchAtLoginError: String?
-    @State private var newIgnoredSubfolder = ""
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -31,15 +29,6 @@ struct SettingsView: View {
 
                 section("Preferences") {
                     launchAtLoginRow
-                }
-
-                // Off-LAN files (CloudKit) are disabled for the 1.0 release.
-                if AppFeatures.remoteFiles {
-                    section("Remote File Access") {
-                        remoteFilesRow
-                        Divider().padding(.leading, Theme.Spacing.md)
-                        ignoredSubfoldersRow
-                    }
                 }
 
                 section("About") {
@@ -97,71 +86,6 @@ struct SettingsView: View {
         }
         .padding(.vertical, Theme.Spacing.sm)
         .padding(.horizontal, Theme.Spacing.md)
-    }
-
-    private var remoteFilesRow: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack {
-                Text("Keep recent files available on my phone")
-                    .font(.system(size: 14, weight: .medium))
-                Spacer()
-                Toggle("Remote File Access", isOn: Binding(
-                    get: { remoteFiles.isEnabled },
-                    set: { remoteFiles.setEnabled($0) }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(Theme.Palette.brand)
-            }
-            Text(remoteFiles.status)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            Text("Recent files from Desktop, Documents and Downloads are cached in your private iCloud so you can download them from the phone anywhere — even when this Mac is asleep. Originals are never modified; turning this off clears the cloud cache.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, Theme.Spacing.sm)
-        .padding(.horizontal, Theme.Spacing.md)
-    }
-
-    private var ignoredSubfoldersRow: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("Ignored Subfolders").font(.system(size: 14, weight: .medium))
-            Text("Files inside these subfolders of Desktop, Documents and Downloads are never cached. Adding one removes its files from the cloud cache.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            ForEach(remoteFiles.ignoredSubfolders, id: \.self) { name in
-                HStack {
-                    Text(name).font(.system(size: 13))
-                    Spacer()
-                    Button {
-                        remoteFiles.removeIgnoredSubfolder(name)
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Stop ignoring \(name)")
-                }
-                .padding(.vertical, 2)
-            }
-            HStack(spacing: Theme.Spacing.sm) {
-                TextField("Subfolder name, e.g. Private or Work/Secret", text: $newIgnoredSubfolder)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 13))
-                    .onSubmit(addIgnoredSubfolder)
-                Button("Add", action: addIgnoredSubfolder)
-                    .disabled(newIgnoredSubfolder.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(.vertical, Theme.Spacing.sm)
-        .padding(.horizontal, Theme.Spacing.md)
-    }
-
-    private func addIgnoredSubfolder() {
-        remoteFiles.addIgnoredSubfolder(newIgnoredSubfolder)
-        newIgnoredSubfolder = ""
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

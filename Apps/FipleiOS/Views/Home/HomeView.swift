@@ -9,9 +9,6 @@ struct HomeView: View {
     /// Switches the tab bar to Settings — wired to the gear in the header so it
     /// matches the mockup without nesting a second settings navigation stack.
     var onOpenSettings: () -> Void = {}
-    /// Switches to the Files tab — offered when the Mac isn't on this network,
-    /// since Files works anywhere while Workspaces need the same Wi-Fi.
-    var onOpenFiles: () -> Void = {}
 
     var body: some View {
         NavigationStack {
@@ -19,7 +16,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     header
 
-                    ConnectionCard(controller: controller, onOpenFiles: onOpenFiles)
+                    ConnectionCard(controller: controller)
 
                     workspaces
 
