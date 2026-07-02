@@ -44,7 +44,7 @@ struct QuickActionIcon: View {
             Favicon(host: host, size: size, cornerRadius: cornerRadius, fallbackSymbol: action.fallbackSymbol)
         } else {
             Image(systemName: action.fallbackSymbol)
-                .font(.system(size: size * 0.40, weight: .semibold))
+                .font(.fiple(size * 0.40, .semibold))
                 .foregroundStyle(Theme.Palette.label)
                 .frame(width: size, height: size)
                 .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: cornerRadius))
@@ -72,7 +72,7 @@ struct Favicon: View {
                     Image(uiImage: image).resizable().scaledToFit().padding(size * 0.22)
                 } else {
                     Image(systemName: fallbackSymbol)
-                        .font(.system(size: size * 0.38, weight: .semibold))
+                        .font(.fiple(size * 0.38, .semibold))
                         .foregroundStyle(Theme.Palette.secondary)
                 }
             }

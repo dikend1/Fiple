@@ -34,6 +34,7 @@ struct MenuContentView: View {
                             .font(.system(size: 34, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .tracking(8)
+                            .accessibilityLabel(DevicesView.spokenPairingCode(code.value))
                     }
                 } else {
                     Text("Starting…").foregroundStyle(.secondary)

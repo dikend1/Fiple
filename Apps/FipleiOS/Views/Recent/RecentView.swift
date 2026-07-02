@@ -7,6 +7,12 @@ struct RecentView: View {
     let controller: RemoteController
 
     @State private var filter: Filter = .all
+    /// Transient "connect to relaunch" hint shown when a row is tapped while the
+    /// Mac isn't reachable (relaunching needs a live LAN connection).
+    @State private var showConnectHint = false
+    @State private var hintDismissTask: Task<Void, Never>?
+
+    private var connected: Bool { controller.phase == .connected }
 
     enum Filter: String, CaseIterable, Identifiable {
         case all = "All"
@@ -54,6 +60,11 @@ struct RecentView: View {
                                     RecentRow(item: item)
                                 }
                                 .buttonStyle(.plain)
+                                // Not connected → the row can't relaunch; look
+                                // disabled but stay tappable so the tap explains
+                                // itself instead of silently doing nothing.
+                                .opacity(connected ? 1 : 0.45)
+                                .accessibilityHint(connected ? "" : "Unavailable. Connect to your Mac on the same Wi-Fi to relaunch.")
                                 if index < items.count - 1 {
                                     Divider().padding(.leading, 72)
                                 }
@@ -66,6 +77,11 @@ struct RecentView: View {
                 .padding(.bottom, Theme.Spacing.xxl)
             }
             .background(Theme.Palette.background)
+            .overlay(alignment: .bottom) {
+                if showConnectHint {
+                    connectHint
+                }
+            }
             .navigationTitle("Recent")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -74,7 +90,7 @@ struct RecentView: View {
                             Button("Clear History", role: .destructive) { controller.clearRecents() }
                         } label: {
                             Image(systemName: "line.3.horizontal.decrease")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.fiple(16, .semibold))
                                 .foregroundStyle(Theme.Palette.label)
                                 .frame(width: 38, height: 38)
                                 .fipleCard(cornerRadius: Theme.Radius.control)
@@ -87,12 +103,47 @@ struct RecentView: View {
     }
 
     private func run(_ item: LaunchRecord) {
+        // Relaunching needs the live connection — off-network, explain instead
+        // of a silent no-op (RemoteController guards internally too).
+        guard connected else {
+            presentConnectHint()
+            return
+        }
         // Single-action launches re-dispatch the action itself; workspace
         // launches look up the tile by id.
         if let action = item.replayAction {
             Task { await controller.runAction(action) }
         } else if let tile = controller.tiles.first(where: { $0.id == item.tileID }) {
             Task { await controller.run(tile) }
+        }
+    }
+
+    // MARK: Connect hint
+
+    /// A soft transient toast above the tab bar; auto-dismisses after a moment.
+    private var connectHint: some View {
+        Text("Connect to your Mac on the same Wi-Fi to relaunch")
+            .font(.fiple(13, .semibold))
+            .foregroundStyle(Theme.Palette.label)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.md)
+            .background(Theme.Palette.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
+            .shadow(color: .black.opacity(0.10), radius: 12, y: 4)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.bottom, Theme.Spacing.xl)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func presentConnectHint() {
+        hintDismissTask?.cancel()
+        withAnimation(.snappy(duration: 0.25)) { showConnectHint = true }
+        hintDismissTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) { showConnectHint = false }
         }
     }
 
@@ -105,7 +156,7 @@ struct RecentView: View {
                         withAnimation(.snappy(duration: 0.2)) { filter = option }
                     } label: {
                         Text(option.rawValue)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.fiple(15, .semibold))
                             .foregroundStyle(selected ? Theme.Palette.brand : Theme.Palette.secondary)
                             .padding(.horizontal, Theme.Spacing.lg)
                             .padding(.vertical, Theme.Spacing.sm + 2)
@@ -145,20 +196,20 @@ private struct RecentRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.fiple(16, .semibold))
                     .foregroundStyle(Theme.Palette.label)
                 Text(item.categoryLabel)
-                    .font(.system(size: 13))
+                    .font(.fiple(13))
                     .foregroundStyle(Theme.Palette.secondary)
             }
 
             Spacer()
 
             Text(item.displayTime)
-                .font(.system(size: 14))
+                .font(.fiple(14))
                 .foregroundStyle(Theme.Palette.secondary)
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.fiple(13, .semibold))
                 .foregroundStyle(Theme.Palette.secondary.opacity(0.6))
         }
         .padding(Theme.Spacing.md)

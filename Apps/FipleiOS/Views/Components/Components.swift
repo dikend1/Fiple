@@ -11,7 +11,7 @@ struct GlyphTile: View {
     var body: some View {
         let accent = Accent(hex: colorHex)
         Image(systemName: symbol)
-            .font(.system(size: size * 0.42, weight: .semibold))
+            .font(.fiple(size * 0.42, .semibold))
             .foregroundStyle(accent.glyph)
             .frame(width: size, height: size)
             .background(accent.iconBackground, in: RoundedRectangle(cornerRadius: cornerRadius))
@@ -26,7 +26,7 @@ struct SectionHeader<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .font(.system(size: 20, weight: .bold))
+                .font(.fiple(20, .bold))
             Spacer()
             trailing
         }

@@ -37,10 +37,10 @@ struct PairingView: View {
                 .scaledToFit()
                 .frame(width: 88, height: 88)
             Text("Fiple")
-                .font(.system(size: 40, weight: .bold))
+                .font(.fiple(40, .bold))
                 .foregroundStyle(Theme.Palette.label)
             Text("One tap back into your flow")
-                .font(.system(size: 17))
+                .font(.fiple(17))
                 .foregroundStyle(Theme.Palette.secondary)
         }
     }
@@ -55,7 +55,7 @@ struct PairingView: View {
             VStack(alignment: .leading, spacing: 10) {
                 statusIcon
                 Text(statusTitle)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.fiple(22, .bold))
                     .foregroundStyle(Theme.Palette.label)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
@@ -84,7 +84,7 @@ struct PairingView: View {
         ZStack {
             Circle().fill(color.opacity(0.14)).frame(width: 46, height: 46)
             Image(systemName: searching ? "wifi" : "checkmark")
-                .font(.system(size: 20, weight: .semibold))
+                .font(.fiple(20, .semibold))
                 .foregroundStyle(color)
         }
     }

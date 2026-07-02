@@ -78,7 +78,15 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .fipleCard()
 
-            Button { Task { await controller.disconnect() } } label: {
+            Button {
+                Task {
+                    await controller.disconnect()
+                    // Actually open the pairing flow — clearing the token alone
+                    // leaves the user staring at the same screen when no Mac is
+                    // discoverable yet.
+                    controller.requestPairing()
+                }
+            } label: {
                 HStack(spacing: Theme.Spacing.md) {
                     Image(systemName: "desktopcomputer")
                         .font(.system(size: 18, weight: .medium))

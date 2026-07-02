@@ -47,9 +47,17 @@ struct DevicesView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.lg)
                     .background(Accent(hex: "#3B82F6").iconBackground, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                    .accessibilityLabel(Self.spokenPairingCode(server.pairingCode?.value))
             }
             .padding(Theme.Spacing.xl)
             .fipleCard()
         }
+    }
+
+    /// VoiceOver reads the code digit by digit ("Pairing code: 8, 4, 1, 2")
+    /// instead of as one number.
+    static func spokenPairingCode(_ code: String?) -> String {
+        guard let code, !code.isEmpty else { return "Pairing code not available yet" }
+        return "Pairing code: " + code.map(String.init).joined(separator: ", ")
     }
 }

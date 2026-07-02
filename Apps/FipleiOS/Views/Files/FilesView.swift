@@ -1,6 +1,7 @@
 import FipleKit
 import QuickLook
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 /// Files: browse and download recent files from the Mac, from anywhere, via the
@@ -12,6 +13,7 @@ struct FilesView: View {
     @State private var previewURL: URL?
     @State private var favoritesFull = false
     @State private var downloadFailed = false
+    @State private var shareItem: ShareItem?
 
     var body: some View {
         NavigationStack {
@@ -20,9 +22,9 @@ struct FilesView: View {
                 case .idle, .loading where store.files.isEmpty:
                     loadingOrEmpty
                 case .unavailable(let message):
-                    EmptyHint(icon: "icloud.slash", text: message)
+                    retryableHint(icon: "icloud.slash", text: message)
                 case .failed(let message):
-                    EmptyHint(icon: "exclamationmark.icloud", text: message)
+                    retryableHint(icon: "exclamationmark.icloud", text: message)
                 default:
                     content
                 }
@@ -43,6 +45,9 @@ struct FilesView: View {
             } message: {
                 Text("Check your connection and try again.")
             }
+            .sheet(item: $shareItem) { item in
+                ActivityView(url: item.url)
+            }
         }
     }
 
@@ -50,10 +55,35 @@ struct FilesView: View {
         if case .loading = store.state {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.files.isEmpty {
-            EmptyHint(
+            retryableHint(
                 icon: "folder",
                 text: "No recent files yet. Turn on Remote File Access in Fiple on your Mac."
             )
+        }
+    }
+
+    /// An error / empty state that keeps retry reachable: the hint lives inside
+    /// a ScrollView so pull-to-refresh works, plus an explicit Retry button that
+    /// runs the same refresh.
+    private func retryableHint(icon: String, text: String) -> some View {
+        ScrollView {
+            VStack(spacing: Theme.Spacing.lg) {
+                EmptyHint(icon: icon, text: text)
+
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                        .font(.fiple(15, .semibold))
+                        .foregroundStyle(Theme.Palette.brand)
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .padding(.vertical, Theme.Spacing.sm + 2)
+                        .background(Theme.Palette.brand.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.top, Theme.Spacing.xxl)
         }
     }
 
@@ -62,7 +92,7 @@ struct FilesView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 if let last = store.lastModified {
                     Text("Updated \(last.formatted(.relative(presentation: .named)))")
-                        .font(.system(size: 13))
+                        .font(.fiple(13))
                         .foregroundStyle(Theme.Palette.secondary)
                         .padding(.horizontal, Theme.Spacing.lg)
                 }
@@ -88,7 +118,7 @@ struct FilesView: View {
         if !files.isEmpty {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Text(title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.fiple(12, .semibold))
                     .foregroundStyle(Theme.Palette.secondary)
                     .padding(.horizontal, Theme.Spacing.lg)
 
@@ -125,6 +155,7 @@ struct FilesView: View {
                   systemImage: file.isPinned ? "star.slash" : "star")
         }
         Button { open(file) } label: { Label("Download & Open", systemImage: "arrow.down.circle") }
+        Button { share(file) } label: { Label("Share…", systemImage: "square.and.arrow.up") }
     }
 
     private func open(_ file: RemoteFile) {
@@ -136,6 +167,33 @@ struct FilesView: View {
             }
         }
     }
+
+    private func share(_ file: RemoteFile) {
+        Task {
+            if let url = await store.download(file) {
+                shareItem = ShareItem(url: url)
+            } else {
+                downloadFailed = true
+            }
+        }
+    }
+}
+
+/// Wraps a share URL so it can drive `.sheet(item:)`.
+private struct ShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// The system share sheet for a downloaded file (PRD: "Download, open, share").
+private struct ActivityView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 /// One file row: type glyph, name, size · date, favorite star / spinner.
@@ -150,12 +208,12 @@ private struct FileRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.fileName)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.fiple(16, .semibold))
                     .foregroundStyle(Theme.Palette.label)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text("\(Self.size(file.sizeBytes)) · \(file.modifiedAt.formatted(date: .abbreviated, time: .omitted))")
-                    .font(.system(size: 13))
+                    .font(.fiple(13))
                     .foregroundStyle(Theme.Palette.secondary)
             }
 
@@ -172,14 +230,17 @@ private struct FileRow: View {
                         .animation(.easeOut(duration: 0.15), value: downloadProgress)
                 }
                 .frame(width: 22, height: 22)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Downloading \(file.fileName)")
+                .accessibilityValue("\(Int(downloadProgress * 100)) percent")
             } else {
                 if file.isPinned {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 13))
+                        .font(.fiple(13))
                         .foregroundStyle(Theme.Palette.brand)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.fiple(13, .semibold))
                     .foregroundStyle(Theme.Palette.secondary.opacity(0.6))
             }
         }
@@ -198,7 +259,7 @@ private struct FileRow: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.Palette.hairline))
         } else {
             Image(systemName: Self.symbol(for: file.contentType))
-                .font(.system(size: 20))
+                .font(.fiple(20))
                 .foregroundStyle(Theme.Palette.brand)
                 .frame(width: 44, height: 44)
                 .background(Theme.Palette.brand.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))

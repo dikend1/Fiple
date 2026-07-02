@@ -18,16 +18,16 @@ struct ConnectionCard: View {
                             .fill(connected ? Theme.Palette.connected : Theme.Palette.secondary)
                             .frame(width: 8, height: 8)
                         Text(connected ? "Connected" : "Not on this network")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.fiple(14, .semibold))
                             .foregroundStyle(connected ? Theme.Palette.connected : Theme.Palette.secondary)
                     }
                     Text(controller.macName ?? "Your Mac")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.fiple(22, .bold))
                         .foregroundStyle(Theme.Palette.label)
                     Text(connected
                          ? "Last active just now"
                          : "Workspaces need your Mac on the same Wi-Fi.")
-                        .font(.system(size: 14))
+                        .font(.fiple(14))
                         .foregroundStyle(Theme.Palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -44,12 +44,12 @@ struct ConnectionCard: View {
                 Button(action: onOpenFiles) {
                     HStack(spacing: 8) {
                         Image(systemName: "folder.fill")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.fiple(14, .semibold))
                         Text("Your files are available anywhere")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.fiple(14, .semibold))
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.fiple(12, .semibold))
                     }
                     .foregroundStyle(Theme.Palette.brand)
                     .padding(.horizontal, Theme.Spacing.md)

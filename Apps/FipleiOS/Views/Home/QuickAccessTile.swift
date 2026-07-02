@@ -21,7 +21,7 @@ struct QuickAccessTile: View {
                 .animation(.easeOut(duration: 0.15), value: isRunning)
 
             Text(item.title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.fiple(12, .medium))
                 .foregroundStyle(Theme.Palette.label)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
