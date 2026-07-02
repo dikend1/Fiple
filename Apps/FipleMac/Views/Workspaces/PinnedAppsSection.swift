@@ -33,6 +33,15 @@ struct PinnedAppsSection: View {
             header
 
             HStack(spacing: Theme.Spacing.md) {
+                if pages.count > 1 {
+                    let current = scrolledPage ?? 0
+                    // Reserve space for both arrows so paging never shifts the
+                    // grid; hide (not remove) the one that isn't applicable.
+                    CarouselArrow(systemName: "chevron.left") { goBack() }
+                        .opacity(current > 0 ? 1 : 0)
+                        .allowsHitTesting(current > 0)
+                }
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 0) {
                         ForEach(pages.indices, id: \.self) { page in
@@ -47,7 +56,10 @@ struct PinnedAppsSection: View {
                 .scrollTargetBehavior(.paging)
 
                 if pages.count > 1 {
-                    CarouselArrow { advance(pageCount: pages.count) }
+                    let current = scrolledPage ?? 0
+                    CarouselArrow(systemName: "chevron.right") { goForward(pageCount: pages.count) }
+                        .opacity(current < pages.count - 1 ? 1 : 0)
+                        .allowsHitTesting(current < pages.count - 1)
                 }
             }
 
@@ -98,9 +110,16 @@ struct PinnedAppsSection: View {
         return result
     }
 
-    private func advance(pageCount: Int) {
+    private func goForward(pageCount: Int) {
         let current = scrolledPage ?? 0
-        withAnimation { scrolledPage = current + 1 < pageCount ? current + 1 : 0 }
+        guard current + 1 < pageCount else { return }
+        withAnimation { scrolledPage = current + 1 }
+    }
+
+    private func goBack() {
+        let current = scrolledPage ?? 0
+        guard current > 0 else { return }
+        withAnimation { scrolledPage = current - 1 }
     }
 }
 
