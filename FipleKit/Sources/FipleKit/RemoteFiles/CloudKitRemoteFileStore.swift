@@ -102,6 +102,11 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
     public func download(recordName: String, onProgress: (@Sendable (Double) -> Void)?) async throws -> Data {
         let recordID = CKRecord.ID(recordName: recordName)
         return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Error>) in
+            // A whole-operation failure (no network, not authenticated) reaches
+            // *only* `fetchRecordsResultBlock` — without it the await would hang
+            // forever. And when both blocks fire for the same fetch, the gate
+            // guarantees exactly one resume.
+            let gate = TakeOnceContinuation(cont)
             let op = CKFetchRecordsOperation(recordIDs: [recordID])
             op.desiredKeys = ["payload"]
             if let onProgress {
@@ -113,12 +118,23 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
                     if let asset = record["payload"] as? CKAsset, let url = asset.fileURL,
                        let data = try? Data(contentsOf: url) {
                         onProgress?(1.0)
-                        cont.resume(returning: data)
+                        gate.take()?.resume(returning: data)
                     } else {
-                        cont.resume(throwing: CKError(.assetFileNotFound))
+                        gate.take()?.resume(throwing: CKError(.assetFileNotFound))
                     }
                 case .failure(let error):
-                    cont.resume(throwing: error)
+                    gate.take()?.resume(throwing: error)
+                }
+            }
+            op.fetchRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    // Normally the per-record block resolved this already; if it
+                    // never fired (record absent from the result set), fail
+                    // instead of hanging.
+                    gate.take()?.resume(throwing: CKError(.unknownItem))
+                case .failure(let error):
+                    gate.take()?.resume(throwing: error)
                 }
             }
             database.add(op)
@@ -189,5 +205,26 @@ public actor CloudKitRemoteFileStore: RemoteFileStore {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try data.write(to: url, options: .atomic)
         return url
+    }
+}
+
+/// Hands out its continuation exactly once; later takers get nil. Needed because
+/// a `CKOperation` can report one outcome through more than one callback (and a
+/// checked continuation traps on double resume). `@unchecked` is safe: the lock
+/// serializes every access to the stored continuation.
+private final class TakeOnceContinuation<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+
+    init(_ continuation: CheckedContinuation<T, Error>) {
+        self.continuation = continuation
+    }
+
+    func take() -> CheckedContinuation<T, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        let taken = continuation
+        continuation = nil
+        return taken
     }
 }
