@@ -39,7 +39,10 @@ final class RemoteFilesController {
     @ObservationIgnored private let deviceID: String
 
     init() {
-        isEnabled = defaults.bool(forKey: enabledKey)
+        // Hard-off when the feature flag is disabled (1.0 LAN-only release), even
+        // if a prior build persisted an enabled state — with the iCloud
+        // entitlement removed there is nothing to sync to.
+        isEnabled = AppFeatures.remoteFiles && defaults.bool(forKey: enabledKey)
         ignoredSubfolders = defaults.stringArray(forKey: ignoredSubfoldersKey) ?? []
         if let saved = defaults.string(forKey: deviceIDKey) {
             deviceID = saved

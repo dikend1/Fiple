@@ -4,14 +4,12 @@
 <dict>
 	<!-- No aps-environment: the app registers no push/CloudKit subscriptions,
 	     and a hardcoded `development` value would fail App Store validation. -->
-	<key>com.apple.developer.icloud-container-identifiers</key>
-	<array>
-		<string>iCloud.com.maksatov.fipleapp</string>
-	</array>
-	<key>com.apple.developer.icloud-services</key>
-	<array>
-		<string>CloudKit</string>
-	</array>
+	<!-- iCloud/CloudKit and the read-only home-folder temporary exception are
+	     intentionally absent for the 1.0 LAN-only release (off-LAN Files is
+	     disabled via AppFeatures.remoteFiles). For the 1.1 Files release, restore
+	     the iCloud entitlements AND replace folder access with security-scoped
+	     bookmarks (user picks folders) rather than the home-relative-path
+	     temporary exception, which draws heavy App Store review scrutiny. -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 	<key>com.apple.security.automation.apple-events</key>
@@ -23,19 +21,6 @@
 	<key>com.apple.security.temporary-exception.apple-events</key>
 	<array>
 		<string>com.apple.shortcuts.events</string>
-	</array>
-	<!-- Read-only reach to the standard folders the remote-file cache mirrors.
-	     A sandboxed app has no automatic access to ~/Desktop or ~/Documents; a
-	     home-relative temporary exception grants read-only access to exactly
-	     these three. Read-only by design (feature safety invariant). Note:
-	     temporary-exception entitlements draw extra App Store review scrutiny —
-	     revisit with security-scoped bookmarks (user picks folders) before store
-	     submission. -->
-	<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
-	<array>
-		<string>/Desktop/</string>
-		<string>/Documents/</string>
-		<string>/Downloads/</string>
 	</array>
 </dict>
 </plist>

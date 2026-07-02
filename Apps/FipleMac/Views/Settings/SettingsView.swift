@@ -33,10 +33,13 @@ struct SettingsView: View {
                     launchAtLoginRow
                 }
 
-                section("Remote File Access") {
-                    remoteFilesRow
-                    Divider().padding(.leading, Theme.Spacing.md)
-                    ignoredSubfoldersRow
+                // Off-LAN files (CloudKit) are disabled for the 1.0 release.
+                if AppFeatures.remoteFiles {
+                    section("Remote File Access") {
+                        remoteFilesRow
+                        Divider().padding(.leading, Theme.Spacing.md)
+                        ignoredSubfoldersRow
+                    }
                 }
 
                 section("About") {
