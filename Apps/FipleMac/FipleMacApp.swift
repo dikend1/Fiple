@@ -40,21 +40,19 @@ struct FipleMacApp: App {
             MenuContentView(server: server)
                 .task { await server.start() }
         } label: {
-            // A rasterised *template* image, not the SwiftUI view directly:
-            // macOS mangles a custom-shape MenuBarExtra label (it rendered as a
-            // dark blob). As a template, the "F" is tinted by the system — crisp
-            // white on a dark bar, black on a light one.
+            // The real app icon (dark squircle + white F) in the menu bar, in
+            // full colour — not a monochrome template — so it matches the brand.
             Image(nsImage: Self.menuBarIcon)
         }
         .menuBarExtraStyle(.window)
     }
 
-    /// The "F" mark rendered once into a template NSImage for the menu bar.
+    /// The app icon sized for the menu bar, kept in colour (non-template).
     private static let menuBarIcon: NSImage = {
-        let renderer = ImageRenderer(content: FipleMark(size: 16, style: Color.black).padding(1))
-        renderer.scale = 2
-        let image = renderer.nsImage ?? NSImage(size: NSSize(width: 14, height: 18))
-        image.isTemplate = true // let the menu bar tint it for light/dark
-        return image
+        let base = NSApplication.shared.applicationIconImage ?? NSImage()
+        let icon = (base.copy() as? NSImage) ?? base
+        icon.size = NSSize(width: 18, height: 18)
+        icon.isTemplate = false
+        return icon
     }()
 }

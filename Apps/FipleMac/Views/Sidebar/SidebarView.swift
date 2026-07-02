@@ -28,13 +28,15 @@ struct SidebarView: View {
 
     private var brand: some View {
         HStack(spacing: Theme.Spacing.md) {
-            Image("FipleLogo")
-                .resizable()
-                .interpolation(.high)
+            // A raised dark tile with a white "F" — the flat dark logo asset
+            // blended into the dark sidebar, so the mark is drawn white to match
+            // the menu-bar icon and stay legible here.
+            RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
+                .fill(Theme.Palette.sidebarRaised)
                 .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                .overlay { FipleMark(size: 19, style: .white) }
                 .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.tile)
+                    RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
                         .strokeBorder(.white.opacity(0.14))
                 )
             Text("Fiple")
