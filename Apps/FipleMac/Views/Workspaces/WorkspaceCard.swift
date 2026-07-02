@@ -51,8 +51,6 @@ struct WorkspaceCard: View {
                 StatColumn(value: tile.appCount, label: "Apps")
                 statDivider
                 StatColumn(value: tile.websiteCount, label: "Websites")
-                statDivider
-                StatColumn(value: tile.shortcutCount, label: tile.shortcutCount == 1 ? "Shortcut" : "Shortcuts")
                 Spacer()
             }
 

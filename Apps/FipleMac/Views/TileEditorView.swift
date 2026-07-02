@@ -8,7 +8,6 @@ struct ActionDraft: Identifiable {
     enum Kind: String, CaseIterable, Identifiable {
         case launchApp = "App"
         case openURL = "URL"
-        case runShortcut = "Shortcut"
         var id: String { rawValue }
     }
 
@@ -16,19 +15,20 @@ struct ActionDraft: Identifiable {
     var kind: Kind
     var bundleID: String
     var url: String
-    var shortcutName: String
 
     init() {
-        id = UUID(); kind = .launchApp; bundleID = ""; url = ""; shortcutName = ""
+        id = UUID(); kind = .launchApp; bundleID = ""; url = ""
     }
 
     init(_ action: Action) {
         id = action.id
-        bundleID = ""; url = ""; shortcutName = ""
+        bundleID = ""; url = ""
         switch action.kind {
         case let .launchApp(bundleID): kind = .launchApp; self.bundleID = bundleID
         case let .openURL(u): kind = .openURL; url = u.absoluteString
-        case let .runShortcut(name): kind = .runShortcut; shortcutName = name
+        // Shortcuts are no longer creatable in the UI; show any legacy shortcut
+        // action as an empty App draft so the editor still opens cleanly.
+        case .runShortcut: kind = .launchApp
         }
     }
 
@@ -40,10 +40,6 @@ struct ActionDraft: Identifiable {
         case .openURL:
             guard let u = URLInput.webURL(from: url) else { return nil }
             return Action(id: id, kind: .openURL(u))
-        case .runShortcut:
-            let trimmed = shortcutName.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { return nil }
-            return Action(id: id, kind: .runShortcut(name: trimmed))
         }
     }
 }
@@ -289,8 +285,6 @@ private struct ActionDraftRow: View {
                 TextField("https://…", text: $draft.url)
                     .textFieldStyle(.roundedBorder)
                     .onChange(of: draft.url) { _, newValue in onURLChanged(newValue) }
-            case .runShortcut:
-                ShortcutPickerField(name: $draft.shortcutName)
             }
         }
         .padding(.vertical, 4)
@@ -374,105 +368,6 @@ private struct AppPickerField: View {
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// Names an Apple Shortcut to run. The App Sandbox can't enumerate the user's
-/// shortcuts (that needs the Apple-events exception App Review rejected), so the
-/// user types the shortcut's exact name; it runs via the `shortcuts://` URL
-/// scheme. `shortcuts` is kept for the signature but is empty in the shipping
-/// build.
-struct ShortcutPickerField: View {
-    @Binding var name: String
-
-    @State private var showing = false
-    @State private var query = ""
-    @State private var shortcutsIcon: NSImage?
-
-    @ViewBuilder private var glyph: some View {
-        if let shortcutsIcon {
-            Image(nsImage: shortcutsIcon).resizable().frame(width: 22, height: 22)
-        } else {
-            Image(systemName: "bolt.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 22, height: 22)
-        }
-    }
-
-    private var typedQuery: String { query.trimmingCharacters(in: .whitespaces) }
-
-    var body: some View {
-        Button { showing = true } label: {
-            HStack(spacing: 8) {
-                glyph
-                Text(name.isEmpty ? "Name a shortcut…" : name)
-                    .foregroundStyle(name.isEmpty ? .secondary : .primary)
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.black.opacity(0.12)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .task { shortcutsIcon = AppIconCache.shared.shortcutsIcon() }
-        .popover(isPresented: $showing, arrowEdge: .bottom) {
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Image(systemName: "bolt.fill").foregroundStyle(.secondary)
-                    TextField("Type the shortcut's exact name", text: $query)
-                        .textFieldStyle(.plain)
-                        .onSubmit { if !typedQuery.isEmpty { commit(typedQuery) } }
-                }
-                .padding(10)
-                Divider()
-                Group {
-                    if typedQuery.isEmpty {
-                        Text("Type the exact name of a shortcut as it\nappears in the Shortcuts app on your Mac.")
-                            .font(.caption2).foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 20).padding(.horizontal, 10)
-                    } else {
-                        row(label: "Use “\(typedQuery)”", value: typedQuery, manual: true)
-                            .padding(6)
-                    }
-                }
-            }
-            .frame(width: 320)
-        }
-        .onChange(of: showing) { _, isShowing in if !isShowing { query = "" } }
-    }
-
-    private func commit(_ value: String) {
-        name = value
-        showing = false
-    }
-
-    private func row(label: String, value: String, manual: Bool) -> some View {
-        Button {
-            commit(value)
-        } label: {
-            HStack(spacing: 10) {
-                if manual {
-                    Image(systemName: "character.cursor.ibeam")
-                        .foregroundStyle(.secondary).frame(width: 22, height: 22)
-                } else {
-                    glyph
-                }
-                Text(label).lineLimit(1)
-                Spacer()
-                if value == name {
-                    Image(systemName: "checkmark").font(.caption).foregroundStyle(.tint)
-                }
-            }
-            .padding(.horizontal, 8).padding(.vertical, 7)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
