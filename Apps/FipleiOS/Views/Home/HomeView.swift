@@ -133,10 +133,21 @@ struct HomeView: View {
 
     @ViewBuilder private var quickAccess: some View {
         let items = controller.fipleBar
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionHeader("Fiple Bar")
+        // The section is always present — when there's nothing yet it shows a
+        // grid of empty slots (like the Mac's Fiple Bar) instead of collapsing
+        // to a blank area, so the user can see where their apps will live.
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeader("Fiple Bar")
 
+            if items.isEmpty {
+                PlaceholderTileGrid()
+                Text(controller.phase == .connected
+                     ? "Apps, websites and shortcuts you add to the Fiple Bar on your Mac appear here."
+                     : "Connect to your Mac on the same Wi-Fi to see your Fiple Bar apps, websites and shortcuts.")
+                    .font(.fiple(13))
+                    .foregroundStyle(Theme.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
                 PagedTileGrid(items: items) { action in
                     Button {
                         Task { await controller.runAction(action) }
@@ -221,6 +232,43 @@ private struct PagedTileGrid<Item: Identifiable, Tile: View>: View {
                 .accessibilityHidden(true)
             }
         }
+    }
+}
+
+/// The empty-state for an icon section: a grid of soft dashed "slots" in the
+/// same 2×4 shape a full page uses, so the area reads as "apps go here" (like
+/// the Mac's Fiple Bar) rather than collapsing into blank white space.
+private struct PlaceholderTileGrid: View {
+    var count = 8
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
+        count: 4
+    )
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
+            ForEach(0 ..< count, id: \.self) { _ in slot }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var slot: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Theme.Palette.secondary.opacity(0.05))
+            .frame(height: 96)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(
+                        Theme.Palette.hairline,
+                        style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+                    )
+            )
+            .overlay(
+                Image(systemName: "app.dashed")
+                    .font(.fiple(22))
+                    .foregroundStyle(Theme.Palette.secondary.opacity(0.35))
+            )
     }
 }
 
