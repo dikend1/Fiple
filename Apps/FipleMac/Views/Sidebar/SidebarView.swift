@@ -28,17 +28,12 @@ struct SidebarView: View {
 
     private var brand: some View {
         HStack(spacing: Theme.Spacing.md) {
-            // A raised dark tile with a white "F" — the flat dark logo asset
-            // blended into the dark sidebar, so the mark is drawn white to match
-            // the menu-bar icon and stay legible here.
-            RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
-                .fill(Theme.Palette.sidebarRaised)
+            // The real app icon (dark squircle + white F), same as the menu-bar
+            // popover — the previous drawn mark wasn't the actual brand icon.
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
                 .frame(width: 40, height: 40)
-                .overlay { FipleMark(size: 19, style: .white) }
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous)
-                        .strokeBorder(.white.opacity(0.14))
-                )
             Text("Fiple")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Theme.Palette.sidebarText)
