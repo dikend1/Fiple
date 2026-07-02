@@ -9,6 +9,9 @@ struct PinnedAppsSection: View {
     let store: TileStore
     let bar: PinnedAppsStore
     var onViewAll: () -> Void
+    /// Launches an action locally. Injected so the click goes through the same
+    /// path as phone-triggered runs (and lands in Recent history).
+    var onRun: (Action) -> Void
 
     @State private var scrolledPage: Int?
     @State private var isAdding = false
@@ -80,7 +83,7 @@ struct PinnedAppsSection: View {
             ForEach(slots) { slot in
                 switch slot {
                 case let .action(action):
-                    BarTile(action: action) { bar.remove(action.id) }
+                    BarTile(action: action, onRun: { onRun(action) }, onRemove: { bar.remove(action.id) })
                 case .empty:
                     EmptyBarSlot { isAdding = true }
                 }
@@ -106,10 +109,13 @@ struct PinnedAppsSection: View {
 
 // MARK: - Tiles
 
-/// A filled Fiple Bar tile: the action's real icon over its name. Hovering
-/// reveals a Remove overlay; clicking removes the entry.
+/// A filled Fiple Bar tile: the action's real icon over its name. Clicking
+/// launches the action locally (mirroring what a tap does on the phone);
+/// removal lives behind a small hover ✕ and the context menu — never the
+/// primary click.
 private struct BarTile: View {
     let action: Action
+    let onRun: () -> Void
     let onRemove: () -> Void
     @State private var hovering = false
 
@@ -117,31 +123,57 @@ private struct BarTile: View {
     private let tileSize: CGFloat = 64
 
     var body: some View {
-        Button(action: onRemove) {
-            VStack(spacing: 7) {
+        VStack(spacing: 7) {
+            Button(action: run) {
                 ZStack {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(Color.primary.opacity(0.04))
                         .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.Palette.hairline))
 
                     icon
-
-                    if hovering {
-                        EditOverlay(symbol: "minus", label: "Remove", radius: radius)
-                    }
                 }
                 .frame(width: tileSize, height: tileSize)
-
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Launch \(title)")
+            .overlay(alignment: .topTrailing) {
+                if hovering {
+                    Button(action: onRemove) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.black.opacity(0.6), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    // Tucked inside the tile corner so the paging ScrollView
+                    // doesn't clip it.
+                    .padding(3)
+                    .transition(.opacity)
+                    .help("Remove \(title) from Fiple Bar")
+                    .accessibilityLabel("Remove \(title) from Fiple Bar")
+                }
+            }
+
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
         .onHover { hovering = $0 }
-        .help("Remove \(title) from Fiple Bar")
+        .contextMenu {
+            Button("Remove from Fiple Bar", role: .destructive, action: onRemove)
+        }
+        .help("Launch \(title)")
+    }
+
+    /// Runs the action on this Mac via the injected launcher, so it goes
+    /// through `ServerController.run` and lands in Recent history like a
+    /// phone-triggered launch.
+    private func run() {
+        onRun()
     }
 
     @ViewBuilder private var icon: some View {

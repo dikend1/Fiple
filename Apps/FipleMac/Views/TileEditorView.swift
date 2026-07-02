@@ -148,14 +148,37 @@ struct TileEditorView: View {
         }
     }
 
+    /// Human-readable swatch names for VoiceOver, keyed by hex.
+    private static let swatchNames: [String: String] = [
+        "#3B82F6": "Blue",
+        "#8B5CF6": "Purple",
+        "#EF4444": "Red",
+        "#10B981": "Green",
+        "#F59E0B": "Orange",
+        "#EC4899": "Pink",
+        "#0EA5E9": "Sky Blue",
+        "#64748B": "Gray",
+    ]
+
     private var swatches: some View {
-        HStack {
-            ForEach(TilePalette.swatches, id: \.self) { hex in
-                Circle()
-                    .fill(Color(hex: hex))
-                    .frame(width: 22, height: 22)
-                    .overlay(Circle().strokeBorder(.primary, lineWidth: colorHex == hex ? 2 : 0))
-                    .onTapGesture { colorHex = hex }
+        // Zero HStack spacing: each swatch's ≥44pt hit target supplies the gaps
+        // while the visible circle stays 22pt.
+        HStack(spacing: 0) {
+            ForEach(Array(TilePalette.swatches.enumerated()), id: \.element) { index, hex in
+                let selected = colorHex == hex
+                Button {
+                    colorHex = hex
+                } label: {
+                    Circle()
+                        .fill(Color(hex: hex))
+                        .frame(width: 22, height: 22)
+                        .overlay(Circle().strokeBorder(.primary, lineWidth: selected ? 2 : 0))
+                        .frame(width: 44, height: 44) // ≥44pt hit target
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Self.swatchNames[hex] ?? "Color \(index + 1)")
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
     }

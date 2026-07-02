@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Central design tokens for the iOS remote. Mirrors the Mac app's `Theme` so
 /// the two apps read as one product — spacing, radii, type and colour live here
@@ -37,7 +38,21 @@ enum Theme {
     }
 
     enum Typography {
-        static let cardTitle = Font.system(size: 18, weight: .bold)
+        static let cardTitle = Font.fiple(18, .bold)
+    }
+}
+
+extension Font {
+    /// A fixed-point system font that scales with the user's Dynamic Type
+    /// setting. Use in place of `.system(size:weight:)` so the mockup's exact
+    /// sizes stay authoritative at the default setting while still growing and
+    /// shrinking with the accessibility text size.
+    static func fiple(
+        _ size: CGFloat,
+        _ weight: Font.Weight = .regular,
+        design: Font.Design = .default
+    ) -> Font {
+        .system(size: UIFontMetrics.default.scaledValue(for: size), weight: weight, design: design)
     }
 }
 

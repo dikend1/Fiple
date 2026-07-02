@@ -23,6 +23,8 @@ struct HomeView: View {
 
                     workspaces
 
+                    quickLaunch
+
                     quickAccess
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
@@ -42,12 +44,12 @@ struct HomeView: View {
     private var header: some View {
         HStack(alignment: .center) {
             Text("Fiple")
-                .font(.system(size: 34, weight: .bold))
+                .font(.fiple(34, .bold))
                 .foregroundStyle(Theme.Palette.label)
             Spacer()
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.fiple(18, .semibold))
                     .foregroundStyle(Theme.Palette.secondary)
                     .frame(width: 40, height: 40)
                     .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -64,9 +66,15 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SectionHeader(title: "Workspaces") {
                 if !items.isEmpty {
-                    Text("View all")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.brandLink)
+                    NavigationLink {
+                        AllWorkspacesView(controller: controller)
+                    } label: {
+                        Text("View all")
+                            .font(.fiple(15, .semibold))
+                            .foregroundStyle(Theme.Palette.brandLink)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View all workspaces")
                 }
             }
 
@@ -92,6 +100,39 @@ struct HomeView: View {
                     }
                 }
                 .scrollClipDisabled()
+            }
+        }
+    }
+
+    // MARK: Quick Launch
+
+    /// Single-action tiles (everything that isn't a workspace preset) — without
+    /// this section they'd exist on the Mac but be unreachable from the phone.
+    /// May overlap with the Fiple Bar below; acceptable for v1.
+    @ViewBuilder private var quickLaunch: some View {
+        let items = controller.tiles.filter { !$0.isWorkspace && !$0.actions.isEmpty }
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                SectionHeader("Quick Launch")
+
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.md), count: 4),
+                    spacing: Theme.Spacing.md
+                ) {
+                    ForEach(items) { tile in
+                        if let action = tile.actions.first {
+                            Button {
+                                Task { await controller.run(tile) }
+                            } label: {
+                                QuickAccessTile(
+                                    item: QuickAction(action: action, tileID: tile.id),
+                                    isRunning: controller.runningTileID == tile.id
+                                )
+                            }
+                            .buttonStyle(QuickTilePressStyle())
+                        }
+                    }
+                }
             }
         }
     }
@@ -140,10 +181,10 @@ struct EmptyHint: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: icon)
-                .font(.system(size: 26))
+                .font(.fiple(26))
                 .foregroundStyle(Theme.Palette.secondary)
             Text(text)
-                .font(.system(size: 14))
+                .font(.fiple(14))
                 .foregroundStyle(Theme.Palette.secondary)
                 .multilineTextAlignment(.center)
         }

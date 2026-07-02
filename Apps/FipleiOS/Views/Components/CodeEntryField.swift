@@ -61,13 +61,13 @@ struct CodeEntryField: View {
 
             if hasDigit {
                 Text(String(digits[index]))
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .font(.fiple(30, .semibold, design: .rounded))
                     .foregroundStyle(Theme.Palette.label)
             } else if isActive {
                 Caret()
             } else {
                 Text("–")
-                    .font(.system(size: 26, weight: .regular))
+                    .font(.fiple(26, .regular))
                     .foregroundStyle(Color(hex: "#C7CDD6"))
             }
         }

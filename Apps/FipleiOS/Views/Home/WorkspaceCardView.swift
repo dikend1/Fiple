@@ -23,7 +23,7 @@ struct WorkspaceCardView: View {
                     .font(Theme.Typography.cardTitle)
                     .foregroundStyle(Theme.Palette.label)
                 Text(tile.subtitle ?? "\(tile.actions.count) actions")
-                    .font(.system(size: 14))
+                    .font(.fiple(14))
                     .foregroundStyle(Theme.Palette.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -43,7 +43,7 @@ struct WorkspaceCardView: View {
                                 .tint(Color(hex: tile.colorHex))
                         } else {
                             Image(systemName: "play.fill")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.fiple(14, .bold))
                                 .foregroundStyle(Color(hex: tile.colorHex))
                         }
                     }
@@ -81,7 +81,7 @@ struct WorkspaceCardView: View {
             }
             if overflow > 0 {
                 Text("+\(overflow)")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.fiple(12, .semibold, design: .rounded))
                     .foregroundStyle(Theme.Palette.secondary)
                     .frame(height: 30)
                     .padding(.horizontal, 8)

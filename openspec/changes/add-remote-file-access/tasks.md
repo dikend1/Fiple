@@ -13,9 +13,11 @@
 - [ ] 0.1 Human accepts ADR-0004 (off-LAN via CloudKit). *(overridden to build early)*
 - [ ] 0.2 Human accepts PRD `fiple-remote-file-access.md`. *(overridden to build early)*
 - [ ] 0.3 CloudKit container + iCloud entitlement provisioned in the Apple
-  Developer account and added to `project.yml`/entitlements for both apps;
-  macOS sandbox folder-read entitlements for Desktop/Documents/Downloads.
-  **Blocking for runtime** — code is written but cannot reach iCloud until done.
+  Developer account. Entitlement *files* are done (iCloud/CloudKit keys and the
+  read-only folder exceptions are in both `Fiple.entitlements`); what cannot be
+  verified from the repo is the Developer-account provisioning itself.
+  Note: the home-relative-path temporary exception must be replaced with
+  security-scoped bookmarks **before App Store submission** (review risk).
 
 ## 1. Core model & budget (FipleKit) — done, tested
 
@@ -31,24 +33,27 @@
 - [x] 2.1 FSEvents watcher for the three folders. — `FolderWatcher.swift`
 - [x] 2.2 CloudKit sync: upload/update, evict over-budget, remove deleted. —
   `RemoteFilesController.reconcile()`, `CloudKitRemoteFileStore`
-- [ ] 2.3 Thumbnail generation for supported types. *(v1 uploads no thumbnail;
-  phone shows a UTI-based glyph. Follow-up.)*
-- [x] 2.4 Settings master toggle (off ⇒ purge cache). *(Budget-config/ignore-list
-  UI and explicit quota-full surfacing are follow-ups.)*
+- [x] 2.3 Thumbnail generation for supported types. — `QLThumbnailGenerator` in
+  `RemoteFilesController` (commit 391975f "real thumbnails").
+- [x] 2.4 Settings master toggle (off ⇒ purge cache) + ignore-list UI for
+  subfolders (added on `fix/audit-findings`). *(Budget-config UI and explicit
+  quota-full surfacing remain follow-ups.)*
 
 ## 3. Phone Files browser (Apps/FipleiOS) — code done; entitlements pending (0.3)
 
 - [x] 3.1 List by folder + Favorites section; filename search; UTI icons. — `FilesView.swift`
-- [x] 3.2 Download → Quick Look (share via the Quick Look share action). *(No
-  determinate progress bar yet — a spinner per file.)*
+- [x] 3.2 Download → Quick Look (share via the Quick Look share action), with a
+  determinate progress ring (commit 0872540 "real download progress") and a
+  failure alert.
 - [x] 3.3 Pin/unpin (`isPinned`) with favorites-limit alert.
 - [x] 3.4 Sync status (last-updated) + unavailable states (iCloud off /
   feature off). — `RemoteFilesStore.State`
 
 ## 4. Governance & privacy
 
-- [ ] 4.1 App Store data-use / privacy-manifest disclosure for the CloudKit
-  store.
+- [x] 4.1 App Store data-use / privacy-manifest disclosure for the CloudKit
+  store. — `Apps/*/PrivacyInfo.xcprivacy` + `docs/release/app-review-notes.md`
+  (commit 79c7cdd "App Store prep").
 - [ ] 4.2 Update `docs/architecture/` from implementation evidence after ship.
 
 ## 5. Verification Evidence
