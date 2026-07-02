@@ -65,6 +65,16 @@ struct Accent {
             endPoint: .bottomTrailing
         )
     }
+
+    /// Solid accent gradient for a primary Run affordance — mirrors the iOS
+    /// remote's run button so both apps share one visual language.
+    var buttonGradient: LinearGradient {
+        LinearGradient(
+            colors: [base.opacity(0.95), base],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
 }
 
 extension View {

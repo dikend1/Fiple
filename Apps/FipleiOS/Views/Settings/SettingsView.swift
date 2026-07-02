@@ -53,15 +53,16 @@ struct SettingsView: View {
 
             Button { confirmingUnpair = true } label: {
                 HStack(spacing: Theme.Spacing.md) {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(hex: "#0E1116"))
-                        .overlay(
-                            LinearGradient(
-                                colors: [Theme.Palette.brand.opacity(0.5), .clear],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            ).clipShape(RoundedRectangle(cornerRadius: 10)).padding(2)
+                    // The paired Mac's device glyph on a soft brand tile — same
+                    // hardware family the connection card shows.
+                    Image(systemName: deviceSymbol)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(Theme.Palette.brand)
+                        .frame(width: 54, height: 40)
+                        .background(
+                            Theme.Palette.brand.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                         )
-                        .frame(width: 54, height: 38)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(controller.macName ?? "Your Mac")
                             .font(.system(size: 16, weight: .semibold))
@@ -146,6 +147,17 @@ struct SettingsView: View {
 
     private var rowDivider: some View { Divider().padding(.leading, 56) }
 
+    /// SF Symbol for the paired Mac's hardware family.
+    private var deviceSymbol: String {
+        switch controller.macKind {
+        case .laptop: "laptopcomputer"
+        case .iMac, .desktop: "desktopcomputer"
+        case .macMini: "macmini"
+        case .macStudio: "macstudio"
+        case .macPro: "macpro.gen3"
+        }
+    }
+
     private var chevron: some View {
         Image(systemName: "chevron.right")
             .font(.system(size: 14, weight: .semibold))
@@ -153,14 +165,16 @@ struct SettingsView: View {
     }
 }
 
-/// Uppercase grouped-list section label.
+/// Grouped-list section label — quiet and secondary so it frames the cards
+/// instead of competing with the big "Settings" title.
 private struct GroupLabel: View {
     let text: String
     init(_ text: String) { self.text = text }
     var body: some View {
-        Text(text)
-            .font(.system(size: 20, weight: .bold))
-            .foregroundStyle(Theme.Palette.label)
+        Text(text.uppercased())
+            .font(.system(size: 13, weight: .semibold))
+            .tracking(0.6)
+            .foregroundStyle(Theme.Palette.secondary)
             .padding(.leading, 4)
     }
 }

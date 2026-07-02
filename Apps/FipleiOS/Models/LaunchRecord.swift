@@ -91,7 +91,7 @@ struct LaunchRecord: Identifiable, Codable, Equatable, Hashable {
         }
         if calendar.isDateInYesterday(timestamp) { return "Yesterday" }
         let days = calendar.dateComponents([.day], from: timestamp, to: Date()).day ?? 0
-        if days < 7 { return "\(days) days ago" }
+        if days < 7 { return days == 1 ? "1 day ago" : "\(days) days ago" }
         return timestamp.formatted(.dateTime.day().month(.abbreviated))
     }
 

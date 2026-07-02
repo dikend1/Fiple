@@ -1,13 +1,17 @@
 import FipleKit
 import SwiftUI
 
-/// A workspace tile rendered as a clean white card (carousel/grid layout).
+/// A workspace tile rendered as a softly tinted card (carousel/grid layout),
+/// matching the iOS remote's cards so both apps read as one product.
 /// Edit and Delete live in the "…" menu; the card surfaces a single Run action.
 struct WorkspaceCard: View {
     let tile: Tile
     let onRun: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
+
+    private var accent: Accent { Accent(hex: tile.colorHex) }
+    private var base: Color { Color(hex: tile.colorHex) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
@@ -59,22 +63,31 @@ struct WorkspaceCard: View {
                         Image(systemName: "play.fill").font(.system(size: 11, weight: .bold))
                         Text("Run").font(.system(size: 13, weight: .semibold))
                     }
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, Theme.Spacing.lg)
                     .padding(.vertical, 8)
-                    .background(Theme.Palette.surface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Theme.Palette.hairline))
-                    .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+                    .background(accent.buttonGradient, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                    .shadow(color: base.opacity(0.4), radius: 6, y: 3)
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Palette.hairline))
-        .shadow(color: .black.opacity(0.05), radius: 12, y: 4)
+        .background {
+            ZStack {
+                Theme.Palette.surface
+                accent.cardGradient
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(base.opacity(0.12))
+        )
+        // Shadow tinted with the workspace colour, like the iOS cards.
+        .shadow(color: base.opacity(0.14), radius: 12, y: 4)
     }
 
     private var statDivider: some View {
