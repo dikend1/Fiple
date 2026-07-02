@@ -25,7 +25,8 @@ struct AllWorkspacesView: View {
             }
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.top, Theme.Spacing.sm)
-            .padding(.bottom, Theme.Spacing.xxl)
+            // Clear the floating tab bar so the last row of cards stays tappable.
+            .padding(.bottom, Theme.Spacing.tabBarClearance)
         }
         .background(Theme.Palette.background)
         .navigationTitle("Workspaces")
