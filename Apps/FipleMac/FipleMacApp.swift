@@ -40,19 +40,20 @@ struct FipleMacApp: App {
             MenuContentView(server: server)
                 .task { await server.start() }
         } label: {
-            // The real app icon (dark squircle + white F) in the menu bar, in
-            // full colour — not a monochrome template — so it matches the brand.
+            // Just the "F" mark as a template image — no dark squircle — so the
+            // menu bar shows a clean white F (tinted by the system).
             Image(nsImage: Self.menuBarIcon)
         }
         .menuBarExtraStyle(.window)
     }
 
-    /// The app icon sized for the menu bar, kept in colour (non-template).
+    /// The bare "F" mark rendered into a template NSImage, sized a touch larger
+    /// to sit prominently in the menu bar.
     private static let menuBarIcon: NSImage = {
-        let base = NSApplication.shared.applicationIconImage ?? NSImage()
-        let icon = (base.copy() as? NSImage) ?? base
-        icon.size = NSSize(width: 18, height: 18)
-        icon.isTemplate = false
-        return icon
+        let renderer = ImageRenderer(content: FipleMark(size: 18, style: Color.black).padding(0.5))
+        renderer.scale = 2
+        let image = renderer.nsImage ?? NSImage(size: NSSize(width: 15, height: 19))
+        image.isTemplate = true // tinted white on a dark bar, black on a light one
+        return image
     }()
 }
