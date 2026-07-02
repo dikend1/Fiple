@@ -61,19 +61,9 @@ struct HomeView: View {
     @ViewBuilder private var workspaces: some View {
         let items = controller.workspaces
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeader(title: "Workspaces") {
-                if !items.isEmpty {
-                    NavigationLink {
-                        AllWorkspacesView(controller: controller)
-                    } label: {
-                        Text("View all")
-                            .font(.fiple(15, .semibold))
-                            .foregroundStyle(Theme.Palette.brandLink)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("View all workspaces")
-                }
-            }
+            // No "View all" — the carousel below already scrolls through every
+            // workspace, so a separate grid screen was a redundant extra tap.
+            SectionHeader("Workspaces")
 
             if items.isEmpty {
                 EmptyHint(
