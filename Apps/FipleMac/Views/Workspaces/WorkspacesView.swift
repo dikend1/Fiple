@@ -37,8 +37,7 @@ struct WorkspacesView: View {
                 PinnedAppsSection(
                     store: store,
                     bar: pinned,
-                    onViewAll: { section = .apps },
-                    onRun: { action in Task { await server.run(action) } }
+                    onViewAll: { section = .apps }
                 )
                 summaries
             }
