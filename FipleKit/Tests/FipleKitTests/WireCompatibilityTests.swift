@@ -25,6 +25,17 @@ struct WireCompatibilityTests {
         )
     }
 
+    @Test("deviceInfo round-trips and tolerates an unknown family")
+    func deviceInfoRoundTrips() throws {
+        let data = try MessageCodec.encode(ServerMessage.deviceInfo(macKind: .macStudio))
+        #expect(try MessageCodec.decodeIfKnown(ServerMessage.self, from: data) == .deviceInfo(macKind: .macStudio))
+
+        // A newer Mac reporting a family this build doesn't know falls back to
+        // .laptop rather than failing the whole message.
+        let future = Data(#"{"type":"deviceInfo","macKind":"macFold"}"#.utf8)
+        #expect(try MessageCodec.decodeIfKnown(ServerMessage.self, from: future) == .deviceInfo(macKind: .laptop))
+    }
+
     @Test("Malformed payload of a known type is still an error")
     func malformedKnownTypeThrows() {
         let broken = Data(#"{"type":"pair"}"#.utf8) // missing `code`

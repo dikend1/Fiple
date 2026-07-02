@@ -45,7 +45,7 @@ struct ConnectionCard: View {
 
                 Spacer(minLength: 0)
 
-                MacBookGlyph()
+                DeviceGlyph(kind: controller.macKind)
                     .frame(width: 116, height: 84)
             }
 
@@ -70,6 +70,37 @@ struct ConnectionCard: View {
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity)
         .fipleCard()
+    }
+}
+
+/// The device illustration for the connection card, chosen from the Mac's
+/// reported hardware family: the custom MacBook art for laptops, and a matching
+/// SF Symbol for an iMac / Mac mini / Mac Studio / Mac Pro so the card is honest
+/// about which kind of Mac is connected.
+private struct DeviceGlyph: View {
+    let kind: MacKind
+
+    var body: some View {
+        switch kind {
+        case .laptop:
+            MacBookGlyph()
+        case .iMac, .desktop, .macMini, .macStudio, .macPro:
+            Image(systemName: symbol)
+                .font(.system(size: 54, weight: .regular))
+                .foregroundStyle(Theme.Palette.label)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var symbol: String {
+        switch kind {
+        case .iMac, .desktop: "desktopcomputer"
+        case .macMini: "macmini"
+        case .macStudio: "macstudio"
+        case .macPro: "macpro.gen3"
+        case .laptop: "laptopcomputer"
+        }
     }
 }
 
