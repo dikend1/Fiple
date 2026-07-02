@@ -9,84 +9,143 @@ struct WorkspaceCardView: View {
     var isRunning: Bool = false
     let onRun: () -> Void
 
+    private var accent: Accent { Accent(hex: tile.colorHex) }
+    private var base: Color { Color(hex: tile.colorHex) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             TileIcon(
                 iconImageData: tile.iconImageData,
                 systemName: tile.iconSystemName,
                 colorHex: tile.colorHex,
-                size: 48
+                size: 52
             )
+            // A soft halo of the workspace's colour so the icon feels lit rather
+            // than pasted on.
+            .background(
+                Circle().fill(base.opacity(0.22)).blur(radius: 18).frame(width: 76, height: 76)
+            )
+            .shadow(color: base.opacity(0.28), radius: 10, y: 5)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(tile.name)
                     .font(Theme.Typography.cardTitle)
+                    .tracking(-0.3)
                     .foregroundStyle(Theme.Palette.label)
                 Text(tile.subtitle ?? "\(tile.actions.count) actions")
                     .font(.fiple(14))
                     .foregroundStyle(Theme.Palette.secondary)
+                    .lineSpacing(2)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: Theme.Spacing.sm)
+            Spacer(minLength: Theme.Spacing.md)
 
-            actionIcons
-
-            HStack {
-                Spacer()
-                Button(action: onRun) {
-                    Group {
-                        if isRunning {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(Color(hex: tile.colorHex))
-                        } else {
-                            Image(systemName: "play.fill")
-                                .font(.fiple(14, .bold))
-                                .foregroundStyle(Color(hex: tile.colorHex))
-                        }
-                    }
-                    .frame(width: 40, height: 40)
-                    .background(Color(hex: tile.colorHex).opacity(0.18), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isRunning)
-                .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
+            HStack(alignment: .bottom) {
+                actionIcons
+                Spacer(minLength: Theme.Spacing.sm)
+                runButton
             }
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, minHeight: 230, alignment: .topLeading)
-        .background(Accent(hex: tile.colorHex).cardGradient)
-        .background(Theme.Palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Palette.hairline))
+        .background {
+            ZStack {
+                Theme.Palette.surface
+                accent.cardGradient
+                accent.cardGlow
+                // A faint glass highlight along the very top edge.
+                LinearGradient(
+                    colors: [.white.opacity(0.5), .clear],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: 60)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .blendMode(.softLight)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+                .blendMode(.overlay)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(base.opacity(0.12))
+        )
+        // A shadow tinted with the workspace colour, so each card gently emits
+        // its own hue instead of a flat grey drop.
+        .shadow(color: base.opacity(0.16), radius: 16, y: 8)
     }
 
-    /// The real icons of the apps / sites / files this workspace launches, shown
-    /// as a compact row with a "+N" chip for the overflow — the at-a-glance "what's
-    /// inside" preview from the mockup, in place of raw stat counts.
+    // MARK: Run button — the card's signature affordance
+
+    private var runButton: some View {
+        Button(action: onRun) {
+            Group {
+                if isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.fiple(15, .bold))
+                        .foregroundStyle(.white)
+                        .offset(x: 1) // optically centre the triangle
+                }
+            }
+            .frame(width: 46, height: 46)
+            .background(accent.buttonGradient, in: Circle())
+            .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+            .shadow(color: base.opacity(0.45), radius: 10, y: 4)
+        }
+        .buttonStyle(RunButtonStyle())
+        .disabled(isRunning)
+        .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
+    }
+
+    /// The real icons of the apps / sites / files this workspace launches, each
+    /// in a uniform white chip so a row of mismatched app icons reads as one tidy
+    /// set — the at-a-glance "what's inside" preview.
     private var actionIcons: some View {
         let actions = tile.actions
         let maxVisible = 4
         let visible = actions.count > maxVisible ? Array(actions.prefix(3)) : actions
         let overflow = actions.count - visible.count
-        return HStack(spacing: 6) {
+        return HStack(spacing: 7) {
             ForEach(visible) { action in
                 QuickActionIcon(
                     action: QuickAction(action: action, tileID: tile.id),
-                    size: 30,
-                    cornerRadius: 8
+                    size: 26,
+                    cornerRadius: 7
                 )
+                .padding(5)
+                .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.Palette.hairline))
+                .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
             }
             if overflow > 0 {
                 Text("+\(overflow)")
-                    .font(.fiple(12, .semibold, design: .rounded))
+                    .font(.fiple(13, .semibold, design: .rounded))
                     .foregroundStyle(Theme.Palette.secondary)
-                    .frame(height: 30)
-                    .padding(.horizontal, 8)
-                    .background(Color.black.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                    .frame(width: 36, height: 36)
+                    .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Theme.Palette.hairline))
+                    .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
             }
         }
+    }
+}
+
+/// A tactile press for the run button — a firm scale-down with a touch of dim,
+/// so tapping to launch feels like pressing a real key.
+private struct RunButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.spring(response: 0.28, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
