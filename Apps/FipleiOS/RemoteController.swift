@@ -398,7 +398,16 @@ final class RemoteController {
                     await self.authenticate(.reconnect(token: token), silent: true)
                     if self.phase == .connected { return }
                     misses += 1
-                    if misses == 2 { self.restartDiscovery() }
+                    if misses == 2 {
+                        // Reconnect has clearly failed — we're offline now, so
+                        // drop the cached workspaces / Fiple Bar rather than keep
+                        // showing a stale snapshot (e.g. a workspace already
+                        // deleted on the Mac). A fresh snapshot arrives on the
+                        // next successful connect.
+                        self.tiles = []
+                        self.fipleBar = []
+                        self.restartDiscovery()
+                    }
                 }
                 try? await Task.sleep(for: delay)
                 delay = min(delay * 2, .seconds(30))
