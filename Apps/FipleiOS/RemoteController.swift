@@ -410,7 +410,7 @@ final class RemoteController {
     private static func message(for reason: PairRejectReason) -> String {
         switch reason {
         case .incorrectCode: "Incorrect code. Check the code shown on your Mac."
-        case .tooManyAttempts: "Too many attempts. A new code is shown on your Mac — wait a moment and use it."
+        case .tooManyAttempts: "Too many attempts. Wait about 10 seconds, then enter the code again."
         case .pairingExpired: "Pairing expired. Enter the code shown on your Mac."
         }
     }

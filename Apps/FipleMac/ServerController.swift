@@ -46,7 +46,7 @@ final class ServerController {
     /// Brute-force protection for the 4-digit code, shared across every socket
     /// in this advertising session. Reset only on a successful pair or an
     /// explicit restart — never when a connection drops.
-    @ObservationIgnored private var throttle = PairingThrottle()
+    @ObservationIgnored private var throttle = PairingThrottle(lockoutDuration: 10)
 
     init(store: TileStore, pinned: PinnedAppsStore) {
         self.store = store
@@ -196,10 +196,10 @@ final class ServerController {
                 FipleLog.pairing.notice("pair rejected — wrong code (\(remaining) attempt(s) left)")
                 try? await peer.send(ServerMessage.pairRejected(reason: .incorrectCode))
             case .lockedOut:
-                // Limit hit: rotate the code (every prior guess is now worthless,
-                // and the new code shows in the UI), tell the phone, drop the socket.
-                regenerateCode()
-                FipleLog.pairing.error("too many attempts — locked out \(Int(throttle.lockoutDuration))s, code rotated")
+                // Limit hit: a short cool-off, but keep the SAME code so the user
+                // just waits a few seconds and re-enters what's already on the Mac
+                // (rotating it only sent them hunting for a "new" code).
+                FipleLog.pairing.error("too many attempts — locked out \(Int(throttle.lockoutDuration))s")
                 try? await peer.send(ServerMessage.pairRejected(reason: .tooManyAttempts))
                 await peer.close()
             case .ignored:
