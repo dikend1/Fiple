@@ -354,6 +354,7 @@ final class RemoteController {
         await peer?.close()
         peer = nil
         tiles = []
+        fipleBar = []
         macName = nil
         macKind = .laptop
         runningTileID = nil
