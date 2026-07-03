@@ -25,9 +25,9 @@ struct WorkspaceCard: View {
                     size: 50
                 )
                 Spacer()
+                // Edit is the card's primary button below, so the "…" menu only
+                // carries the destructive Delete — no duplicate Edit.
                 Menu {
-                    Button("Edit", action: onEdit)
-                    Divider()
                     Button("Delete", role: .destructive, action: onDelete)
                 } label: {
                     Image(systemName: "ellipsis")

@@ -22,8 +22,10 @@
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Fiple lists your Apple Shortcuts so you can add them to a tile.</string>
+	<!-- No NSAppleEventsUsageDescription: the app declares no Apple-events
+	     entitlement and runs Shortcuts via the `shortcuts://` URL scheme, so the
+	     key is dead and would invite reviewer questions about unused Apple-events
+	     access (Guideline 2.4.5(i)). -->
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_fiple._tcp</string>
