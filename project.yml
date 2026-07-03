@@ -1,6 +1,6 @@
 name: Fiple
 options:
-  bundleIdPrefix: com.maksatov
+  bundleIdPrefix: com.diasmaksatov
   deploymentTarget:
     macOS: "14.0"
     iOS: "17.0"
@@ -13,10 +13,10 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    # Automatic signing with the developer's personal team, so the apps install
-    # on real devices and the setting survives `xcodegen generate`.
+    # Automatic signing. No hardcoded DEVELOPMENT_TEAM — Xcode uses whichever
+    # Apple Developer account is signed in (select your team in Signing &
+    # Capabilities). The previous team (bizhan's) no longer owns the bundle id.
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: VXJ8BY6538
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "2"
 
@@ -30,7 +30,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp
+        PRODUCT_BUNDLE_IDENTIFIER: com.diasmaksatov.fiple
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleMac/Info.plist
@@ -49,7 +49,7 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp
+        PRODUCT_BUNDLE_IDENTIFIER: com.diasmaksatov.fiple
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleiOS/Info.plist
