@@ -53,8 +53,6 @@ struct TileEditorView: View {
     @State private var colorHex: String
     @State private var drafts: [ActionDraft]
     @State private var installedApps: [InstalledApp] = []
-    /// The host we last fetched a favicon for, so typing doesn't refetch.
-    @State private var faviconHost: String?
     /// The last name we auto-filled, so re-picking another app/URL can replace
     /// it — but a name the user typed by hand is left untouched.
     @State private var autoFilledName: String?
@@ -67,11 +65,35 @@ struct TileEditorView: View {
         _icon = State(initialValue: tile?.iconSystemName ?? "square.grid.2x2")
         _iconImageData = State(initialValue: tile?.iconImageData)
         _colorHex = State(initialValue: tile?.colorHex ?? "#3B82F6")
-        _drafts = State(initialValue: (tile?.actions ?? []).map(ActionDraft.init))
+        // A workspace is a preset of 2+ actions, so a brand-new one opens with two
+        // empty action rows to fill in; editing keeps the tile's real actions.
+        _drafts = State(initialValue: tile?.actions.map(ActionDraft.init) ?? [ActionDraft(), ActionDraft()])
     }
 
+    /// Fully-filled action rows (empty rows don't count).
+    private var validActionCount: Int { drafts.filter { $0.toAction() != nil }.count }
+
+    /// A workspace is a preset that opens several things at once, so it needs a
+    /// name and at least two actions — a single app belongs in the Fiple Bar.
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && drafts.contains { $0.toAction() != nil }
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && validActionCount >= 2
+    }
+
+    /// The workspace colour, used to tint the preview, accents and the Save button.
+    private var base: Color { Color(hex: colorHex) }
+
+    /// A live `Tile` assembled from the current form state so the preview card at
+    /// the top of the editor updates as the user types, picks a colour, or adds
+    /// actions — the editor shows exactly what the tile will look like.
+    private var previewTile: Tile {
+        Tile(
+            name: name.trimmingCharacters(in: .whitespaces).isEmpty ? "Workspace name" : name,
+            subtitle: subtitle.trimmingCharacters(in: .whitespaces).isEmpty ? nil : subtitle,
+            iconSystemName: icon,
+            iconImageData: iconImageData,
+            colorHex: colorHex,
+            actions: drafts.compactMap { $0.toAction() }
+        )
     }
 
     /// The name field may be overwritten by an auto-fill when it's blank or still
@@ -81,53 +103,29 @@ struct TileEditorView: View {
         return trimmed.isEmpty || trimmed == autoFilledName
     }
 
+    /// While only one action is filled in, picking that app/URL derives the tile's
+    /// identity (name + icon). Once a second action is added it's a real workspace
+    /// and the name/icon are the user's to set — more apps must not hijack them.
+    private var isIdentityAutoFillable: Bool { validActionCount <= 1 }
+
     var body: some View {
         VStack(spacing: 0) {
-            Text(original == nil ? "New Workspace" : "Edit Workspace").font(.headline).padding()
+            header
             Divider()
-            Form {
-                Section("Appearance") {
-                    LabeledContent("Icon") {
-                        HStack(spacing: 12) {
-                            TileIconPreview(iconImageData: iconImageData, systemName: icon, colorHex: colorHex)
-                            if iconImageData != nil {
-                                Button("Use symbol") { iconImageData = nil }
-                                    .controlSize(.small)
-                            }
-                        }
-                    }
-                    TextField("Name", text: $name)
-                    TextField("Description", text: $subtitle, prompt: Text("Everything you need to code"))
-                    swatches
+            ScrollView {
+                VStack(spacing: Theme.Spacing.lg) {
+                    LivePreviewCard(tile: previewTile)
+                    appearancePanel
+                    actionsPanel
                 }
-                Section("Actions") {
-                    ForEach($drafts) { $draft in
-                        ActionDraftRow(
-                            draft: $draft,
-                            installedApps: installedApps,
-                            onAppChosen: applyAppMetadata,
-                            onURLChanged: applyURLMetadata
-                        ) {
-                            drafts.removeAll { $0.id == draft.id }
-                        }
-                    }
-                    Button { drafts.append(ActionDraft()) } label: {
-                        Label("Add Action", systemImage: "plus.circle")
-                    }
-                }
+                .padding(Theme.Spacing.lg)
             }
-            .formStyle(.grouped)
+            .background(Theme.Palette.windowBackground)
             Divider()
-            HStack {
-                Button("Cancel") { dismiss() }
-                Spacer()
-                Button("Save") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!isValid)
-            }
-            .padding()
+            footer
         }
-        .frame(width: 460, height: 560)
+        .frame(width: 480, height: 620)
+        .background(Theme.Palette.windowBackground)
         .preferredColorScheme(.light) // keep the editor light like the rest of the app
         .task {
             // Only apps are enumerated (via Spotlight). Shortcuts can't be listed
@@ -136,6 +134,186 @@ struct TileEditorView: View {
             // via the `shortcuts://` URL scheme).
             installedApps = await InstalledApps.all()
         }
+    }
+
+    // MARK: - Chrome
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(original == nil ? "New Workspace" : "Edit Workspace")
+                .font(.system(size: 17, weight: .bold))
+            Text("Set up what this tile launches, then tap it from your iPhone.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.lg)
+        .background(Theme.Palette.surface)
+    }
+
+    private var footer: some View {
+        HStack {
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Spacer()
+            Button {
+                save()
+            } label: {
+                Text(original == nil ? "Create Workspace" : "Save Changes")
+                    .fontWeight(.semibold)
+                    .frame(minWidth: 120)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(base)
+            .keyboardShortcut(.defaultAction)
+            .disabled(!isValid)
+        }
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.md)
+        .background(Theme.Palette.surface)
+    }
+
+    // MARK: - Panels
+
+    private var appearancePanel: some View {
+        editorSection("Appearance", systemImage: "paintpalette.fill") {
+            EditorField(label: "Name", text: $name, prompt: "Workspace name")
+            EditorField(label: "Description", text: $subtitle, prompt: "Everything you need to code")
+            iconBlock
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                Text("Colour")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                swatches
+            }
+        }
+    }
+
+    /// A curated set of workspace glyphs the user can pick from. When an app logo
+    /// has been auto-filled it's shown first as the current choice; tapping any
+    /// symbol switches the icon to that coloured glyph instead.
+    private static let iconSymbols = [
+        "square.grid.2x2", "briefcase.fill", "hammer.fill",
+        "chevron.left.forwardslash.chevron.right", "terminal.fill", "paintbrush.pointed.fill",
+        "book.fill", "graduationcap.fill", "bubble.left.and.bubble.right.fill",
+        "globe", "envelope.fill", "music.note",
+        "film.fill", "gamecontroller.fill", "cart.fill", "star.fill",
+    ]
+
+    private var iconBlock: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("Icon")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 40, maximum: 40), spacing: 10)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                if let iconImageData, let image = NSImage(data: iconImageData) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(6)
+                        .frame(width: 40, height: 40)
+                        .background(base.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.tile).strokeBorder(base, lineWidth: 2))
+                        .help("Currently using the app logo")
+                }
+                ForEach(Self.iconSymbols, id: \.self) { symbol in
+                    symbolChip(symbol)
+                }
+            }
+            if iconImageData != nil {
+                Text("Tap a symbol to use it instead of the app logo.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private func symbolChip(_ symbol: String) -> some View {
+        let selected = iconImageData == nil && icon == symbol
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                icon = symbol
+                iconImageData = nil
+            }
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(selected ? .white : base)
+                .frame(width: 40, height: 40)
+                .background(selected ? base : base.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(symbol)
+    }
+
+    private var actionsPanel: some View {
+        editorSection("Actions", systemImage: "bolt.fill") {
+            ForEach($drafts) { $draft in
+                ActionDraftRow(
+                    draft: $draft,
+                    installedApps: installedApps,
+                    onAppChosen: applyAppMetadata,
+                    onURLChanged: applyURLMetadata
+                ) {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        drafts.removeAll { $0.id == draft.id }
+                    }
+                }
+                .padding(Theme.Spacing.md)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control).strokeBorder(Theme.Palette.hairline))
+            }
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { drafts.append(ActionDraft()) }
+            } label: {
+                Label("Add action", systemImage: "plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(base)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(base.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.control)
+                            .strokeBorder(base.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if validActionCount < 2 {
+                Label(
+                    "A workspace opens at least two things at once — add \(2 - validActionCount) more.",
+                    systemImage: "info.circle"
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// A titled white card panel matching the app's card language.
+    private func editorSection(
+        _ title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .labelStyle(.titleAndIcon)
+            content()
+        }
+        .padding(Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fipleCard()
     }
 
     /// Human-readable swatch names for VoiceOver, keyed by hex.
@@ -161,8 +339,14 @@ struct TileEditorView: View {
                 } label: {
                     Circle()
                         .fill(Color(hex: hex))
-                        .frame(width: 22, height: 22)
-                        .overlay(Circle().strokeBorder(.primary, lineWidth: selected ? 2 : 0))
+                        .frame(width: 24, height: 24)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: selected ? 2 : 0))
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color(hex: hex), lineWidth: selected ? 2 : 0)
+                                .padding(-4)
+                        )
+                        .shadow(color: Color(hex: hex).opacity(selected ? 0.4 : 0), radius: 4, y: 1)
                         .frame(width: 44, height: 44) // ≥44pt hit target
                         .contentShape(Rectangle())
                 }
@@ -173,33 +357,23 @@ struct TileEditorView: View {
         }
     }
 
-    /// Picking an app fills in a name (unless the user typed their own) and its
-    /// real icon as the logo. Re-picking replaces a name we previously auto-filled.
+    /// Picking an app only suggests a name (unless the user typed their own). The
+    /// workspace icon is *not* taken from the app — a preset of several apps
+    /// shouldn't wear one app's logo, so the icon is the user's to pick above.
     private func applyAppMetadata(_ app: InstalledApp) {
-        if isNameAutoFillable { name = app.name; autoFilledName = app.name }
-        iconImageData = app.iconPNG
-        faviconHost = nil
+        guard isIdentityAutoFillable, isNameAutoFillable else { return }
+        name = app.name
+        autoFilledName = app.name
     }
 
-    /// Typing a URL fills in a name from the domain and fetches the site favicon.
+    /// Typing a URL only suggests a name from the domain — the site's favicon is
+    /// never used as the workspace icon (the user picks the icon themselves).
     private func applyURLMetadata(_ raw: String) {
         guard let host = URLInput.webURL(from: raw)?.host(), host.contains(".") else { return }
-        if isNameAutoFillable {
-            let pretty = Self.prettyName(fromHost: host)
-            name = pretty; autoFilledName = pretty
-        }
-        if icon == "square.grid.2x2" { icon = "globe" }
-        guard host != faviconHost else { return }
-        faviconHost = host
-        Task { await loadFavicon(host: host) }
-    }
-
-    private func loadFavicon(host: String) async {
-        guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128") else { return }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = NSImage(data: data), let png = AppIconRenderer.png(from: image) else { return }
-        // Apply only if the user is still on this host (avoids a stale late result).
-        if faviconHost == host { iconImageData = png }
+        guard isIdentityAutoFillable, isNameAutoFillable else { return }
+        let pretty = Self.prettyName(fromHost: host)
+        name = pretty
+        autoFilledName = pretty
     }
 
     /// "whooshly.app" → "Whooshly", "www.github.com" → "Github".
@@ -234,23 +408,86 @@ struct TileEditorView: View {
     }
 }
 
-/// Shows the tile's chosen logo, or its SF Symbol on the color swatch as a fallback.
-struct TileIconPreview: View {
-    let iconImageData: Data?
-    let systemName: String
-    let colorHex: String
+/// A live, non-interactive preview of the workspace card the user is building —
+/// the hero of the editor. It mirrors the real `WorkspaceCard` (icon, name,
+/// stats, tinted wash) minus the menu and Edit button, and animates as the form
+/// changes so "what am I making?" is always answered on screen.
+private struct LivePreviewCard: View {
+    let tile: Tile
+
+    private var base: Color { Color(hex: tile.colorHex) }
+    private var accent: Accent { Accent(hex: tile.colorHex) }
 
     var body: some View {
-        if let iconImageData, let image = NSImage(data: iconImageData) {
-            Image(nsImage: image)
-                .resizable()
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
-        } else {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color(hex: colorHex))
-                .frame(width: 32, height: 32)
-                .overlay(Image(systemName: systemName).foregroundStyle(.white))
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            HStack(alignment: .top, spacing: Theme.Spacing.md) {
+                IconTile(
+                    iconImageData: tile.iconImageData,
+                    systemName: tile.iconSystemName,
+                    colorHex: tile.colorHex,
+                    size: 46
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tile.name).font(Theme.Font.cardTitle).lineLimit(1)
+                    if let subtitle = tile.subtitle, !subtitle.isEmpty {
+                        Text(subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                    } else {
+                        Text("Add a short description").font(.subheadline).foregroundStyle(.tertiary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 0) {
+                StatColumn(value: tile.appCount, label: "Apps")
+                Rectangle()
+                    .fill(Theme.Palette.hairline)
+                    .frame(width: 1, height: 26)
+                    .padding(.horizontal, Theme.Spacing.lg)
+                StatColumn(value: tile.websiteCount, label: "Websites")
+                Spacer()
+                Label("Launches from iPhone", systemImage: "iphone.gen3")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(Theme.Spacing.xl)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                Theme.Palette.surface
+                accent.cardGradient
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                .strokeBorder(base.opacity(0.14))
+        )
+        .shadow(color: base.opacity(0.18), radius: 16, y: 6)
+        .animation(.easeInOut(duration: 0.22), value: tile.colorHex)
+    }
+}
+
+/// A labelled text field styled to match the editor's card panels instead of the
+/// stock grouped-form row.
+private struct EditorField: View {
+    let label: String
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+            TextField("", text: $text, prompt: Text(prompt))
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 8)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control).strokeBorder(Theme.Palette.hairline))
         }
     }
 }

@@ -1,9 +1,9 @@
 import FipleKit
 import SwiftUI
 
-/// Home: the connected-Mac status card, the real workspace presets streamed from
-/// the Mac, and a Quick Access grid of the individual apps / sites / files those
-/// workspaces use. Tapping a card or icon runs it on the Mac.
+/// Home: the connected-Mac status card, the real workspace presets (2+ actions)
+/// streamed from the Mac, and the Fiple Bar grid of single apps / sites pinned
+/// for one-tap launch. Tapping a card or icon runs it on the Mac.
 struct HomeView: View {
     let controller: RemoteController
     /// Switches the tab bar to Settings — wired to the gear in the header so it
@@ -19,8 +19,6 @@ struct HomeView: View {
                     ConnectionCard(controller: controller)
 
                     workspaces
-
-                    quickLaunch
 
                     quickAccess
                 }
@@ -91,34 +89,6 @@ struct HomeView: View {
         }
     }
 
-    // MARK: Quick Launch
-
-    /// Single-action tiles (everything that isn't a workspace preset) — without
-    /// this section they'd exist on the Mac but be unreachable from the phone.
-    /// May overlap with the Fiple Bar below; acceptable for v1.
-    @ViewBuilder private var quickLaunch: some View {
-        let items = controller.tiles.filter { !$0.isWorkspace && !$0.actions.isEmpty }
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SectionHeader("Quick Launch")
-
-                PagedTileGrid(items: items) { tile in
-                    if let action = tile.actions.first {
-                        Button {
-                            Task { await controller.run(tile) }
-                        } label: {
-                            QuickAccessTile(
-                                item: QuickAction(action: action, tileID: tile.id),
-                                isRunning: controller.runningTileID == tile.id
-                            )
-                        }
-                        .buttonStyle(QuickTilePressStyle())
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: Quick Access
 
     @ViewBuilder private var quickAccess: some View {
@@ -153,12 +123,6 @@ struct HomeView: View {
         }
     }
 
-    /// Runs the parent tile of a quick-access action (the wire protocol triggers
-    /// whole tiles, not individual actions).
-    private func run(_ item: QuickAction) {
-        guard let tile = controller.tiles.first(where: { $0.id == item.tileID }) else { return }
-        Task { await controller.run(tile) }
-    }
 }
 
 /// Height of one icon tile (icon + label + padding), so empty placeholder slots
