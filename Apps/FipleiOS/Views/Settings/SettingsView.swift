@@ -75,6 +75,7 @@ struct SettingsView: View {
                     chevron
                 }
                 .padding(Theme.Spacing.lg)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .fipleCard()
@@ -99,6 +100,7 @@ struct SettingsView: View {
                     chevron
                 }
                 .padding(Theme.Spacing.lg)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .fipleCard()
@@ -208,6 +210,9 @@ private struct SettingsRow: View {
             }
             .padding(.horizontal, Theme.Spacing.lg)
             .padding(.vertical, Theme.Spacing.md + 2)
+            // Make the entire row tappable, not just the icon/label — the Spacer
+            // and padding are dead zones without an explicit hit shape.
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
