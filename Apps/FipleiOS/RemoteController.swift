@@ -158,7 +158,7 @@ final class RemoteController {
     /// `silent` marks background auto-reconnect attempts: their failures must
     /// not bounce the UI into the pairing flow or surface an error — the phone
     /// may simply be off the Mac's network, which the tabbed UI already handles.
-    private func authenticate(_ auth: ClientMessage, silent: Bool = false) async {
+    private func authenticate(_ auth: ClientMessage, silent: Bool = false, timeout: Duration = .seconds(10)) async {
         guard let endpoint else { return }
         if case .reconnect = auth { pendingAuthIsReconnect = true } else { pendingAuthIsReconnect = false }
         // A silent auto-reconnect keeps the current UI (usually `.connected`) so a
@@ -168,7 +168,7 @@ final class RemoteController {
         if !silent { phase = .connecting }
         pairError = nil
         do {
-            let peer = try await client.connect(to: endpoint)
+            let peer = try await client.connect(to: endpoint, timeout: timeout)
             self.peer = peer
             startReceiving(on: peer)
             try await peer.send(auth)
@@ -187,6 +187,11 @@ final class RemoteController {
         receiveTask?.cancel()
         receiveTask = Task { [weak self] in
             guard let self else { return }
+            // The message stream *finishing* (no throw) means the Mac closed the
+            // socket cleanly — a deliberate quit / sleep / disconnect. A thrown
+            // error is an unclean drop (reset, timeout) that may just be a
+            // transient network blip. We treat the two very differently below.
+            var deliberate = true
             do {
                 for try await payload in await peer.messages {
                     // A newer Mac may send message types this build doesn't
@@ -199,9 +204,9 @@ final class RemoteController {
                     await self.handle(message)
                 }
             } catch {
-                // fall through to disconnect handling
+                deliberate = false
             }
-            await self.handleDrop(peer)
+            await self.handleDrop(peer, deliberate: deliberate)
         }
     }
 
@@ -367,7 +372,7 @@ final class RemoteController {
         phase = endpoint == nil ? .searching : .readyToPair
     }
 
-    private func handleDrop(_ peer: PeerConnection) async {
+    private func handleDrop(_ peer: PeerConnection, deliberate: Bool) async {
         guard self.peer === peer else { return }
         self.peer = nil
         // Nothing in flight will ever be answered on this socket; a spinner
@@ -375,13 +380,25 @@ final class RemoteController {
         runningTileID = nil
         runningActionID = nil
         runStartedAt.removeAll()
-        // Transient drop: auto-reconnect silently if we still trust this Mac.
-        if storedToken != nil {
-            FipleLog.connection.notice("connection dropped — auto-reconnecting")
-            scheduleReconnect()
-        } else {
+        guard storedToken != nil else {
             phase = endpoint == nil ? .searching : .readyToPair
+            return
         }
+        // A clean close means the Mac went away on purpose (quit / sleep /
+        // explicit disconnect) — reflect that immediately instead of pretending
+        // we're still connected to a Mac that's gone. An unclean error keeps the
+        // connected UI for the brief reconnect window so a transient Wi-Fi blip
+        // doesn't flash the searching screen. Either way we still try a silent
+        // token reconnect: if the Mac comes back we slide straight into it.
+        if deliberate {
+            tiles = []
+            fipleBar = []
+            phase = endpoint == nil ? .searching : .readyToPair
+            FipleLog.connection.notice("connection closed cleanly — Mac went away")
+        } else {
+            FipleLog.connection.notice("connection dropped — auto-reconnecting")
+        }
+        scheduleReconnect()
     }
 
     /// Retries the token reconnect with exponential backoff instead of giving
@@ -405,7 +422,10 @@ final class RemoteController {
                 // "connected" to a Mac that had gone away or disconnected it.
                 if self.peer != nil, self.phase == .connected { return }
                 if let token = self.storedToken, self.endpoint != nil, self.peer == nil {
-                    await self.authenticate(.reconnect(token: token), silent: true)
+                    // A short deadline so a truly-gone Mac (whose withdrawn Bonjour
+                    // service leaves the connect stuck in `.waiting`) surfaces as
+                    // "offline" in a few seconds instead of ~10.
+                    await self.authenticate(.reconnect(token: token), silent: true, timeout: .seconds(4))
                     misses += 1
                     if misses == 2 {
                         // Reconnect has clearly failed — we're offline now, so
