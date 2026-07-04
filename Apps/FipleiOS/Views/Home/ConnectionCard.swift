@@ -70,6 +70,9 @@ struct ConnectionCard: View {
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity)
         .fipleCard()
+        // When disconnected this whole card is a "tap to pair" button; without an
+        // explicit hit shape only the text/glyph registered taps, not the padding.
+        .contentShape(Rectangle())
     }
 }
 
