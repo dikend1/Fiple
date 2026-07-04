@@ -37,6 +37,10 @@ struct QuickAccessTile: View {
                 .strokeBorder(Theme.Palette.hairline)
         )
         .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
+        // Make the WHOLE tile tappable, not just the icon/label. Without this the
+        // Button (this tile is its label) only hit-tests the visible content, so
+        // taps on the card's padding/empty area were ignored — only the text ran.
+        .contentShape(Rectangle())
     }
 }
 

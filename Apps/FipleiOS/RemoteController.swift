@@ -161,7 +161,11 @@ final class RemoteController {
     private func authenticate(_ auth: ClientMessage, silent: Bool = false) async {
         guard let endpoint else { return }
         if case .reconnect = auth { pendingAuthIsReconnect = true } else { pendingAuthIsReconnect = false }
-        phase = .connecting
+        // A silent auto-reconnect keeps the current UI (usually `.connected`) so a
+        // brief Wi-Fi drop doesn't flash the connecting/pairing screen; the phase
+        // only moves if the reconnect actually fails or is rejected. Interactive
+        // pairing shows connecting progress as usual.
+        if !silent { phase = .connecting }
         pairError = nil
         do {
             let peer = try await client.connect(to: endpoint)
@@ -393,10 +397,15 @@ final class RemoteController {
             while !Task.isCancelled {
                 guard let self else { return }
                 guard self.storedToken != nil else { return }
-                if self.phase == .connected { return }
+                // We're genuinely back only when a *live socket* is paired again.
+                // Don't gate on `phase` alone: after a drop the UI intentionally
+                // stays `.connected` (to avoid flicker) while `peer` is nil, so
+                // gating this loop on `phase == .connected` made it return on the
+                // very first tick and never retry — leaving the phone stuck showing
+                // "connected" to a Mac that had gone away or disconnected it.
+                if self.peer != nil, self.phase == .connected { return }
                 if let token = self.storedToken, self.endpoint != nil, self.peer == nil {
                     await self.authenticate(.reconnect(token: token), silent: true)
-                    if self.phase == .connected { return }
                     misses += 1
                     if misses == 2 {
                         // Reconnect has clearly failed — we're offline now, so
