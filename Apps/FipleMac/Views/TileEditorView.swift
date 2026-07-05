@@ -258,6 +258,7 @@ struct TileEditorView: View {
                 ActionDraftRow(
                     draft: $draft,
                     installedApps: installedApps,
+                    accent: base,
                     onAppChosen: applyAppMetadata,
                     onURLChanged: applyURLMetadata
                 ) {
@@ -495,6 +496,9 @@ private struct EditorField: View {
 private struct ActionDraftRow: View {
     @Binding var draft: ActionDraft
     let installedApps: [InstalledApp]
+    /// The workspace's accent colour, so the App/URL toggle matches the editor's
+    /// theme instead of the stock blue segmented control.
+    var accent: Color = Theme.Palette.brand
     let onAppChosen: (InstalledApp) -> Void
     let onURLChanged: (String) -> Void
     let onDelete: () -> Void
@@ -502,15 +506,15 @@ private struct ActionDraftRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Picker("Type", selection: $draft.kind) {
-                    ForEach(ActionDraft.Kind.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                kindToggle
+                Spacer()
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .help("Remove this action")
             }
             switch draft.kind {
             case .launchApp:
@@ -522,6 +526,29 @@ private struct ActionDraftRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// A compact App / URL toggle tinted with the workspace accent — replaces the
+    /// stock `.segmented` picker, whose selected segment was always system blue.
+    private var kindToggle: some View {
+        HStack(spacing: 0) {
+            ForEach(ActionDraft.Kind.allCases) { kind in
+                let selected = draft.kind == kind
+                Button {
+                    withAnimation(.easeOut(duration: 0.12)) { draft.kind = kind }
+                } label: {
+                    Text(kind.rawValue)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(selected ? .white : .secondary)
+                        .frame(width: 58, height: 26)
+                        .background(selected ? accent : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(Color.black.opacity(0.05), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }
 
