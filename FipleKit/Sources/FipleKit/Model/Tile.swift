@@ -30,7 +30,7 @@ public struct Tile: Identifiable, Sendable, Equatable, Hashable, Codable {
         subtitle: String? = nil,
         iconSystemName: String = "square.grid.2x2",
         iconImageData: Data? = nil,
-        colorHex: String = "#3B82F6",
+        colorHex: String = "#34C759",
         order: Int = 0,
         actions: [Action] = []
     ) {
