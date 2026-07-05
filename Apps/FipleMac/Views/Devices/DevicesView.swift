@@ -21,7 +21,7 @@ struct DevicesView: View {
         case .connected:
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 HStack(spacing: Theme.Spacing.md) {
-                    IconTile(iconImageData: nil, systemName: "iphone.gen3", colorHex: "#34C759", size: 44)
+                    IconTile(iconImageData: nil, systemName: "iphone.gen3", colorHex: "#2DA44E", size: 44)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("iPhone connected").font(.system(size: 16, weight: .semibold))
                         Text("Changes sync live to your remote.")
