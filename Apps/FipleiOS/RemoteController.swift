@@ -505,7 +505,7 @@ final class RemoteController {
 
     static let demoTiles: [Tile] = [
         Tile(name: "Start Coding", subtitle: "Everything you need to code",
-             iconSystemName: "chevron.left.forwardslash.chevron.right", colorHex: "#34C759", order: 0,
+             iconSystemName: "chevron.left.forwardslash.chevron.right", colorHex: "#2DA44E", order: 0,
              actions: [
                 Action(kind: .launchApp(bundleID: "com.apple.dt.Xcode")),
                 Action(kind: .openURL(URL(string: "https://github.com")!)),

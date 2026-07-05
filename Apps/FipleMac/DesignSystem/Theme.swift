@@ -22,7 +22,7 @@ enum Theme {
 
     enum Palette {
         /// Brand green — active sidebar item, primary affordances.
-        static let brand = Color(hex: "#34C759")
+        static let brand = Color(hex: "#2DA44E")
         /// Light content background behind the cards.
         static let windowBackground = Color(hex: "#F4F5F7")
         /// Card surface and elevated panels.
@@ -33,7 +33,7 @@ enum Theme {
         static let sidebarText = Color(hex: "#E5E7EB")
         static let sidebarSecondary = Color(hex: "#8A94A6")
         static let hairline = Color.black.opacity(0.06)
-        static let connected = Color(hex: "#34C759")
+        static let connected = Color(hex: "#2DA44E")
     }
 
     enum Font {

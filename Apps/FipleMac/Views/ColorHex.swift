@@ -14,7 +14,7 @@ extension Color {
 }
 
 enum TilePalette {
-    // Brand green (#34C759) is first — it's the default workspace colour, so the
+    // Brand green (#2DA44E) is first — it's the default workspace colour, so the
     // picker opens with the default swatch selected and leftmost.
-    static let swatches = ["#34C759", "#3B82F6", "#8B5CF6", "#EF4444", "#F59E0B", "#EC4899", "#0EA5E9", "#64748B"]
+    static let swatches = ["#2DA44E", "#3B82F6", "#8B5CF6", "#EF4444", "#F59E0B", "#EC4899", "#0EA5E9", "#64748B"]
 }

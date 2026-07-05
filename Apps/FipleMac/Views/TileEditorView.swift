@@ -64,7 +64,7 @@ struct TileEditorView: View {
         _subtitle = State(initialValue: tile?.subtitle ?? "")
         _icon = State(initialValue: tile?.iconSystemName ?? "square.grid.2x2")
         _iconImageData = State(initialValue: tile?.iconImageData)
-        _colorHex = State(initialValue: tile?.colorHex ?? "#34C759")
+        _colorHex = State(initialValue: tile?.colorHex ?? "#2DA44E")
         // A workspace is a preset of 2+ actions, so a brand-new one opens with two
         // empty action rows to fill in; editing keeps the tile's real actions.
         _drafts = State(initialValue: tile?.actions.map(ActionDraft.init) ?? [ActionDraft(), ActionDraft()])
@@ -319,7 +319,7 @@ struct TileEditorView: View {
 
     /// Human-readable swatch names for VoiceOver, keyed by hex.
     private static let swatchNames: [String: String] = [
-        "#34C759": "Green",
+        "#2DA44E": "Green",
         "#3B82F6": "Blue",
         "#8B5CF6": "Purple",
         "#EF4444": "Red",
