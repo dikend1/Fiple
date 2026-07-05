@@ -341,14 +341,13 @@ private struct AddActionSheet: View {
 
     private var header: some View {
         VStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(brand.opacity(0.14))
-                    .frame(width: 54, height: 54)
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(brand)
-            }
+            // The real app icon (the Fiple logo), matching the menu-bar and
+            // sidebar branding — not a generic "+".
+            Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
+                .resizable()
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
             Text("Add to Fiple Bar").font(.system(size: 18, weight: .bold))
             Text("Pin an app or a website here, then open it from your iPhone with one tap.")
                 .font(.callout).foregroundStyle(.secondary)
