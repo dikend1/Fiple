@@ -13,6 +13,7 @@ struct TerminalScreen: View {
 
     @State private var session: TerminalSession?
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -53,10 +54,34 @@ struct TerminalScreen: View {
             }
             .ignoresSafeArea(.container, edges: .bottom)
         case let .failed(message):
-            statusMessage("Couldn’t open terminal", message, systemImage: "exclamationmark.triangle")
+            failureView(session, message: message)
         case .ended:
             statusMessage("Session paused", "Reopen to resume your shell.", systemImage: "moon.zzz")
         }
+    }
+
+    private func failureView(_ session: TerminalSession, message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 44)).foregroundStyle(.secondary)
+            VStack(spacing: 6) {
+                Text("Couldn’t open terminal").font(.headline)
+                Text(message).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Button("Try Again") {
+                // A wrong password is usually a stale saved one — forget it so the
+                // next attempt asks fresh — then return to Home to re-enter.
+                if session.lastAuthFailReason == .badPassword {
+                    TerminalCredentialStore.clear()
+                }
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.white)
+            .foregroundStyle(.black)
+        }
+        .foregroundStyle(.white)
+        .padding()
     }
 
     private func statusMessage(_ title: String, _ detail: String, systemImage: String) -> some View {
