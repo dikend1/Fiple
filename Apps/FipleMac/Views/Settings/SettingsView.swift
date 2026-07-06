@@ -104,7 +104,7 @@ struct SettingsView: View {
                     Text("Terminal Access").font(.system(size: 14, weight: .medium))
                     Text(terminal.hasPassword
                          ? "Run a shell on this Mac from your iPhone."
-                         : "Set a master password to enable.")
+                         : "Create a password below first, then turn this on.")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -121,10 +121,10 @@ struct SettingsView: View {
             Divider().padding(.leading, Theme.Spacing.md)
 
             HStack {
-                SecureField(terminal.hasPassword ? "Change master password" : "Set master password",
+                SecureField(terminal.hasPassword ? "Change password" : "Create a password (min 4 characters)",
                             text: $masterPassword)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 240)
+                    .frame(maxWidth: 280)
                 Button(terminal.hasPassword ? "Change" : "Set") {
                     terminal.setPassword(masterPassword)
                     masterPassword = ""

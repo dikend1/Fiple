@@ -34,17 +34,20 @@ final class TerminalController {
 
     init() {
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
-        hasPassword = Keychain.get(Self.passwordKey) != nil
+        hasPassword = Self.loadStoredRecordString() != nil
     }
 
     /// Sets or replaces the master password. Enabling is only allowed afterward.
     /// Notifies the server so a running/paired session can start the listener.
+    ///
+    /// `hasPassword` reflects whether the verifier was *actually* persisted — so
+    /// a failed write leaves the toggle disabled instead of enabling a feature
+    /// whose listener can never load its password.
     func setPassword(_ password: String) {
         let record = MasterPassword.make(password)
         guard let json = try? JSONEncoder().encode(record),
               let string = String(data: json, encoding: .utf8) else { return }
-        Keychain.set(string, for: Self.passwordKey)
-        hasPassword = true
+        hasPassword = Self.storeRecordString(string)
         didChange?()
     }
 
@@ -92,8 +95,33 @@ final class TerminalController {
     }
 
     private func loadRecord() -> MasterPasswordRecord? {
-        guard let string = Keychain.get(Self.passwordKey),
+        guard let string = Self.loadStoredRecordString(),
               let data = string.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(MasterPasswordRecord.self, from: data)
+    }
+
+    // MARK: - Verifier persistence
+    //
+    // The stored value is a PBKDF2 salt+hash (a verifier), never the password.
+    // Prefer the Keychain, but a non-sandboxed build without a keychain-access
+    // group can't write the data-protection keychain — so we verify the write
+    // read-back and fall back to UserDefaults so the feature still works. The
+    // sandboxed 1.0 build stays Keychain-only (the write succeeds there).
+
+    /// Persists the verifier, returning whether it can be read back afterward.
+    private static func storeRecordString(_ string: String) -> Bool {
+        UserDefaults.standard.removeObject(forKey: passwordKey) // clear any stale fallback
+        Keychain.set(string, for: passwordKey)
+        if Keychain.get(passwordKey) == string { return true }
+
+        // Keychain unavailable (non-sandboxed dev build) — fall back so the
+        // terminal still works on the branch.
+        FipleLog.connection.notice("terminal password: keychain unavailable, storing verifier in UserDefaults")
+        UserDefaults.standard.set(string, forKey: passwordKey)
+        return UserDefaults.standard.string(forKey: passwordKey) != nil
+    }
+
+    private static func loadStoredRecordString() -> String? {
+        Keychain.get(passwordKey) ?? UserDefaults.standard.string(forKey: passwordKey)
     }
 }
