@@ -28,6 +28,9 @@ final class ServerController {
 
     @ObservationIgnored let store: TileStore
     @ObservationIgnored let pinned: PinnedAppsStore
+    /// The privileged terminal feature. Its listener is separate from the tile
+    /// server; this controller advertises it to the paired phone.
+    @ObservationIgnored let terminal: TerminalController
     @ObservationIgnored private let server = FipleServer()
     @ObservationIgnored private let executor = MacActionExecutor()
     @ObservationIgnored private var peer: PeerConnection?
@@ -48,15 +51,19 @@ final class ServerController {
     /// explicit restart — never when a connection drops.
     @ObservationIgnored private var throttle = PairingThrottle(lockoutDuration: 10)
 
-    init(store: TileStore, pinned: PinnedAppsStore) {
+    init(store: TileStore, pinned: PinnedAppsStore, terminal: TerminalController = TerminalController()) {
         self.store = store
         self.pinned = pinned
+        self.terminal = terminal
         sessionToken = Self.loadToken()
         store.didChange = { [weak self] in
             Task { await self?.pushSnapshot() }
         }
         pinned.didChange = { [weak self] in
             Task { await self?.pushFipleBar() }
+        }
+        terminal.didChange = { [weak self] in
+            Task { await self?.pushTerminalInfo() }
         }
     }
 
@@ -287,6 +294,18 @@ final class ServerController {
         try? await peer.send(ServerMessage.deviceInfo(macKind: MacDeviceInfo.current))
         await sendTilesSnapshot(to: peer)
         await sendFipleBar(to: peer)
+        // Bring the terminal listener in line with this pairing (its PSK is keyed
+        // to the token) and tell the phone whether/where it can connect.
+        await terminal.syncService(pairingToken: token)
+        try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled, port: terminal.port))
+    }
+
+    /// Re-advertises the terminal service to the connected phone after the Mac
+    /// toggles the feature. Also (re)binds the listener to the current token.
+    private func pushTerminalInfo() async {
+        guard isPaired, let peer, let token = sessionToken else { return }
+        await terminal.syncService(pairingToken: token)
+        try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled, port: terminal.port))
     }
 
     /// Compares bearer tokens without early exit, so a mismatch's timing leaks

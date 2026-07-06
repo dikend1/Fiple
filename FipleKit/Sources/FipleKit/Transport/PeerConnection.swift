@@ -84,6 +84,24 @@ public actor PeerConnection {
         finish(throwing: nil)
     }
 
+    /// The Mac's resolved address for this live connection, if known. The phone
+    /// reuses it to reach the terminal service on the advertised port without a
+    /// second Bonjour resolution — the tile channel has already resolved the Mac.
+    public func remoteHost() -> String? {
+        guard case let .hostPort(host, _)? = connection.currentPath?.remoteEndpoint else { return nil }
+        switch host {
+        case let .ipv4(address):
+            return "\(address)"
+        case let .ipv6(address):
+            // Strip any %interface zone id — NWEndpoint.Host re-adds scope itself.
+            return "\(address)".components(separatedBy: "%").first
+        case let .name(name, _):
+            return name
+        @unknown default:
+            return nil
+        }
+    }
+
     /// Registers a one-shot handler invoked when the connection finishes
     /// (closed, failed, or cancelled). Fires immediately if already finished.
     /// Used by ``FipleServer`` to free a connection slot.

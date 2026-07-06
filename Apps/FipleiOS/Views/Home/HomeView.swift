@@ -10,6 +10,10 @@ struct HomeView: View {
     /// matches the mockup without nesting a second settings navigation stack.
     var onOpenSettings: () -> Void = {}
 
+    @State private var showTerminalSheet = false
+    @State private var terminalPassword = ""
+    @State private var openTerminal = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -17,6 +21,10 @@ struct HomeView: View {
                     header
 
                     ConnectionCard(controller: controller)
+
+                    if controller.terminalTarget != nil {
+                        terminalEntry
+                    }
 
                     workspaces
 
@@ -29,6 +37,65 @@ struct HomeView: View {
             .background(Theme.Palette.background)
             .toolbar(.hidden, for: .navigationBar)
         }
+        .sheet(isPresented: $showTerminalSheet) { terminalPasswordSheet }
+        .fullScreenCover(isPresented: $openTerminal) {
+            if let target = controller.terminalTarget {
+                TerminalScreen(
+                    host: target.host, port: target.port,
+                    pairingToken: target.token, masterPassword: terminalPassword
+                )
+            }
+        }
+    }
+
+    // MARK: Terminal
+
+    private var terminalEntry: some View {
+        Button {
+            terminalPassword = ""
+            showTerminalSheet = true
+        } label: {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "terminal.fill").font(.fiple(20, .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Terminal").font(.fiple(17, .semibold))
+                    Text("Run a shell on your Mac").font(.fiple(13)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.fiple(13, .semibold)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(Theme.Palette.label)
+            .padding(Theme.Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var terminalPasswordSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Master Password") {
+                    SecureField("Enter master password", text: $terminalPassword)
+                        .textContentType(.password)
+                }
+            }
+            .navigationTitle("Open Terminal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showTerminalSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Open") {
+                        showTerminalSheet = false
+                        openTerminal = true
+                    }
+                    .disabled(terminalPassword.isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.height(200)])
     }
 
     // MARK: Header

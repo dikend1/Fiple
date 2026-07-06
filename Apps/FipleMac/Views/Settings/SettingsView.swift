@@ -11,6 +11,7 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @State private var launchAtLogin = false
     @State private var launchAtLoginError: String?
+    @State private var masterPassword = ""
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -29,6 +30,10 @@ struct SettingsView: View {
 
                 section("Preferences") {
                     launchAtLoginRow
+                }
+
+                section("Terminal") {
+                    terminalSection
                 }
 
                 section("About") {
@@ -86,6 +91,55 @@ struct SettingsView: View {
         }
         .padding(.vertical, Theme.Spacing.sm)
         .padding(.horizontal, Theme.Spacing.md)
+    }
+
+    // MARK: Terminal
+
+    @ViewBuilder
+    private var terminalSection: some View {
+        let terminal = server.terminal
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Terminal Access").font(.system(size: 14, weight: .medium))
+                    Text(terminal.hasPassword
+                         ? "Run a shell on this Mac from your iPhone."
+                         : "Set a master password to enable.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("Terminal Access", isOn: Binding(
+                    get: { terminal.enabled },
+                    set: { terminal.setEnabled($0) }
+                ))
+                .labelsHidden().toggleStyle(.switch).tint(Theme.Palette.brand)
+                .disabled(!terminal.hasPassword)
+            }
+            .padding(.vertical, Theme.Spacing.sm)
+            .padding(.horizontal, Theme.Spacing.md)
+
+            Divider().padding(.leading, Theme.Spacing.md)
+
+            HStack {
+                SecureField(terminal.hasPassword ? "Change master password" : "Set master password",
+                            text: $masterPassword)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 240)
+                Button(terminal.hasPassword ? "Change" : "Set") {
+                    terminal.setPassword(masterPassword)
+                    masterPassword = ""
+                }
+                .disabled(masterPassword.count < 4)
+                Spacer()
+            }
+            .padding(.vertical, Theme.Spacing.sm)
+            .padding(.horizontal, Theme.Spacing.md)
+
+            if terminal.enabled, terminal.port != 0 {
+                Divider().padding(.leading, Theme.Spacing.md)
+                settingRow(title: "Status", value: "Listening on port \(terminal.port)")
+            }
+        }
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
