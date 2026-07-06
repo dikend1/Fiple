@@ -47,6 +47,7 @@ struct TerminalScreen: View {
                 .tint(.white).foregroundStyle(.white)
         case .ready:
             VStack(spacing: 0) {
+                terminalTopBar
                 // A fresh emulator per connection redraws the replayed scrollback
                 // cleanly instead of appending it to stale content.
                 SwiftTermView(session: session).id(session.generation)
@@ -56,8 +57,38 @@ struct TerminalScreen: View {
         case let .failed(message):
             failureView(session, message: message)
         case .ended:
-            statusMessage("Session paused", "Reopen to resume your shell.", systemImage: "moon.zzz")
+            VStack(spacing: 20) {
+                Image(systemName: "moon.zzz").font(.system(size: 44)).foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    Text("Session paused").font(.headline)
+                    Text("Reopen to resume your shell.").font(.subheadline).foregroundStyle(.secondary)
+                }
+                Button("Close") { dismiss() }
+                    .buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
+            }
+            .foregroundStyle(.white).padding()
         }
+    }
+
+    /// A slim bar over the terminal with the way out — the shell keeps running on
+    /// the Mac (detached), so this just closes the screen, it doesn't kill it.
+    private var terminalTopBar: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Label("Done", systemImage: "chevron.down")
+                    .font(.system(.subheadline, weight: .semibold))
+            }
+            .tint(.white)
+            Spacer()
+            Text("Terminal").font(.system(.subheadline, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.5))
+            Spacer()
+            // Balances the leading button so the title stays centered.
+            Label("Done", systemImage: "chevron.down").opacity(0).accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.black)
     }
 
     private func failureView(_ session: TerminalSession, message: String) -> some View {
