@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- BRANCH-ONLY (feat/remote-terminal): the terminal feature needs a real,
+	     un-sandboxed login shell (brew, git, user projects), which the App
+	     Sandbox forbids. This file drops `com.apple.security.app-sandbox` so the
+	     host can spawn a full pty for local device testing. It mirrors the
+	     eventual ADR-0006 Developer ID posture. DO NOT ship this / merge to main;
+	     the sandboxed 1.0 config lives in Fiple.entitlements. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>
