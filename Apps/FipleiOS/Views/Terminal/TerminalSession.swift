@@ -22,6 +22,9 @@ final class TerminalSession {
     }
 
     private(set) var phase: Phase = .connecting
+    /// The reason for the most recent auth rejection, so the UI can react (e.g.
+    /// clear a stale saved password on `.badPassword` and offer a retry).
+    private(set) var lastAuthFailReason: TerminalAuthFailReason?
     /// Bumped on every successful (re)connect, so the terminal view can force a
     /// fresh emulator and cleanly redraw the replayed scrollback.
     private(set) var generation = 0
@@ -100,6 +103,7 @@ final class TerminalSession {
                 case let .output(data):
                     self.outputHandler?(data)
                 case let .authFailed(reason):
+                    self.lastAuthFailReason = reason
                     self.phase = .failed(Self.message(for: reason))
                 case .ended:
                     // Backgrounding kills the socket; keep resumeSessionID so a
