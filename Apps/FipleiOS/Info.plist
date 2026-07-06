@@ -28,6 +28,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Fiple finds your Mac on the local network to send tile commands.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Fiple uses Face ID to unlock the Mac terminal without retyping your master password.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
