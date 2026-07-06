@@ -52,6 +52,61 @@ struct TerminalServiceEndToEndTests {
         service.stop()
     }
 
+    @Test("Reconnecting with the session id resumes the shell and replays its buffer")
+    func reattachReplaysBuffer() async throws {
+        let service = makeService() // default 10-min grace: session survives the gap
+        let port = try await service.start()
+
+        // First connection: authenticate, run a command, capture the session id.
+        let first = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await first.connect()
+        first.authenticate(passwordProof: password, token: token)
+
+        var sessionID: String?
+        var firstOutput = ""
+        for await event in first.events {
+            switch event {
+            case let .authenticated(id):
+                sessionID = id
+                first.send(Data("reattach-me\n".utf8))
+            case let .output(data):
+                firstOutput += String(decoding: data, as: UTF8.self)
+            default:
+                break
+            }
+            if firstOutput.contains("reattach-me") { break }
+        }
+        #expect(firstOutput.contains("reattach-me"))
+        let resumeID = try #require(sessionID)
+
+        // Drop the first connection — the shell detaches but keeps running.
+        first.close()
+
+        // Second connection: resume the same session; its buffer must replay.
+        let second = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await second.connect()
+        second.authenticate(passwordProof: password, token: token, resumeSessionID: resumeID)
+
+        var resumedID: String?
+        var replay = ""
+        for await event in second.events {
+            switch event {
+            case let .authenticated(id):
+                resumedID = id
+            case let .output(data):
+                replay += String(decoding: data, as: UTF8.self)
+            default:
+                break
+            }
+            if replay.contains("reattach-me") { break }
+        }
+        #expect(resumedID == resumeID) // same shell, not a fresh one
+        #expect(replay.contains("reattach-me")) // scrollback replayed on reattach
+
+        second.close()
+        service.stop()
+    }
+
     @Test("A wrong master password is rejected with no shell attached")
     func wrongPasswordRejected() async throws {
         let service = makeService()

@@ -7,9 +7,8 @@ struct TerminalControlTests {
     @Test("Client control messages round-trip through JSON")
     func clientRoundTrip() throws {
         let messages: [TerminalClientControl] = [
-            .auth(token: "tok-123", passwordProof: "proof-abc"),
-            .attach(sessionID: "sess-1"),
-            .newSession
+            .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: nil),
+            .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: "sess-1")
         ]
         for message in messages {
             let data = try MessageCodec.encode(message)
@@ -49,7 +48,7 @@ struct TerminalControlTests {
 
     @Test("An unknown message type is skipped by decodeIfKnown, not fatal")
     func unknownTypeSkipped() throws {
-        let json = Data(#"{"type":"teleport","sessionID":"x"}"#.utf8)
+        let json = Data(#"{"type":"teleport","token":"x"}"#.utf8)
         let decoded = try MessageCodec.decodeIfKnown(TerminalClientControl.self, from: json)
         #expect(decoded == nil)
     }
