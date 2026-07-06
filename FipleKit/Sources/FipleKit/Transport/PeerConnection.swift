@@ -93,8 +93,9 @@ public actor PeerConnection {
         case let .ipv4(address):
             return "\(address)"
         case let .ipv6(address):
-            // Strip any %interface zone id — NWEndpoint.Host re-adds scope itself.
-            return "\(address)".components(separatedBy: "%").first
+            // Keep the %interface zone id: a link-local address (fe80::/10) is
+            // unroutable without it, and NWEndpoint.Host parses it back intact.
+            return "\(address)"
         case let .name(name, _):
             return name
         @unknown default:
