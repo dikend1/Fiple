@@ -37,11 +37,16 @@ public final class PTYSession: @unchecked Sendable {
         arguments: [String]? = nil,
         cols: Int = 80,
         rows: Int = 24,
+        workingDirectory: String? = nil,
         environment: [String: String] = ["TERM": "xterm-256color"]
     ) throws {
         let shell = shellPath ?? ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         // Default to a login shell so the user's PATH and rc files load.
         let argv = arguments ?? [shell, "-l"]
+        // Start in the user's home, like Terminal.app — a GUI app's cwd is `/`,
+        // which the forked shell would otherwise inherit. Resolved before the
+        // fork so the child only needs an async-signal-safe `chdir`.
+        let cwd = workingDirectory ?? FileManager.default.homeDirectoryForCurrentUser.path
 
         var master: Int32 = 0
         var size = winsize(ws_row: UInt16(rows), ws_col: UInt16(cols), ws_xpixel: 0, ws_ypixel: 0)
@@ -52,7 +57,9 @@ public final class PTYSession: @unchecked Sendable {
         }
 
         if childPID == 0 {
-            // Child. Set TERM et al., then exec the shell, replacing this image.
+            // Child. Move to the home directory, set TERM et al., then exec the
+            // shell, replacing this image.
+            _ = cwd.withCString { chdir($0) }
             for (key, value) in environment { setenv(key, value, 1) }
             let cArgs: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
             execv(shell, cArgs)

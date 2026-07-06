@@ -28,6 +28,18 @@ struct PTYSessionTests {
         pty.close()
     }
 
+    @Test("The shell starts in the requested working directory")
+    func startsInWorkingDirectory() async throws {
+        let sink = Sink()
+        // /bin/pwd prints the cwd and exits — proves the child chdir'd.
+        let pty = try PTYSession(shellPath: "/bin/pwd", arguments: ["/bin/pwd"], workingDirectory: "/usr")
+        pty.onOutput = { sink.append($0) }
+
+        try await waitUntil(timeout: 5) { sink.text().contains("/usr") }
+        #expect(sink.text().contains("/usr"))
+        pty.close()
+    }
+
     @Test("The shell window can be resized without error")
     func resizeDoesNotCrash() async throws {
         let pty = try PTYSession(shellPath: "/bin/cat", arguments: ["/bin/cat"])
