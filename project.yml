@@ -9,6 +9,12 @@ options:
 packages:
   FipleKit:
     path: FipleKit
+  # SwiftTerm (MIT) — xterm-compatible terminal renderer for the iOS remote
+  # terminal. First third-party dependency; recorded per the stack-selection
+  # policy. iOS client only; the Mac host has no SwiftTerm dependency.
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: "1.2.0"
 
 settings:
   base:
@@ -47,6 +53,7 @@ targets:
       - Apps/FipleiOS
     dependencies:
       - package: FipleKit
+      - package: SwiftTerm
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp
