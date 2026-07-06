@@ -3,7 +3,7 @@ import Network
 import Testing
 @testable import FipleKit
 
-@Suite("Terminal TLS loopback", .timeLimit(.minutes(1)))
+@Suite("Terminal TLS loopback", .serialized, .timeLimit(.minutes(1)))
 struct TerminalTLSLoopbackTests {
     /// Brings up a TLS-PSK listener on localhost and connects with matching
     /// parameters, then pushes one terminal DATA frame through the encrypted
