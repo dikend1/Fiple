@@ -2,16 +2,17 @@ import SwiftUI
 import SwiftTerm
 import FipleKit
 
-/// Bridges SwiftTerm's `TerminalView` to a ``TerminalClient``.
+/// Bridges SwiftTerm's `TerminalView` to a ``TerminalSession``.
 ///
 /// SwiftTerm owns the xterm emulation and rendering; this view wires its two
-/// directions to the encrypted channel: bytes the user types are forwarded to
-/// the Mac's pty, and shell output from the channel is fed back into the
-/// emulator. Size changes are reported so the pty reflows.
+/// directions to the session: bytes the user types go to the Mac's shell, and
+/// shell output the session delivers is fed into the emulator. Size changes are
+/// reported so the pty reflows. Recreated (via `.id(session.generation)`) on each
+/// reconnect, so a resumed session's replayed scrollback redraws a clean screen.
 struct SwiftTermView: UIViewRepresentable {
-    let client: TerminalClient
+    let session: TerminalSession
 
-    func makeCoordinator() -> Coordinator { Coordinator(client: client) }
+    func makeCoordinator() -> Coordinator { Coordinator(session: session) }
 
     func makeUIView(context: Context) -> TerminalView {
         let terminal = TerminalView(frame: .zero)
@@ -27,53 +28,38 @@ struct SwiftTermView: UIViewRepresentable {
         coordinator.detach()
     }
 
-    /// Owns the client→terminal pump and forwards terminal→client events.
-    /// Main-actor isolated: SwiftTerm drives the delegate on the main thread and
-    /// all `TerminalView` mutation must happen there.
+    /// Receives shell output from the session and forwards keystrokes back.
     @MainActor
     final class Coordinator: NSObject, TerminalViewDelegate {
-        private let client: TerminalClient
+        private let session: TerminalSession
         private weak var terminal: TerminalView?
-        private var pumpTask: Task<Void, Never>?
 
-        init(client: TerminalClient) { self.client = client }
+        init(session: TerminalSession) { self.session = session }
 
-        /// Starts draining channel output into the emulator once the view exists.
+        /// Routes session output into the emulator.
         func attach(to terminal: TerminalView) {
             self.terminal = terminal
-            pumpTask = Task { [weak self] in
-                guard let self else { return }
-                for await event in self.client.events {
-                    switch event {
-                    case let .output(data):
-                        self.terminal?.feed(byteArray: ArraySlice(data))
-                    case let .ended(code):
-                        let note = "\r\n[session ended\(code.map { " (exit \($0))" } ?? "")]\r\n"
-                        self.terminal?.feed(text: note)
-                    case .authenticated, .authFailed:
-                        break // handled by TerminalScreen
-                    }
-                }
+            session.outputHandler = { [weak terminal] data in
+                terminal?.feed(byteArray: ArraySlice(data))
             }
         }
 
         func detach() {
-            pumpTask?.cancel()
-            pumpTask = nil
+            session.outputHandler = nil
         }
 
         // MARK: TerminalViewDelegate
         // SwiftTerm's protocol is nonisolated; these witnesses only touch the
-        // Sendable `client`, so they stay nonisolated and hop nowhere.
+        // session (main-actor safe via its own isolation) — kept nonisolated to
+        // satisfy the protocol, hopping onto the main actor to call it.
 
-        /// User typed something → forward the bytes to the Mac's shell.
         nonisolated func send(source: TerminalView, data: ArraySlice<UInt8>) {
-            client.send(Data(data))
+            let bytes = Data(data)
+            Task { @MainActor in session.send(bytes) }
         }
 
-        /// The visible grid changed → tell the pty so full-screen apps reflow.
         nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-            client.resize(cols: newCols, rows: newRows)
+            Task { @MainActor in session.resize(cols: newCols, rows: newRows) }
         }
 
         nonisolated func scrolled(source: TerminalView, position: Double) {}

@@ -52,8 +52,7 @@ struct HomeView: View {
 
     private var terminalEntry: some View {
         Button {
-            terminalPassword = ""
-            showTerminalSheet = true
+            Task { await beginTerminal() }
         } label: {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "terminal.fill").font(.fiple(20, .semibold))
@@ -72,6 +71,21 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
+    /// Opens the terminal: unlock with Face ID if a password is already saved,
+    /// otherwise prompt for it (and save it behind biometrics on success).
+    private func beginTerminal() async {
+        if TerminalCredentialStore.hasStoredPassword() {
+            if let password = await TerminalCredentialStore.retrieve(reason: "Unlock the Mac terminal") {
+                terminalPassword = password
+                openTerminal = true
+                return
+            }
+            // Biometry cancelled or failed — fall back to typing.
+        }
+        terminalPassword = ""
+        showTerminalSheet = true
+    }
+
     private var terminalPasswordSheet: some View {
         NavigationStack {
             Form {
@@ -88,10 +102,12 @@ struct HomeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Open") {
+                        // Remember the password behind Face ID for next time.
+                        TerminalCredentialStore.save(terminalPassword)
                         showTerminalSheet = false
                         openTerminal = true
                     }
-                    .disabled(terminalPassword.isEmpty)
+                    .disabled(terminalPassword.count < 4)
                 }
             }
         }
