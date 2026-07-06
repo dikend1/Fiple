@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import FipleKit
 
-@Suite("PTY session", .timeLimit(.minutes(1)))
+@Suite("PTY session", .serialized, .timeLimit(.minutes(1)))
 struct PTYSessionTests {
     /// Collects pty output across callbacks in a thread-safe way.
     private final class Sink: @unchecked Sendable {
