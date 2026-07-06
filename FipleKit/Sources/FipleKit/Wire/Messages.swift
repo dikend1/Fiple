@@ -87,6 +87,12 @@ public enum ServerMessage: Sendable, Equatable {
     case fipleBar(actions: [Action])
     /// Per-action result of a triggered tile.
     case runResult(RunResult)
+    /// Advertises the privileged terminal service on this Mac: whether it is
+    /// enabled and, if so, the TCP port its TLS-PSK listener is bound to. Sent
+    /// on connect and whenever the Mac toggles the feature. The phone connects
+    /// to `port` on the Mac's resolved address, deriving the channel PSK from the
+    /// same pairing token (ADR-0005). Older remotes skip this unknown type.
+    case terminalService(enabled: Bool, port: UInt16)
 }
 
 extension ServerMessage: WireTypeTagged {
@@ -95,9 +101,9 @@ extension ServerMessage: WireTypeTagged {
 }
 
 extension ServerMessage: Codable {
-    private enum Tag: String, Codable, CaseIterable { case paired, deviceInfo, pairRejected, tilesSnapshot, fipleBar, runResult }
+    private enum Tag: String, Codable, CaseIterable { case paired, deviceInfo, pairRejected, tilesSnapshot, fipleBar, runResult, terminalService }
     private enum CodingKeys: String, CodingKey {
-        case type, macID, macName, macKind, token, reason, tiles, actions, result, version
+        case type, macID, macName, macKind, token, reason, tiles, actions, result, version, enabled, terminalPort
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +131,11 @@ extension ServerMessage: Codable {
             self = .fipleBar(actions: try c.decode([Action].self, forKey: .actions))
         case .runResult:
             self = .runResult(try c.decode(RunResult.self, forKey: .result))
+        case .terminalService:
+            self = .terminalService(
+                enabled: try c.decode(Bool.self, forKey: .enabled),
+                port: try c.decode(UInt16.self, forKey: .terminalPort)
+            )
         }
     }
 
@@ -152,6 +163,10 @@ extension ServerMessage: Codable {
         case let .runResult(result):
             try c.encode(Tag.runResult, forKey: .type)
             try c.encode(result, forKey: .result)
+        case let .terminalService(enabled, port):
+            try c.encode(Tag.terminalService, forKey: .type)
+            try c.encode(enabled, forKey: .enabled)
+            try c.encode(port, forKey: .terminalPort)
         }
     }
 }

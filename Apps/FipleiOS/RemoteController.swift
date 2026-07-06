@@ -38,6 +38,20 @@ final class RemoteController {
     /// The Mac's curated Fiple Bar — quick actions synced from the Mac (apps,
     /// websites, files), tapped here to launch on the Mac.
     private(set) var fipleBar: [Action] = []
+
+    /// Terminal service state advertised by the Mac over the tile channel.
+    private(set) var terminalEnabled = false
+    private(set) var terminalPort: UInt16 = 0
+    /// The Mac's resolved address, reused from the live tile connection.
+    private(set) var terminalHost: String?
+
+    /// Everything the terminal screen needs to open a session, or nil when the
+    /// Mac hasn't enabled the feature (or we're not connected).
+    var terminalTarget: (host: String, port: UInt16, token: String)? {
+        guard terminalEnabled, terminalPort != 0,
+              let terminalHost, let token = storedToken else { return nil }
+        return (terminalHost, terminalPort, token)
+    }
     /// Phone-side launch history. The Mac keeps its own `RecentStore`, but it is
     /// not sent over the wire, so the remote records what *it* triggers — newest
     /// first, capped and persisted so it survives relaunch.
@@ -256,6 +270,14 @@ final class RemoteController {
         case let .fipleBar(actions):
             self.fipleBar = actions
 
+        case let .terminalService(enabled, port):
+            terminalEnabled = enabled
+            terminalPort = port
+            // Reuse the Mac address the tile channel already resolved, so the
+            // terminal connects without a second Bonjour lookup.
+            terminalHost = await peer?.remoteHost()
+            FipleLog.connection.info("terminal service \(enabled ? "on port \(port)" : "off")")
+
         case let .runResult(result):
             if let started = runStartedAt.removeValue(forKey: result.tileID) {
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
@@ -364,6 +386,9 @@ final class RemoteController {
         peer = nil
         tiles = []
         fipleBar = []
+        terminalEnabled = false
+        terminalPort = 0
+        terminalHost = nil
         macName = nil
         macKind = .laptop
         runningTileID = nil

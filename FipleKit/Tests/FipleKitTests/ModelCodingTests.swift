@@ -90,6 +90,8 @@ struct ModelCodingTests {
             .pairRejected(reason: .tooManyAttempts),
             .tilesSnapshot(tiles: [Tile(name: "Deep Work")]),
             .runResult(RunResult(tileID: id, actions: [.success(UUID()), .failure(UUID(), "not installed")])),
+            .terminalService(enabled: true, port: 52123),
+            .terminalService(enabled: false, port: 0),
         ]
         for message in messages {
             #expect(try roundTrip(message) == message)
