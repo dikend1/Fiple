@@ -62,15 +62,16 @@ public final class TerminalClient: @unchecked Sendable {
         receive()
     }
 
-    /// Sends the auth handshake — the pairing token plus a proof of the master
-    /// password. Watch ``events`` for `.authenticated` or `.authFailed`.
-    public func authenticate(passwordProof: String, token: String) {
-        sendControl(.auth(token: token, passwordProof: passwordProof))
-    }
+    /// The shell session id the Mac assigned, learned from `.authenticated`.
+    /// Pass it back as `resumeSessionID` on the next connect to reattach.
+    public private(set) var sessionID: String?
 
-    /// Reattaches to an existing shell session after a reconnect.
-    public func attach(sessionID: String) {
-        sendControl(.attach(sessionID: sessionID))
+    /// Sends the auth handshake — the pairing token plus a proof of the master
+    /// password. If `resumeSessionID` names a shell still alive on the Mac, it is
+    /// resumed (buffer replayed); otherwise a fresh shell starts. Watch
+    /// ``events`` for `.authenticated` or `.authFailed`.
+    public func authenticate(passwordProof: String, token: String, resumeSessionID: String? = nil) {
+        sendControl(.auth(token: token, passwordProof: passwordProof, resumeSessionID: resumeSessionID))
     }
 
     /// Sends keystrokes to the shell.
@@ -112,7 +113,9 @@ public final class TerminalClient: @unchecked Sendable {
         case .control:
             guard let control = try? MessageCodec.decode(TerminalServerControl.self, from: frame.payload) else { return }
             switch control {
-            case let .authOK(sessionID): continuation.yield(.authenticated(sessionID: sessionID))
+            case let .authOK(sessionID):
+                self.sessionID = sessionID
+                continuation.yield(.authenticated(sessionID: sessionID))
             case let .authFailed(reason): continuation.yield(.authFailed(reason))
             case let .sessionEnded(code): finish(exitCode: code)
             }

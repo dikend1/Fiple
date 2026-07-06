@@ -4,29 +4,35 @@ import Network
 
 /// The Mac's privileged terminal listener: a TLS-PSK channel that authenticates
 /// with the pairing token + master password, then bridges an encrypted socket to
-/// a live `PTYSession`. Separate from the plaintext tile listener (ADR-0005).
+/// a live shell session. Separate from the plaintext tile listener (ADR-0005).
 ///
-/// Off by default in the app; the app constructs and `start()`s it only after
-/// the user enables the feature and sets a master password.
+/// Shell sessions live in a registry independent of connections, so a phone that
+/// backgrounds and reconnects resumes the same shell (detach/reattach). Off by
+/// default in the app; started only after the user enables the feature and sets
+/// a master password.
 public final class TerminalService: @unchecked Sendable {
     private let pairingToken: String
     private let passwordRecord: MasterPasswordRecord
-    private let shellPath: String?
-    private let shellArguments: [String]?
     private let queue = DispatchQueue(label: "com.fiple.terminal.service")
+    private let registry: TerminalSessionRegistry
     private var listener: NWListener?
-    private var sessions: [ObjectIdentifier: ConnectionSession] = [:]
+    private var connections: [ObjectIdentifier: ConnectionSession] = [:]
 
+    /// - Parameter graceInterval: how long a disconnected shell survives before
+    ///   SIGHUP (default 10 minutes).
     public init(
         pairingToken: String,
         passwordRecord: MasterPasswordRecord,
         shellPath: String? = nil,
-        shellArguments: [String]? = nil
+        shellArguments: [String]? = nil,
+        graceInterval: TimeInterval = 600
     ) {
         self.pairingToken = pairingToken
         self.passwordRecord = passwordRecord
-        self.shellPath = shellPath
-        self.shellArguments = shellArguments
+        self.registry = TerminalSessionRegistry(
+            queue: queue, graceInterval: graceInterval,
+            shellPath: shellPath, shellArguments: shellArguments
+        )
     }
 
     /// Starts the TLS-PSK listener and returns the bound port.
@@ -57,8 +63,9 @@ public final class TerminalService: @unchecked Sendable {
 
     public func stop() {
         queue.sync {
-            for session in sessions.values { session.close() }
-            sessions.removeAll()
+            for connection in connections.values { connection.teardown() }
+            connections.removeAll()
+            registry.closeAll()
             listener?.cancel()
             listener = nil
         }
@@ -69,31 +76,29 @@ public final class TerminalService: @unchecked Sendable {
             connection: connection,
             pairingToken: pairingToken,
             passwordRecord: passwordRecord,
-            shellPath: shellPath,
-            shellArguments: shellArguments,
+            registry: registry,
             queue: queue
         )
-        sessions[ObjectIdentifier(session)] = session
+        connections[ObjectIdentifier(session)] = session
         session.onFinished = { [weak self] in
-            self?.queue.async { self?.sessions[ObjectIdentifier(session)] = nil }
+            self?.queue.async { self?.connections[ObjectIdentifier(session)] = nil }
         }
         session.start()
     }
 }
 
-/// One accepted connection: runs the auth handshake, then pipes the encrypted
-/// channel to a pty. Owned and confined to the service's serial queue.
+/// One accepted connection: runs the auth handshake, then bridges the encrypted
+/// channel to a `ShellSession` (new or resumed). Confined to the service queue.
 private final class ConnectionSession: @unchecked Sendable {
     private let connection: NWConnection
     private let queue: DispatchQueue
+    private let registry: TerminalSessionRegistry
     private var decoder = TerminalFrameDecoder()
     private var authenticator: TerminalAuthenticator
-    private let shellPath: String?
-    private let shellArguments: [String]?
 
     private var authenticated = false
-    private var pty: PTYSession?
-    private var scrollback = ScrollbackBuffer()
+    /// The shell this connection is currently driving (nil until authorized).
+    private weak var shell: ShellSession?
 
     var onFinished: (@Sendable () -> Void)?
 
@@ -101,14 +106,12 @@ private final class ConnectionSession: @unchecked Sendable {
         connection: NWConnection,
         pairingToken: String,
         passwordRecord: MasterPasswordRecord,
-        shellPath: String?,
-        shellArguments: [String]?,
+        registry: TerminalSessionRegistry,
         queue: DispatchQueue
     ) {
         self.connection = connection
         self.queue = queue
-        self.shellPath = shellPath
-        self.shellArguments = shellArguments
+        self.registry = registry
         self.authenticator = TerminalAuthenticator(
             record: passwordRecord,
             authorizedTokens: [pairingToken]
@@ -119,7 +122,7 @@ private final class ConnectionSession: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.close()
+                self?.queue.async { self?.finish() }
             default:
                 break
             }
@@ -133,16 +136,14 @@ private final class ConnectionSession: @unchecked Sendable {
             guard let self else { return }
             if let data, !data.isEmpty {
                 do {
-                    for frame in try self.decoder.append(data) {
-                        self.handle(frame)
-                    }
+                    for frame in try self.decoder.append(data) { self.handle(frame) }
                 } catch {
-                    self.close()
+                    self.finish()
                     return
                 }
             }
             if isComplete || error != nil {
-                self.close()
+                self.finish()
                 return
             }
             self.receive()
@@ -151,22 +152,21 @@ private final class ConnectionSession: @unchecked Sendable {
 
     private func handle(_ frame: TerminalFrame) {
         if !authenticated {
-            // Pre-auth, only a CONTROL auth message is meaningful.
             guard frame.type == .control,
                   let control = try? MessageCodec.decode(TerminalClientControl.self, from: frame.payload)
             else { return }
-            if case let .auth(token, proof) = control {
-                authenticate(token: token, proof: proof)
+            if case let .auth(token, proof, resumeSessionID) = control {
+                authenticate(token: token, proof: proof, resumeSessionID: resumeSessionID)
             }
             return
         }
 
         switch frame.type {
         case .data:
-            pty?.write(frame.payload)
+            shell?.write(frame.payload)
         case .resize:
             if let size = try? MessageCodec.decode(TerminalResize.self, from: frame.payload) {
-                pty?.resize(cols: size.cols, rows: size.rows)
+                shell?.resize(cols: size.cols, rows: size.rows)
             }
         case .ping:
             send(TerminalFrame(type: .pong))
@@ -175,52 +175,42 @@ private final class ConnectionSession: @unchecked Sendable {
         }
     }
 
-    private func authenticate(token: String, proof: String) {
-        let decision = authenticator.authenticate(
-            token: token, passwordProof: proof, now: Date(),
-            makeSessionID: { UUID().uuidString }
-        )
-        switch decision {
-        case let .authorized(reply):
+    private func authenticate(token: String, proof: String, resumeSessionID: String?) {
+        switch authenticator.authenticate(token: token, passwordProof: proof, now: Date()) {
+        case .authorized:
             authenticated = true
-            sendControl(reply)
-            spawnPTY()
+            attachShell(resumeSessionID: resumeSessionID)
         case let .rejected(reason):
-            // Send the rejection, then drop the socket only once the bytes have
-            // flushed — cancelling first would swallow the frame.
+            // Send the rejection, then drop the socket only once it has flushed.
             if let payload = try? MessageCodec.encode(TerminalServerControl.authFailed(reason: reason)),
                let bytes = try? TerminalFrameCodec.frame(TerminalFrame(type: .control, payload: payload)) {
                 connection.send(content: bytes, completion: .contentProcessed { [weak self] _ in
-                    self?.queue.async { self?.close() }
+                    self?.queue.async { self?.finish() }
                 })
             } else {
-                close()
+                finish()
             }
         }
     }
 
-    private func spawnPTY() {
-        do {
-            let pty = try PTYSession(shellPath: shellPath, arguments: shellArguments)
-            pty.onOutput = { [weak self] out in
-                guard let self else { return }
-                self.queue.async {
-                    self.scrollback.append(out)
-                    self.send(TerminalFrame(type: .data, payload: out))
-                }
+    private func attachShell(resumeSessionID: String?) {
+        // Resume the named session if it's still alive; otherwise start fresh.
+        let session: ShellSession
+        if let id = resumeSessionID, let existing = registry.session(id: id) {
+            session = existing
+        } else {
+            do {
+                session = try registry.create()
+            } catch {
+                sendControl(.sessionEnded(exitCode: nil))
+                finish()
+                return
             }
-            pty.onExit = { [weak self] code in
-                guard let self else { return }
-                self.queue.async {
-                    self.sendControl(.sessionEnded(exitCode: code))
-                    self.close()
-                }
-            }
-            self.pty = pty
-        } catch {
-            sendControl(.sessionEnded(exitCode: nil))
-            close()
         }
+        shell = session
+        sendControl(.authOK(sessionID: session.id))
+        // Attach after replying so the phone has the id before buffered bytes.
+        session.attach(sink: { [weak self] frame in self?.send(frame) })
     }
 
     private func sendControl(_ message: TerminalServerControl) {
@@ -233,14 +223,23 @@ private final class ConnectionSession: @unchecked Sendable {
         connection.send(content: bytes, completion: .contentProcessed { _ in })
     }
 
-    private var closed = false
-    func close() {
-        if closed { return }
-        closed = true
-        pty?.close()
-        pty = nil
+    private var finished = false
+    /// The phone dropped: detach the shell (starting its grace period) and free
+    /// the connection. The shell keeps running so a reconnect can resume it.
+    func finish() {
+        if finished { return }
+        finished = true
+        shell?.detach()
+        shell = nil
         connection.cancel()
         onFinished?()
+    }
+
+    /// Hard teardown when the whole service stops (does not preserve the shell —
+    /// the registry closes it separately).
+    func teardown() {
+        finished = true
+        connection.cancel()
     }
 }
 

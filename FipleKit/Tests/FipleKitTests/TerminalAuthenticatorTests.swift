@@ -23,18 +23,16 @@ struct TerminalAuthenticatorTests {
     func happyPath() {
         var auth = makeAuth()
         let decision = auth.authenticate(
-            token: "good-token", passwordProof: "hunter2", now: now,
-            makeSessionID: { "sess-fixed" }
+            token: "good-token", passwordProof: "hunter2", now: now
         )
-        #expect(decision == .authorized(.authOK(sessionID: "sess-fixed")))
+        #expect(decision == .authorized)
     }
 
     @Test("An unknown token is rejected as badToken without consuming an attempt")
     func badToken() {
         var auth = makeAuth()
         let decision = auth.authenticate(
-            token: "stranger", passwordProof: "hunter2", now: now,
-            makeSessionID: { "x" }
+            token: "stranger", passwordProof: "hunter2", now: now
         )
         #expect(decision == .rejected(.badToken))
         #expect(auth.throttle.failedAttempts == 0)
@@ -44,8 +42,7 @@ struct TerminalAuthenticatorTests {
     func badPassword() {
         var auth = makeAuth()
         let decision = auth.authenticate(
-            token: "good-token", passwordProof: "wrong", now: now,
-            makeSessionID: { "x" }
+            token: "good-token", passwordProof: "wrong", now: now
         )
         #expect(decision == .rejected(.badPassword))
         #expect(auth.throttle.failedAttempts == 1)
@@ -56,28 +53,27 @@ struct TerminalAuthenticatorTests {
         var auth = makeAuth(maxAttempts: 3)
         // Three wrong attempts: the third hits the limit and locks out.
         for _ in 0..<2 {
-            _ = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now, makeSessionID: { "x" })
+            _ = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now)
         }
-        let third = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now, makeSessionID: { "x" })
+        let third = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now)
         #expect(third == .rejected(.lockedOut))
 
         // Even the correct password is refused while locked out.
-        let duringLockout = auth.authenticate(token: "good-token", passwordProof: "hunter2", now: now, makeSessionID: { "x" })
+        let duringLockout = auth.authenticate(token: "good-token", passwordProof: "hunter2", now: now)
         #expect(duringLockout == .rejected(.lockedOut))
     }
 
     @Test("After the lockout window lapses, the correct password authorizes again")
     func recoversAfterLockout() {
         var auth = makeAuth(maxAttempts: 2)
-        _ = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now, makeSessionID: { "x" })
-        let locked = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now, makeSessionID: { "x" })
+        _ = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now)
+        let locked = auth.authenticate(token: "good-token", passwordProof: "wrong", now: now)
         #expect(locked == .rejected(.lockedOut))
 
         let later = now.addingTimeInterval(31)
         let decision = auth.authenticate(
-            token: "good-token", passwordProof: "hunter2", now: later,
-            makeSessionID: { "sess-recovered" }
+            token: "good-token", passwordProof: "hunter2", now: later
         )
-        #expect(decision == .authorized(.authOK(sessionID: "sess-recovered")))
+        #expect(decision == .authorized)
     }
 }

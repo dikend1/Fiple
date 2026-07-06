@@ -29,12 +29,11 @@ public enum TerminalAuthFailReason: String, Sendable, Equatable, Codable {
 /// CONTROL-frame payloads sent from the phone to the Mac's terminal service.
 public enum TerminalClientControl: Sendable, Equatable {
     /// Authenticate the terminal session: the tile-channel pairing token plus a
-    /// proof of the master password. Both factors are required (ADR-0005).
-    case auth(token: String, passwordProof: String)
-    /// Reattach to an existing session after a reconnect, replaying its buffer.
-    case attach(sessionID: String)
-    /// Start a fresh shell session (no prior session to resume).
-    case newSession
+    /// proof of the master password (both factors required, ADR-0005). If
+    /// `resumeSessionID` names a shell session still alive on the Mac (within its
+    /// grace period), the Mac reattaches to it and replays its buffer; otherwise
+    /// a fresh shell is started. Nil on a first connection.
+    case auth(token: String, passwordProof: String, resumeSessionID: String?)
 }
 
 extension TerminalClientControl: WireTypeTagged {
@@ -42,8 +41,8 @@ extension TerminalClientControl: WireTypeTagged {
 }
 
 extension TerminalClientControl: Codable {
-    private enum Tag: String, Codable, CaseIterable { case auth, attach, newSession }
-    private enum CodingKeys: String, CodingKey { case type, token, passwordProof, sessionID }
+    private enum Tag: String, Codable, CaseIterable { case auth }
+    private enum CodingKeys: String, CodingKey { case type, token, passwordProof, resumeSessionID }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -51,27 +50,20 @@ extension TerminalClientControl: Codable {
         case .auth:
             self = .auth(
                 token: try c.decode(String.self, forKey: .token),
-                passwordProof: try c.decode(String.self, forKey: .passwordProof)
+                passwordProof: try c.decode(String.self, forKey: .passwordProof),
+                resumeSessionID: try c.decodeIfPresent(String.self, forKey: .resumeSessionID)
             )
-        case .attach:
-            self = .attach(sessionID: try c.decode(String.self, forKey: .sessionID))
-        case .newSession:
-            self = .newSession
         }
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case let .auth(token, passwordProof):
+        case let .auth(token, passwordProof, resumeSessionID):
             try c.encode(Tag.auth, forKey: .type)
             try c.encode(token, forKey: .token)
             try c.encode(passwordProof, forKey: .passwordProof)
-        case let .attach(sessionID):
-            try c.encode(Tag.attach, forKey: .type)
-            try c.encode(sessionID, forKey: .sessionID)
-        case .newSession:
-            try c.encode(Tag.newSession, forKey: .type)
+            try c.encodeIfPresent(resumeSessionID, forKey: .resumeSessionID)
         }
     }
 }

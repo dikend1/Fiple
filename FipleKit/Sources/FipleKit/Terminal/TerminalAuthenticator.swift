@@ -24,17 +24,16 @@ public struct TerminalAuthenticator: Sendable {
     }
 
     public enum Decision: Sendable, Equatable {
-        case authorized(TerminalServerControl) // .authOK(sessionID:)
+        case authorized
         case rejected(TerminalAuthFailReason)
     }
 
-    /// Judges one `auth` control message. `makeSessionID` supplies the id for a
-    /// freshly authorized session (injected so it stays deterministic in tests).
+    /// Judges one `auth` control message. Session creation/reattach is the
+    /// service's job — this only decides whether the two factors pass.
     public mutating func authenticate(
         token: String,
         passwordProof: String,
-        now: Date,
-        makeSessionID: () -> String
+        now: Date
     ) -> Decision {
         // A standing lockout rejects before any credential is examined, and
         // without consuming an attempt.
@@ -52,7 +51,7 @@ public struct TerminalAuthenticator: Sendable {
         let matches = MasterPassword.verify(passwordProof, against: record)
         switch throttle.register(matches: matches, now: now) {
         case .accepted:
-            return .authorized(.authOK(sessionID: makeSessionID()))
+            return .authorized
         case .rejected, .lockedOut:
             // Both map to a password failure for the client; the throttle has
             // recorded the attempt and will lock out on its own policy.
