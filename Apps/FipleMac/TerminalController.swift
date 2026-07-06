@@ -28,6 +28,9 @@ final class TerminalController {
     /// The pairing token the running service is keyed to, so we can detect a
     /// rotation and restart rather than serve a stale PSK.
     @ObservationIgnored private var serviceToken: String?
+    /// The password verifier the running service was built with, so a password
+    /// change restarts the service instead of validating against the old one.
+    @ObservationIgnored private var serviceRecord: MasterPasswordRecord?
 
     private static let enabledKey = "com.fiple.terminal.enabled"
     private static let passwordKey = "com.fiple.terminal.password"
@@ -70,8 +73,10 @@ final class TerminalController {
             stopService()
             return
         }
-        // Already running on the same token — nothing to do.
-        if service != nil, serviceToken == token { return }
+        // Already running with the same token AND password — nothing to do. A
+        // changed password must restart the service, else it keeps validating
+        // against the old verifier and rejects the new password.
+        if service != nil, serviceToken == token, serviceRecord == record { return }
         stopService()
 
         let service = TerminalService(pairingToken: token, passwordRecord: record)
@@ -79,6 +84,7 @@ final class TerminalController {
             let boundPort = try await service.start()
             self.service = service
             self.serviceToken = token
+            self.serviceRecord = record
             self.port = boundPort
             FipleLog.connection.info("terminal service listening on \(boundPort)")
         } catch {
@@ -91,6 +97,7 @@ final class TerminalController {
         service?.stop()
         service = nil
         serviceToken = nil
+        serviceRecord = nil
         port = 0
     }
 
