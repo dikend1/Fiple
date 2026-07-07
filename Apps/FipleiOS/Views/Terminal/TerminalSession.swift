@@ -43,6 +43,10 @@ final class TerminalSession {
     private var resumeSessionID: String?
     private var backgrounded = false
     private var closed = false
+    /// A Face-ID password was valid before, so a rejection right after an app
+    /// restart is likely the Mac still settling its reconnect — auto-retry a few
+    /// times before surfacing the inline password field.
+    private var authRetriesLeft: Int
     @ObservationIgnored private var client: TerminalClient?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var retryTask: Task<Void, Never>?
@@ -50,11 +54,12 @@ final class TerminalSession {
     /// Set by the terminal view to receive shell output bytes.
     @ObservationIgnored var outputHandler: (@MainActor (Data) -> Void)?
 
-    init(host: String, port: UInt16, token: String, password: String) {
+    init(host: String, port: UInt16, token: String, password: String, passwordPrevalidated: Bool = false) {
         self.host = host
         self.port = port
         self.token = token
         self.password = password
+        self.authRetriesLeft = passwordPrevalidated ? 3 : 0
     }
 
     /// First connection.
@@ -150,7 +155,19 @@ final class TerminalSession {
                 case let .authFailed(reason):
                     self.lastAuthFailReason = reason
                     self.retryTask?.cancel()
-                    self.phase = .failed(Self.message(for: reason))
+                    // A pre-validated (Face ID) password rejected right after a
+                    // restart is usually the Mac still settling — retry quietly.
+                    if reason == .badPassword, self.authRetriesLeft > 0 {
+                        self.authRetriesLeft -= 1
+                        self.phase = .authenticating
+                        Task { [weak self] in
+                            try? await Task.sleep(nanoseconds: 1_200_000_000)
+                            guard let self, !self.closed else { return }
+                            await self.attempt()
+                        }
+                    } else {
+                        self.phase = .failed(Self.message(for: reason))
+                    }
                 case .ended:
                     // The shell process exited — nothing to resume.
                     self.retryTask?.cancel()
