@@ -19,6 +19,8 @@ final class TerminalController {
     private(set) var hasPassword: Bool
     /// The bound port of the running listener, or 0 when not running.
     private(set) var port: UInt16 = 0
+    /// How many phones are currently connected to the terminal.
+    private(set) var activeSessions = 0
 
     /// Fires when the advertised (enabled, port) may have changed, so the server
     /// controller re-sends the terminal info to the connected phone.
@@ -80,6 +82,9 @@ final class TerminalController {
         stopService()
 
         let service = TerminalService(pairingToken: token, passwordRecord: record)
+        service.onActiveSessionsChanged = { [weak self] count in
+            Task { @MainActor in self?.activeSessions = count }
+        }
         do {
             let boundPort = try await service.start()
             self.service = service
@@ -99,6 +104,7 @@ final class TerminalController {
         serviceToken = nil
         serviceRecord = nil
         port = 0
+        activeSessions = 0
     }
 
     private func loadRecord() -> MasterPasswordRecord? {
