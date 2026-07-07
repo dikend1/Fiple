@@ -22,6 +22,7 @@ struct TerminalScreen: View {
     /// authenticates (may differ from the one passed in).
     @State private var retryPassword = ""
     @State private var showRetryPassword = false
+    @FocusState private var passwordFocused: Bool
     @State private var pendingRememberPassword: String?
     /// Keyboard height + bottom safe area, so we can lift the terminal so the
     /// line you're typing is never hidden behind the keyboard.
@@ -165,49 +166,7 @@ struct TerminalScreen: View {
     @ViewBuilder
     private func failureView(_ session: TerminalSession, message: String) -> some View {
         if session.lastAuthFailReason == .badPassword {
-            // Correct the password in place — no bounce back to Home.
-            VStack(spacing: 20) {
-                Image(systemName: "key.fill").font(.system(size: 40)).foregroundStyle(.secondary)
-                VStack(spacing: 6) {
-                    Text("Enter master password").font(.headline)
-                    Text("Type the password you set on your Mac.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                HStack {
-                    ZStack {
-                        SecureField("Master password", text: $retryPassword)
-                            .opacity(showRetryPassword ? 0 : 1)
-                            .disabled(showRetryPassword)
-                        TextField("Master password", text: $retryPassword)
-                            .opacity(showRetryPassword ? 1 : 0)
-                            .disabled(!showRetryPassword)
-                    }
-                    .textFieldStyle(.roundedBorder)
-                    // The field background is light; force dark text so it isn't
-                    // white-on-white (the screen tints everything white).
-                    .foregroundStyle(.black)
-                    .tint(.black)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onSubmit(submitRetry)
-                    Button {
-                        showRetryPassword.toggle()
-                    } label: {
-                        Image(systemName: showRetryPassword ? "eye.slash" : "eye")
-                            .font(.system(size: 18))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .frame(maxWidth: 280)
-                HStack {
-                    Button("Cancel") { dismiss() }.buttonStyle(.bordered).tint(.white)
-                    Button("Connect", action: submitRetry)
-                        .buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
-                        .disabled(retryPassword.count < 4)
-                }
-            }
-            .foregroundStyle(.white).padding()
+            passwordUnlockView
         } else {
             VStack(spacing: 20) {
                 Image(systemName: "exclamationmark.triangle")
@@ -221,6 +180,105 @@ struct TerminalScreen: View {
             }
             .foregroundStyle(.white).padding()
         }
+    }
+
+    /// Unlock the terminal by entering the Mac's master password. Styled to match
+    /// the dark terminal: a green key badge, a monospace field with the reveal
+    /// toggle inline, and a full-width brand-green Connect.
+    private var passwordUnlockView: some View {
+        VStack(spacing: 28) {
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle().fill(Theme.Palette.brand.opacity(0.16)).frame(width: 72, height: 72)
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.brand)
+                }
+                VStack(spacing: 8) {
+                    Text("Unlock terminal")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("Enter the master password you set on your Mac.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            passwordField
+
+            VStack(spacing: 12) {
+                Button(action: submitRetry) {
+                    Text("Connect")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(canConnect ? Theme.Palette.brand : Color.white.opacity(0.12))
+                        )
+                        .foregroundStyle(canConnect ? .white : .white.opacity(0.4))
+                }
+                .disabled(!canConnect)
+
+                Button("Cancel") { dismiss() }
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .padding(.vertical, 6)
+            }
+        }
+        .padding(.horizontal, 28)
+        .frame(maxWidth: 420)
+    }
+
+    private var canConnect: Bool { retryPassword.count >= 4 }
+
+    private var passwordField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(.white.opacity(0.35))
+            ZStack(alignment: .leading) {
+                if retryPassword.isEmpty {
+                    Text("Master password").foregroundStyle(.white.opacity(0.3))
+                }
+                Group {
+                    if showRetryPassword {
+                        TextField("", text: $retryPassword)
+                    } else {
+                        SecureField("", text: $retryPassword)
+                    }
+                }
+                .foregroundStyle(.white)
+                .tint(Theme.Palette.brand)
+                .font(.system(size: 16, design: .monospaced))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($passwordFocused)
+                .onSubmit(submitRetry)
+            }
+            Button {
+                showRetryPassword.toggle()
+            } label: {
+                Image(systemName: showRetryPassword ? "eye.slash.fill" : "eye.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 15)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(0.07))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(passwordFocused ? Theme.Palette.brand : Color.white.opacity(0.12),
+                                lineWidth: passwordFocused ? 1.5 : 1)
+                )
+        )
+        .animation(.easeOut(duration: 0.15), value: passwordFocused)
+        .onAppear { passwordFocused = true }
     }
 
     private func submitRetry() {
