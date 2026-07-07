@@ -34,11 +34,24 @@ struct SwiftTermView: UIViewRepresentable {
         private let session: TerminalSession
         private weak var terminal: TerminalView?
 
+        // Pinch-to-zoom font sizing, remembered across sessions.
+        private static let fontSizeKey = "com.fiple.terminal.fontSize"
+        private static let minSize: CGFloat = 9
+        private static let maxSize: CGFloat = 26
+        private var fontSize: CGFloat = {
+            let saved = UserDefaults.standard.double(forKey: fontSizeKey)
+            return saved > 0 ? saved : 13
+        }()
+        private var pinchStartSize: CGFloat = 13
+
         init(session: TerminalSession) { self.session = session }
 
-        /// Routes session output into the emulator.
+        /// Routes session output into the emulator and enables pinch-to-zoom.
         func attach(to terminal: TerminalView) {
             self.terminal = terminal
+            terminal.font = Self.monospaced(fontSize)
+            let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+            terminal.addGestureRecognizer(pinch)
             session.outputHandler = { [weak terminal] data in
                 terminal?.feed(byteArray: ArraySlice(data))
             }
@@ -46,6 +59,30 @@ struct SwiftTermView: UIViewRepresentable {
 
         func detach() {
             session.outputHandler = nil
+        }
+
+        @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard let terminal else { return }
+            switch gesture.state {
+            case .began:
+                pinchStartSize = fontSize
+            case .changed, .ended:
+                let target = (pinchStartSize * gesture.scale).rounded()
+                let clamped = min(max(target, Self.minSize), Self.maxSize)
+                if clamped != fontSize {
+                    fontSize = clamped
+                    terminal.font = Self.monospaced(clamped)
+                }
+                if gesture.state == .ended {
+                    UserDefaults.standard.set(fontSize, forKey: Self.fontSizeKey)
+                }
+            default:
+                break
+            }
+        }
+
+        private static func monospaced(_ size: CGFloat) -> UIFont {
+            UIFont.monospacedSystemFont(ofSize: size, weight: .regular)
         }
 
         // MARK: TerminalViewDelegate
