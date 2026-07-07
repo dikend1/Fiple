@@ -23,6 +23,9 @@ struct SwiftTermView: UIViewRepresentable {
         // We provide our own accessory bar in SwiftUI — drop SwiftTerm's built-in
         // one so there aren't two stacked rows.
         terminal.inputAccessoryView = nil
+        // Send taps as mouse clicks so TUIs (opencode, htop, vim `:set mouse=a`,
+        // tmux) respond to finger taps.
+        terminal.allowMouseReporting = true
         context.coordinator.attach(to: terminal)
         return terminal
     }
