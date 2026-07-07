@@ -175,12 +175,13 @@ struct TerminalScreen: View {
                         .multilineTextAlignment(.center)
                 }
                 HStack {
-                    Group {
-                        if showRetryPassword {
-                            TextField("Master password", text: $retryPassword)
-                        } else {
-                            SecureField("Master password", text: $retryPassword)
-                        }
+                    ZStack {
+                        SecureField("Master password", text: $retryPassword)
+                            .opacity(showRetryPassword ? 0 : 1)
+                            .disabled(showRetryPassword)
+                        TextField("Master password", text: $retryPassword)
+                            .opacity(showRetryPassword ? 1 : 0)
+                            .disabled(!showRetryPassword)
                     }
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.never)
@@ -190,6 +191,7 @@ struct TerminalScreen: View {
                         showRetryPassword.toggle()
                     } label: {
                         Image(systemName: showRetryPassword ? "eye.slash" : "eye")
+                            .font(.system(size: 18))
                             .foregroundStyle(.white)
                     }
                 }
