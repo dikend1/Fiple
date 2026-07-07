@@ -17,6 +17,12 @@ public final class TerminalService: @unchecked Sendable {
     private let registry: TerminalSessionRegistry
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: ConnectionSession] = [:]
+    private var activeCount = 0
+
+    /// Reports how many phones are currently authenticated to the terminal, so
+    /// the Mac UI can show "iPhone connected" instead of a raw port. Fired on the
+    /// service queue whenever the count changes.
+    public var onActiveSessionsChanged: (@Sendable (Int) -> Void)?
 
     /// - Parameter graceInterval: how long a disconnected shell survives before
     ///   SIGHUP (default 10 minutes).
@@ -83,7 +89,15 @@ public final class TerminalService: @unchecked Sendable {
         session.onFinished = { [weak self] in
             self?.queue.async { self?.connections[ObjectIdentifier(session)] = nil }
         }
+        session.onActiveChange = { [weak self] delta in
+            self?.queue.async { self?.updateActiveCount(by: delta) }
+        }
         session.start()
+    }
+
+    private func updateActiveCount(by delta: Int) {
+        activeCount = max(0, activeCount + delta)
+        onActiveSessionsChanged?(activeCount)
     }
 }
 
@@ -101,6 +115,9 @@ private final class ConnectionSession: @unchecked Sendable {
     private weak var shell: ShellSession?
 
     var onFinished: (@Sendable () -> Void)?
+    /// +1 when this connection authenticates, -1 when it drops (once each).
+    var onActiveChange: (@Sendable (Int) -> Void)?
+    private var countedActive = false
 
     init(
         connection: NWConnection,
@@ -208,6 +225,7 @@ private final class ConnectionSession: @unchecked Sendable {
             }
         }
         shell = session
+        if !countedActive { countedActive = true; onActiveChange?(1) }
         sendControl(.authOK(sessionID: session.id))
         // Attach after replying so the phone has the id before buffered bytes.
         session.attach(sink: { [weak self] frame in self?.send(frame) })
@@ -229,6 +247,7 @@ private final class ConnectionSession: @unchecked Sendable {
     func finish() {
         if finished { return }
         finished = true
+        if countedActive { countedActive = false; onActiveChange?(-1) }
         shell?.detach()
         shell = nil
         connection.cancel()

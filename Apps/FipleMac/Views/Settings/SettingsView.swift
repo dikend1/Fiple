@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = false
     @State private var launchAtLoginError: String?
     @State private var masterPassword = ""
+    @State private var showingPasswordField = false
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -99,47 +100,122 @@ struct SettingsView: View {
     private var terminalSection: some View {
         let terminal = server.terminal
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Terminal Access").font(.system(size: 14, weight: .medium))
-                    Text(terminal.hasPassword
-                         ? "Run a shell on this Mac from your iPhone."
-                         : "Create a password below first, then turn this on.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("Terminal Access", isOn: Binding(
-                    get: { terminal.enabled },
-                    set: { terminal.setEnabled($0) }
-                ))
-                .labelsHidden().toggleStyle(.switch).tint(Theme.Palette.brand)
-                .disabled(!terminal.hasPassword)
-            }
-            .padding(.vertical, Theme.Spacing.sm)
-            .padding(.horizontal, Theme.Spacing.md)
+            terminalHeaderRow(terminal)
 
-            Divider().padding(.leading, Theme.Spacing.md)
+            Divider().padding(.leading, 52)
+            terminalPasswordRow(terminal)
 
-            HStack {
-                SecureField(terminal.hasPassword ? "Change password" : "Create a password (min 4 characters)",
-                            text: $masterPassword)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
-                Button(terminal.hasPassword ? "Change" : "Set") {
-                    terminal.setPassword(masterPassword)
-                    masterPassword = ""
-                }
-                .disabled(masterPassword.count < 4)
-                Spacer()
-            }
-            .padding(.vertical, Theme.Spacing.sm)
-            .padding(.horizontal, Theme.Spacing.md)
-
-            if terminal.enabled, terminal.port != 0 {
-                Divider().padding(.leading, Theme.Spacing.md)
-                settingRow(title: "Status", value: "Listening on port \(terminal.port)")
+            if terminal.enabled {
+                Divider().padding(.leading, 52)
+                terminalStatusRow(terminal)
+                terminalSecurityNote
             }
         }
+    }
+
+    /// Icon + title + subtitle + the enable toggle.
+    private func terminalHeaderRow(_ terminal: TerminalController) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Theme.Palette.brand.opacity(0.15))
+                .frame(width: 28, height: 28)
+                .overlay(Image(systemName: "terminal.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.brand))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Terminal Access").font(.system(size: 14, weight: .medium))
+                Text(terminal.hasPassword
+                     ? "Run a shell on this Mac from your iPhone."
+                     : "Set a master password below to turn this on.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("Terminal Access", isOn: Binding(
+                get: { terminal.enabled },
+                set: { terminal.setEnabled($0) }
+            ))
+            .labelsHidden().toggleStyle(.switch).tint(Theme.Palette.brand)
+            .disabled(!terminal.hasPassword)
+            .help(terminal.hasPassword ? "" : "Set a master password first")
+        }
+        .padding(Theme.Spacing.md)
+    }
+
+    /// Compact when a password is set (a Change… button reveals the field);
+    /// prominent field when none is set yet (the required first step).
+    @ViewBuilder
+    private func terminalPasswordRow(_ terminal: TerminalController) -> some View {
+        if terminal.hasPassword && !showingPasswordField {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "key.fill").font(.system(size: 12))
+                    .foregroundStyle(.secondary).frame(width: 28)
+                Text("Master Password").font(.system(size: 14, weight: .medium))
+                Text("Set").font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.Palette.brand)
+                Spacer()
+                Button("Change…") { showingPasswordField = true }
+                    .controlSize(.small)
+            }
+            .padding(Theme.Spacing.md)
+        } else {
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "key.fill").font(.system(size: 12))
+                    .foregroundStyle(.secondary).frame(width: 28)
+                SecureField(terminal.hasPassword ? "New password (min 4 characters)"
+                                                 : "Create a password (min 4 characters)",
+                            text: $masterPassword)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+                Button(terminal.hasPassword ? "Save" : "Set") {
+                    terminal.setPassword(masterPassword)
+                    masterPassword = ""
+                    showingPasswordField = false
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(masterPassword.count < 4)
+                if terminal.hasPassword {
+                    Button("Cancel") { masterPassword = ""; showingPasswordField = false }
+                        .controlSize(.regular)
+                }
+                Spacer()
+            }
+            .padding(Theme.Spacing.md)
+        }
+    }
+
+    /// A humane status: a coloured dot + plain-language state instead of a port.
+    private func terminalStatusRow(_ terminal: TerminalController) -> some View {
+        let connected = terminal.activeSessions > 0
+        return HStack(spacing: Theme.Spacing.sm) {
+            Circle()
+                .fill(connected ? Theme.Palette.connected : Color.orange)
+                .frame(width: 8, height: 8).frame(width: 28)
+            Text(connected
+                 ? (terminal.activeSessions == 1 ? "iPhone connected"
+                                                 : "\(terminal.activeSessions) iPhones connected")
+                 : "Ready — waiting for iPhone")
+                .font(.system(size: 14, weight: .medium))
+            Spacer()
+            // The port stays available for troubleshooting, but only on hover.
+            if terminal.port != 0 {
+                Text("Port \(terminal.port)").font(.system(size: 11))
+                    .foregroundStyle(.tertiary).help("The terminal service is listening on this port")
+            }
+        }
+        .padding(Theme.Spacing.md)
+    }
+
+    /// Honest note about the power this grants (HIG: disclose strong capabilities).
+    private var terminalSecurityNote: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+            Image(systemName: "lock.shield").font(.system(size: 12))
+                .foregroundStyle(.secondary).frame(width: 28)
+            Text("Anyone with the master password and your paired iPhone can run any command on this Mac.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.bottom, Theme.Spacing.md)
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
