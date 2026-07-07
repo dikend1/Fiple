@@ -13,6 +13,9 @@ struct HomeView: View {
     @State private var showTerminalSheet = false
     @State private var terminalPassword = ""
     @State private var openTerminal = false
+    /// Whether the current password came from Face ID (already saved) vs typed
+    /// (save it only once it actually authenticates).
+    @State private var terminalFromBiometrics = false
 
     var body: some View {
         NavigationStack {
@@ -42,7 +45,8 @@ struct HomeView: View {
             if let target = controller.terminalTarget {
                 TerminalScreen(
                     host: target.host, port: target.port,
-                    pairingToken: target.token, masterPassword: terminalPassword
+                    pairingToken: target.token, masterPassword: terminalPassword,
+                    rememberOnSuccess: !terminalFromBiometrics
                 )
             }
         }
@@ -71,18 +75,21 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    /// Opens the terminal: unlock with Face ID if a password is already saved,
-    /// otherwise prompt for it (and save it behind biometrics on success).
+    /// Opens the terminal: unlock with Face ID if a password is already
+    /// remembered, otherwise ask for it (typed passwords are saved only after
+    /// they successfully authenticate — see TerminalScreen).
     private func beginTerminal() async {
         if TerminalCredentialStore.hasStoredPassword() {
             if let password = await TerminalCredentialStore.retrieve(reason: "Unlock the Mac terminal") {
                 terminalPassword = password
+                terminalFromBiometrics = true
                 openTerminal = true
                 return
             }
             // Biometry cancelled or failed — fall back to typing.
         }
         terminalPassword = ""
+        terminalFromBiometrics = false
         showTerminalSheet = true
     }
 
@@ -102,8 +109,8 @@ struct HomeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Open") {
-                        // Remember the password behind Face ID for next time.
-                        TerminalCredentialStore.save(terminalPassword)
+                        // Don't save yet — only after it authenticates (so a
+                        // wrong password never gets remembered for Face ID).
                         showTerminalSheet = false
                         openTerminal = true
                     }

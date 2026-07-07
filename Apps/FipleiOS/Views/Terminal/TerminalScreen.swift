@@ -11,8 +11,12 @@ struct TerminalScreen: View {
     let port: UInt16
     let pairingToken: String
     let masterPassword: String
+    /// True when the password was typed (not from Face ID) — save it behind
+    /// biometrics once it authenticates, so next time is one-tap Face ID.
+    var rememberOnSuccess: Bool = false
 
     @State private var session: TerminalSession?
+    @State private var didRemember = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
 
@@ -35,6 +39,19 @@ struct TerminalScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             session?.scenePhaseChanged(active: phase == .active)
+        }
+        .onChange(of: session?.phase) { _, phase in
+            guard let phase else { return }
+            if phase == .ready, rememberOnSuccess, !didRemember {
+                // The typed password just authenticated — remember it now.
+                didRemember = true
+                TerminalCredentialStore.save(masterPassword)
+            }
+            if case .failed = phase, session?.lastAuthFailReason == .badPassword {
+                // A wrong (likely stale) saved password — forget it so the next
+                // open asks fresh instead of failing again.
+                TerminalCredentialStore.clear()
+            }
         }
         .onDisappear { session?.close() }
     }
