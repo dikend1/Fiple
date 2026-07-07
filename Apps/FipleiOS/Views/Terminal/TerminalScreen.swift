@@ -147,20 +147,31 @@ struct TerminalScreen: View {
     private var terminalTopBar: some View {
         HStack {
             Button { dismiss() } label: {
-                Label("Done", systemImage: "chevron.down")
-                    .font(.system(.subheadline, weight: .semibold))
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.down").font(.system(size: 13, weight: .bold))
+                    Text("Done").font(.system(size: 15, weight: .semibold))
+                }
             }
             .tint(.white)
             Spacer()
-            Text("Terminal").font(.system(.subheadline, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.5))
+            HStack(spacing: 7) {
+                Circle().fill(Theme.Palette.brand).frame(width: 7, height: 7)
+                    .shadow(color: Theme.Palette.brand.opacity(0.7), radius: 3)
+                Text("Terminal")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
             Spacer()
-            // Balances the leading button so the title stays centered.
-            Label("Done", systemImage: "chevron.down").opacity(0).accessibilityHidden(true)
+            // Balances the leading button so the title stays centred.
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.down").font(.system(size: 13, weight: .bold))
+                Text("Done").font(.system(size: 15, weight: .semibold))
+            }.opacity(0).accessibilityHidden(true)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.black)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(Color(white: 0.06))
+        .overlay(Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5), alignment: .bottom)
     }
 
     @ViewBuilder
@@ -310,45 +321,53 @@ private struct TerminalAccessoryBar: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                iconKey("doc.on.clipboard") {
+            HStack(spacing: 7) {
+                iconKey("doc.on.clipboard", accent: true) {
                     if let text = UIPasteboard.general.string, !text.isEmpty {
                         session.send(Data(text.utf8))
                     }
                 }
-                Divider().frame(height: 22).overlay(Color.white.opacity(0.2))
                 key("esc") { session.send(Data([0x1b])) }
                 key("tab") { session.send(Data([0x09])) }
                 key("⌃C") { session.send(Data([0x03])) }
+                sep
+                key("~") { session.send(Data("~".utf8)) }
+                key("/") { session.send(Data("/".utf8)) }
+                key("|") { session.send(Data("|".utf8)) }
+                key("-") { session.send(Data("-".utf8)) }
+                sep
                 key("↑") { session.send(Data([0x1b, 0x5b, 0x41])) }
                 key("↓") { session.send(Data([0x1b, 0x5b, 0x42])) }
                 key("←") { session.send(Data([0x1b, 0x5b, 0x44])) }
                 key("→") { session.send(Data([0x1b, 0x5b, 0x43])) }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
         }
-        .background(.ultraThinMaterial)
+        .background(Color(white: 0.10))
+        .overlay(Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5), alignment: .top)
     }
 
-    private func iconKey(_ systemName: String, action: @escaping () -> Void) -> some View {
+    private var sep: some View {
+        RoundedRectangle(cornerRadius: 1).fill(Color.white.opacity(0.14))
+            .frame(width: 1, height: 22).padding(.horizontal, 2)
+    }
+
+    private func iconKey(_ systemName: String, accent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(.callout, weight: .medium))
-                .frame(minWidth: 40)
-                .padding(.vertical, 6)
-                .background(Color(white: 0.2), in: RoundedRectangle(cornerRadius: 6))
+            Image(systemName: systemName).font(.system(size: 15, weight: .medium))
+                .frame(minWidth: 42, minHeight: 32)
+                .background(accent ? Theme.Palette.brand.opacity(0.9) : Color(white: 0.22),
+                           in: RoundedRectangle(cornerRadius: 8))
                 .foregroundStyle(.white)
         }
     }
 
     private func key(_ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(label)
-                .font(.system(.callout, design: .monospaced))
-                .frame(minWidth: 40)
-                .padding(.vertical, 6)
-                .background(Color(white: 0.2), in: RoundedRectangle(cornerRadius: 6))
+            Text(label).font(.system(size: 15, weight: .medium, design: .monospaced))
+                .frame(minWidth: 42, minHeight: 32)
+                .background(Color(white: 0.22), in: RoundedRectangle(cornerRadius: 8))
                 .foregroundStyle(.white)
         }
     }
