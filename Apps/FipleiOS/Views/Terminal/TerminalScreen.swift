@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 import FipleKit
 
 /// Full-screen terminal on the phone. Owns a ``TerminalSession`` that connects,
@@ -21,8 +22,17 @@ struct TerminalScreen: View {
     /// authenticates (may differ from the one passed in).
     @State private var retryPassword = ""
     @State private var pendingRememberPassword: String?
+    /// Keyboard height + bottom safe area, so we can lift the terminal so the
+    /// line you're typing is never hidden behind the keyboard.
+    @State private var keyboardHeight: CGFloat = 0
+    @State private var bottomSafeArea: CGFloat = 0
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
+
+    /// How much to lift the terminal so its bottom clears the keyboard (the
+    /// keyboard frame already includes the home-indicator area we'd otherwise
+    /// double-count).
+    private var keyboardInset: CGFloat { max(0, keyboardHeight - bottomSafeArea) }
 
     var body: some View {
         ZStack {
@@ -32,6 +42,19 @@ struct TerminalScreen: View {
             } else {
                 ProgressView().tint(.white)
             }
+        }
+        .background(
+            GeometryReader { proxy in
+                Color.clear.onAppear { bottomSafeArea = proxy.safeAreaInsets.bottom }
+            }
+        )
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            if let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                withAnimation(.easeOut(duration: 0.25)) { keyboardHeight = frame.height }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.2)) { keyboardHeight = 0 }
         }
         .task {
             guard session == nil else { return }
@@ -96,7 +119,11 @@ struct TerminalScreen: View {
                 SwiftTermView(session: session).id(session.generation)
                 TerminalAccessoryBar(session: session)
             }
-            .ignoresSafeArea(.container, edges: .bottom)
+            // Lift the whole terminal above the keyboard so the line you're
+            // typing stays visible; we drive this ourselves instead of SwiftUI's
+            // auto-avoidance (which SwiftTerm's UIScrollView doesn't cooperate with).
+            .padding(.bottom, keyboardInset)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         case let .failed(message):
             failureView(session, message: message)
         case .ended:
