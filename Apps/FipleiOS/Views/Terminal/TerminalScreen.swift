@@ -184,6 +184,10 @@ struct TerminalScreen: View {
                             .disabled(!showRetryPassword)
                     }
                     .textFieldStyle(.roundedBorder)
+                    // The field background is light; force dark text so it isn't
+                    // white-on-white (the screen tints everything white).
+                    .foregroundStyle(.black)
+                    .tint(.black)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .onSubmit(submitRetry)
