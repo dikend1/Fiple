@@ -35,7 +35,7 @@ final class TerminalSession {
     private let host: String
     private let port: UInt16
     private let token: String
-    private let password: String
+    private var password: String
     /// Seconds between reconnect attempts while the Mac is unreachable.
     private let retryInterval: TimeInterval = 3
 
@@ -61,6 +61,15 @@ final class TerminalSession {
     func connect() async {
         phase = .connecting
         await attempt()
+    }
+
+    /// Re-authenticate with a corrected password (from the inline retry field),
+    /// without leaving the terminal screen.
+    func retry(withPassword newPassword: String) {
+        password = newPassword
+        lastAuthFailReason = nil
+        retryTask?.cancel()
+        Task { await connect() }
     }
 
     /// Called on scene-phase changes. iOS kills the socket seconds after the app

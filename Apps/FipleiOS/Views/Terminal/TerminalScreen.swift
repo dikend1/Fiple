@@ -17,6 +17,10 @@ struct TerminalScreen: View {
 
     @State private var session: TerminalSession?
     @State private var didRemember = false
+    /// A password the user typed on the inline retry field, to remember once it
+    /// authenticates (may differ from the one passed in).
+    @State private var retryPassword = ""
+    @State private var pendingRememberPassword: String?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
 
@@ -42,14 +46,20 @@ struct TerminalScreen: View {
         }
         .onChange(of: session?.phase) { _, phase in
             guard let phase else { return }
-            if phase == .ready, rememberOnSuccess, !didRemember {
-                // The typed password just authenticated — remember it now.
-                didRemember = true
-                TerminalCredentialStore.save(masterPassword)
+            if phase == .ready, !didRemember {
+                // Remember whichever password just authenticated: a corrected one
+                // typed on the inline field wins, else the initial typed one.
+                if let corrected = pendingRememberPassword {
+                    didRemember = true
+                    TerminalCredentialStore.save(corrected)
+                } else if rememberOnSuccess {
+                    didRemember = true
+                    TerminalCredentialStore.save(masterPassword)
+                }
             }
             if case .failed = phase, session?.lastAuthFailReason == .badPassword {
-                // A wrong (likely stale) saved password — forget it so the next
-                // open asks fresh instead of failing again.
+                // A wrong (likely stale) saved password — forget it so it isn't
+                // reused; the inline field below lets the user correct it.
                 TerminalCredentialStore.clear()
             }
         }
@@ -121,28 +131,51 @@ struct TerminalScreen: View {
         .background(.black)
     }
 
+    @ViewBuilder
     private func failureView(_ session: TerminalSession, message: String) -> some View {
-        VStack(spacing: 20) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 44)).foregroundStyle(.secondary)
-            VStack(spacing: 6) {
-                Text("Couldn’t open terminal").font(.headline)
-                Text(message).font(.subheadline).foregroundStyle(.secondary)
-            }
-            Button("Try Again") {
-                // A wrong password is usually a stale saved one — forget it so the
-                // next attempt asks fresh — then return to Home to re-enter.
-                if session.lastAuthFailReason == .badPassword {
-                    TerminalCredentialStore.clear()
+        if session.lastAuthFailReason == .badPassword {
+            // Correct the password in place — no bounce back to Home.
+            VStack(spacing: 20) {
+                Image(systemName: "key.fill").font(.system(size: 40)).foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    Text("Enter master password").font(.headline)
+                    Text("Type the password you set on your Mac.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                dismiss()
+                SecureField("Master password", text: $retryPassword)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
+                    .frame(maxWidth: 260)
+                    .onSubmit(submitRetry)
+                HStack {
+                    Button("Cancel") { dismiss() }.buttonStyle(.bordered).tint(.white)
+                    Button("Connect", action: submitRetry)
+                        .buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
+                        .disabled(retryPassword.count < 4)
+                }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.white)
-            .foregroundStyle(.black)
+            .foregroundStyle(.white).padding()
+        } else {
+            VStack(spacing: 20) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 44)).foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    Text("Couldn’t open terminal").font(.headline)
+                    Text(message).font(.subheadline).foregroundStyle(.secondary)
+                }
+                Button("Close") { dismiss() }
+                    .buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
+            }
+            .foregroundStyle(.white).padding()
         }
-        .foregroundStyle(.white)
-        .padding()
+    }
+
+    private func submitRetry() {
+        guard retryPassword.count >= 4 else { return }
+        pendingRememberPassword = retryPassword // remember it if it works
+        session?.retry(withPassword: retryPassword)
+        retryPassword = ""
     }
 
     private func statusMessage(_ title: String, _ detail: String, systemImage: String) -> some View {
