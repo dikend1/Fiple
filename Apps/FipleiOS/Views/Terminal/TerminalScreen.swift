@@ -21,6 +21,7 @@ struct TerminalScreen: View {
     /// A password the user typed on the inline retry field, to remember once it
     /// authenticates (may differ from the one passed in).
     @State private var retryPassword = ""
+    @State private var showRetryPassword = false
     @State private var pendingRememberPassword: String?
     /// Keyboard height + bottom safe area, so we can lift the terminal so the
     /// line you're typing is never hidden behind the keyboard.
@@ -173,11 +174,26 @@ struct TerminalScreen: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-                SecureField("Master password", text: $retryPassword)
+                HStack {
+                    Group {
+                        if showRetryPassword {
+                            TextField("Master password", text: $retryPassword)
+                        } else {
+                            SecureField("Master password", text: $retryPassword)
+                        }
+                    }
                     .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-                    .frame(maxWidth: 260)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
                     .onSubmit(submitRetry)
+                    Button {
+                        showRetryPassword.toggle()
+                    } label: {
+                        Image(systemName: showRetryPassword ? "eye.slash" : "eye")
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(maxWidth: 280)
                 HStack {
                     Button("Cancel") { dismiss() }.buttonStyle(.bordered).tint(.white)
                     Button("Connect", action: submitRetry)
