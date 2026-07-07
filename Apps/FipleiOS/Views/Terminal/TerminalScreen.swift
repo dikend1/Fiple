@@ -188,12 +188,16 @@ struct TerminalScreen: View {
     private var passwordUnlockView: some View {
         VStack(spacing: 28) {
             VStack(spacing: 18) {
-                ZStack {
-                    Circle().fill(Theme.Palette.brand.opacity(0.16)).frame(width: 72, height: 72)
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.brand)
-                }
+                Image("FipleLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
                 VStack(spacing: 8) {
                     Text("Unlock terminal")
                         .font(.system(size: 24, weight: .bold))
