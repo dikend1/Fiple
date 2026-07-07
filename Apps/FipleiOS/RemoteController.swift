@@ -98,6 +98,7 @@ final class RemoteController {
 
     private func startDiscovery() {
         discoverTask?.cancel()
+        discovered.removeAll()
         discoverTask = Task { [weak self] in
             guard let self else { return }
             for await endpoint in await self.client.discover() {
@@ -124,17 +125,84 @@ final class RemoteController {
     /// automatically the instant a Mac appears, so they never have to re-enter it.
     @ObservationIgnored private var pendingCode: PairingCode?
 
+    /// Every Mac discovered on the LAN this browse. Several Macs can advertise
+    /// Fiple on the same network (a shared office / home Wi-Fi), so the first one
+    /// to answer is not necessarily *yours* — the old "first Mac wins" rule meant
+    /// a friend's Mac could grab the connection and reject your code. The pairing
+    /// code (or reconnect token), tried against each Mac in turn, is what decides
+    /// which Mac to connect to.
+    @ObservationIgnored private var discovered: [NWEndpoint] = []
+
+    /// An in-flight pairing / reconnect attempt that walks the discovered Macs
+    /// one at a time until one accepts. `tried` remembers the Macs already ruled
+    /// out so each is attempted once. A rejection advances to the next Mac; only
+    /// when every Mac has been ruled out does the attempt surface a failure.
+    private struct Sweep {
+        let auth: ClientMessage
+        let silent: Bool
+        var tried: Set<NWEndpoint> = []
+    }
+    @ObservationIgnored private var sweep: Sweep?
+
     private func found(_ endpoint: NWEndpoint) async {
-        guard self.endpoint == nil else { return } // MVP: first Mac wins
-        self.endpoint = endpoint
+        if !discovered.contains(endpoint) { discovered.append(endpoint) }
         FipleLog.discovery.info("Mac found on LAN")
+
+        // A sweep is already walking the Macs. This new one is now in
+        // `discovered`, so the sweep will reach it if its current candidate
+        // fails — don't start a second attempt in parallel.
+        if sweep != nil { return }
+
+        // Only searching / ready-to-pair start a fresh attempt; when already
+        // connecting or connected there's nothing to kick off.
+        guard phase == .searching || phase == .readyToPair else { return }
+
         if let token = storedToken {
             FipleLog.pairing.info("auto-reconnecting with stored token")
-            await authenticate(.reconnect(token: token), silent: true)
+            await startSweep(.reconnect(token: token), silent: true)
         } else if let pending = pendingCode {
             pendingCode = nil
-            await authenticate(.pair(code: pending.value))
+            await startSweep(.pair(code: pending.value), silent: false)
         } else {
+            phase = .readyToPair
+        }
+    }
+
+    // MARK: - Pairing sweep
+
+    /// Begin trying `auth` against the Macs on the LAN, starting with the first
+    /// one we haven't ruled out yet.
+    private func startSweep(_ auth: ClientMessage, silent: Bool) async {
+        sweep = Sweep(auth: auth, silent: silent)
+        await advanceSweep()
+    }
+
+    /// Attempt the next not-yet-tried Mac in the current sweep. With none left,
+    /// the attempt is finished — see `finishSweep`.
+    private func advanceSweep() async {
+        guard var current = sweep else { return }
+        guard let next = discovered.first(where: { !current.tried.contains($0) }) else {
+            await finishSweep()
+            return
+        }
+        current.tried.insert(next)
+        sweep = current
+        endpoint = next
+        await authenticate(current.auth, silent: current.silent)
+    }
+
+    /// Every discovered Mac rejected the credential (or was unreachable). A
+    /// reconnect sweep just means our Mac isn't on the network right now — keep
+    /// the token and stay quiet. A code sweep means the code matched no Mac
+    /// present, so surface that.
+    private func finishSweep() async {
+        guard let current = sweep else { return }
+        sweep = nil
+        if case .reconnect = current.auth {
+            phase = .searching
+        } else {
+            pendingCode = nil
+            pairError = "Incorrect code. Check the code shown on your Mac."
             phase = .readyToPair
         }
     }
@@ -147,12 +215,12 @@ final class RemoteController {
             return
         }
         // No Mac on the LAN yet — remember the code and pair as soon as one shows up.
-        guard endpoint != nil else {
+        guard !discovered.isEmpty else {
             pendingCode = parsed
             pairError = nil
             return
         }
-        await authenticate(.pair(code: parsed.value))
+        await startSweep(.pair(code: parsed.value), silent: false)
     }
 
     /// `silent` marks background auto-reconnect attempts: their failures must
@@ -174,7 +242,11 @@ final class RemoteController {
             try await peer.send(auth)
         } catch {
             FipleLog.pairing.error("authenticate failed: \(error.localizedDescription)")
-            if silent {
+            // Mid-sweep an unreachable Mac is simply the wrong (or absent) one —
+            // move on to the next candidate instead of failing the whole attempt.
+            if sweep != nil {
+                await advanceSweep()
+            } else if silent {
                 phase = .searching
             } else {
                 pairError = "Couldn't reach your Mac"
@@ -219,6 +291,14 @@ final class RemoteController {
             // sent the bearer token. Drop the pairing entirely so the token
             // (now potentially exposed) stops being valid grounds for trust.
             if pendingAuthIsReconnect, let expected = storedMacID, expected != macID {
+                // The wrong Mac answered our token. Mid-sweep that just means
+                // this isn't our Mac — move on without disturbing the token.
+                if sweep != nil {
+                    await peer?.close()
+                    peer = nil
+                    await advanceSweep()
+                    return
+                }
                 FipleLog.pairing.error("paired reply from an unexpected Mac — clearing pairing")
                 storedToken = nil
                 storedMacID = nil
@@ -229,6 +309,8 @@ final class RemoteController {
                 return
             }
             FipleLog.pairing.info("paired with '\(macName)'")
+            sweep = nil
+            pendingCode = nil
             reconnectTask?.cancel()
             reconnectTask = nil
             self.macName = macName
@@ -241,11 +323,19 @@ final class RemoteController {
             macKind = kind
 
         case let .pairRejected(reason):
-            // a rejected reconnect means the remembered pairing is stale
             FipleLog.pairing.notice("pair rejected: \(reason.rawValue)")
-            storedToken = nil
             await peer?.close()
             peer = nil
+            // Mid-sweep this Mac rejected us, but another on the LAN might
+            // accept. Try the next one; the token stays put until every Mac has
+            // been ruled out.
+            if sweep != nil {
+                await advanceSweep()
+                return
+            }
+            // A rejected reconnect (outside a sweep) means the remembered pairing
+            // is stale.
+            storedToken = nil
             pairError = Self.message(for: reason)
             phase = .readyToPair
 
@@ -358,6 +448,7 @@ final class RemoteController {
     func disconnect() async {
         reconnectTask?.cancel()
         reconnectTask = nil
+        sweep = nil
         storedToken = nil
         storedMacID = nil
         await peer?.close()
@@ -369,7 +460,7 @@ final class RemoteController {
         runningTileID = nil
         runningActionID = nil
         runStartedAt.removeAll()
-        phase = endpoint == nil ? .searching : .readyToPair
+        phase = discovered.isEmpty ? .searching : .readyToPair
     }
 
     private func handleDrop(_ peer: PeerConnection, deliberate: Bool) async {
@@ -381,7 +472,7 @@ final class RemoteController {
         runningActionID = nil
         runStartedAt.removeAll()
         guard storedToken != nil else {
-            phase = endpoint == nil ? .searching : .readyToPair
+            phase = discovered.isEmpty ? .searching : .readyToPair
             return
         }
         // A clean close means the Mac went away on purpose (quit / sleep /
@@ -393,7 +484,7 @@ final class RemoteController {
         if deliberate {
             tiles = []
             fipleBar = []
-            phase = endpoint == nil ? .searching : .readyToPair
+            phase = discovered.isEmpty ? .searching : .readyToPair
             FipleLog.connection.notice("connection closed cleanly — Mac went away")
         } else {
             FipleLog.connection.notice("connection dropped — auto-reconnecting")
