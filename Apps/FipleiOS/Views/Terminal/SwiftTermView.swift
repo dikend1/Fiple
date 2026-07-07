@@ -18,6 +18,11 @@ struct SwiftTermView: UIViewRepresentable {
         let terminal = TerminalView(frame: .zero)
         terminal.terminalDelegate = context.coordinator
         terminal.backgroundColor = .black
+        terminal.nativeBackgroundColor = .black
+        terminal.nativeForegroundColor = UIColor(white: 0.92, alpha: 1)
+        // We provide our own accessory bar in SwiftUI — drop SwiftTerm's built-in
+        // one so there aren't two stacked rows.
+        terminal.inputAccessoryView = nil
         context.coordinator.attach(to: terminal)
         return terminal
     }
