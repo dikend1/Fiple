@@ -36,7 +36,10 @@ struct TerminalScreen: View {
         .task {
             guard session == nil else { return }
             let session = TerminalSession(
-                host: host, port: port, token: pairingToken, password: masterPassword
+                host: host, port: port, token: pairingToken, password: masterPassword,
+                // A Face-ID password (not a fresh typed one) was valid before, so
+                // allow quiet retries if the Mac rejects it right after a restart.
+                passwordPrevalidated: !rememberOnSuccess
             )
             self.session = session
             await session.connect()
