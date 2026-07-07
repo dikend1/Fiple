@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FipleKit
 
 /// Full-screen terminal on the phone. Owns a ``TerminalSession`` that connects,
@@ -125,25 +126,44 @@ struct TerminalScreen: View {
     }
 }
 
-/// A keyboard accessory row for keys a soft keyboard lacks — Esc, Tab, arrows,
-/// and Ctrl-C, the ones you actually need in a shell.
+/// A keyboard accessory row for keys a soft keyboard lacks — Esc, Tab, Ctrl-C,
+/// arrows — plus a one-tap Paste (copy is the native long-press → Copy menu).
+/// Horizontally scrollable so nothing clips on narrow phones.
 private struct TerminalAccessoryBar: View {
     let session: TerminalSession
 
     var body: some View {
-        HStack(spacing: 8) {
-            key("esc") { session.send(Data([0x1b])) }
-            key("tab") { session.send(Data([0x09])) }
-            key("⌃C") { session.send(Data([0x03])) }
-            key("↑") { session.send(Data([0x1b, 0x5b, 0x41])) }
-            key("↓") { session.send(Data([0x1b, 0x5b, 0x42])) }
-            key("←") { session.send(Data([0x1b, 0x5b, 0x44])) }
-            key("→") { session.send(Data([0x1b, 0x5b, 0x43])) }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                iconKey("doc.on.clipboard") {
+                    if let text = UIPasteboard.general.string, !text.isEmpty {
+                        session.send(Data(text.utf8))
+                    }
+                }
+                Divider().frame(height: 22).overlay(Color.white.opacity(0.2))
+                key("esc") { session.send(Data([0x1b])) }
+                key("tab") { session.send(Data([0x09])) }
+                key("⌃C") { session.send(Data([0x03])) }
+                key("↑") { session.send(Data([0x1b, 0x5b, 0x41])) }
+                key("↓") { session.send(Data([0x1b, 0x5b, 0x42])) }
+                key("←") { session.send(Data([0x1b, 0x5b, 0x44])) }
+                key("→") { session.send(Data([0x1b, 0x5b, 0x43])) }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial)
+    }
+
+    private func iconKey(_ systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(.callout, weight: .medium))
+                .frame(minWidth: 40)
+                .padding(.vertical, 6)
+                .background(Color(white: 0.2), in: RoundedRectangle(cornerRadius: 6))
+                .foregroundStyle(.white)
+        }
     }
 
     private func key(_ label: String, action: @escaping () -> Void) -> some View {
