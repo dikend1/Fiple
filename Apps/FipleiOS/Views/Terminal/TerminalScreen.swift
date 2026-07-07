@@ -34,8 +34,7 @@ struct TerminalScreen: View {
             await session.connect()
         }
         .onChange(of: scenePhase) { _, phase in
-            // Coming back to the foreground: reconnect and resume the shell.
-            if phase == .active { Task { await session?.reconnectIfNeeded() } }
+            session?.scenePhaseChanged(active: phase == .active)
         }
         .onDisappear { session?.close() }
     }
@@ -46,6 +45,19 @@ struct TerminalScreen: View {
         case .connecting, .authenticating:
             ProgressView(session.phase == .connecting ? "Connecting…" : "Authenticating…")
                 .tint(.white).foregroundStyle(.white)
+        case .reconnecting:
+            VStack(spacing: 16) {
+                ProgressView().tint(.white)
+                VStack(spacing: 6) {
+                    Text("Reconnecting…").font(.headline).foregroundStyle(.white)
+                    Text("Waiting for your Mac. If it’s asleep, wake it — your shell is kept for you.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.bordered).tint(.white)
+            }
+            .padding()
         case .ready:
             VStack(spacing: 0) {
                 terminalTopBar

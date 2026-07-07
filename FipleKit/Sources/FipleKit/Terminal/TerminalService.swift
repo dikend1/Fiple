@@ -41,30 +41,56 @@ public final class TerminalService: @unchecked Sendable {
         )
     }
 
+    /// The port the listener bound to, so a rebind (after sleep / an interface
+    /// change) reuses it and the phone's saved target stays valid.
+    private var boundPort: UInt16 = 0
+
     /// Starts the TLS-PSK listener and returns the bound port.
     @discardableResult
     public func start(port: NWEndpoint.Port = .any) async throws -> UInt16 {
-        let params = TerminalTLS.serverParameters(pairingToken: pairingToken)
-        let listener = try NWListener(using: params, on: port)
-        listener.newConnectionHandler = { [weak self] conn in
-            self?.accept(conn)
-        }
+        let listener = try makeListener(on: port)
         self.listener = listener
 
-        return try await withCheckedThrowingContinuation { cont in
+        let bound: UInt16 = try await withCheckedThrowingContinuation { cont in
             let guardOnce = ResumeOnce()
-            listener.stateUpdateHandler = { state in
+            listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
                     if guardOnce.claim() { cont.resume(returning: listener.port?.rawValue ?? 0) }
                 case .failed(let error):
                     if guardOnce.claim() { cont.resume(throwing: error) }
+                    else { self?.rebind() } // failed after start — recover
                 default:
                     break
                 }
             }
             listener.start(queue: self.queue)
         }
+        boundPort = bound
+        return bound
+    }
+
+    private func makeListener(on port: NWEndpoint.Port) throws -> NWListener {
+        let params = TerminalTLS.serverParameters(pairingToken: pairingToken)
+        let listener = try NWListener(using: params, on: port)
+        listener.newConnectionHandler = { [weak self] conn in
+            self?.accept(conn)
+        }
+        return listener
+    }
+
+    /// Rebuilds the listener on the same port after it dies (Mac wake, Wi-Fi
+    /// change) without touching the session registry — so detached shells that
+    /// survived the interruption can still be resumed. Best-effort.
+    private func rebind() {
+        guard boundPort != 0, let reusePort = NWEndpoint.Port(rawValue: boundPort) else { return }
+        listener?.cancel()
+        guard let listener = try? makeListener(on: reusePort) else { return }
+        self.listener = listener
+        listener.stateUpdateHandler = { [weak self] state in
+            if case .failed = state { self?.rebind() }
+        }
+        listener.start(queue: queue)
     }
 
     public func stop() {
