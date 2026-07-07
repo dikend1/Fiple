@@ -167,7 +167,8 @@ private final class ConnectionSession: @unchecked Sendable {
         connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
-                self?.queue.async { self?.finish() }
+                guard let self else { return }
+                self.queue.async { self.finish() }
             default:
                 break
             }
@@ -230,7 +231,8 @@ private final class ConnectionSession: @unchecked Sendable {
             if let payload = try? MessageCodec.encode(TerminalServerControl.authFailed(reason: reason)),
                let bytes = try? TerminalFrameCodec.frame(TerminalFrame(type: .control, payload: payload)) {
                 connection.send(content: bytes, completion: .contentProcessed { [weak self] _ in
-                    self?.queue.async { self?.finish() }
+                    guard let self else { return }
+                    self.queue.async { self.finish() }
                 })
             } else {
                 finish()
