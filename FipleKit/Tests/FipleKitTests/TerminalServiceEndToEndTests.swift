@@ -41,7 +41,7 @@ struct TerminalServiceEndToEndTests {
             case let .output(data):
                 output += String(decoding: data, as: UTF8.self)
                 if output.contains("fipletest") { client.close() }
-            case .authFailed, .ended:
+            case .authFailed, .ended, .disconnected:
                 break
             }
             if output.contains("fipletest") { break }

@@ -4,8 +4,8 @@ import Observation
 
 /// The phone-side terminal session controller. Stable across reconnects: it owns
 /// the current `TerminalClient`, is the *single* consumer of its event stream,
-/// and re-establishes the channel (resuming the same Mac shell) when the app
-/// returns from the background.
+/// and re-establishes the channel (resuming the same Mac shell) when the link
+/// drops — the Mac sleeps, Wi-Fi blips, or the app returns from the background.
 ///
 /// The SwiftTerm view binds to this — feeding from `outputHandler` and sending
 /// through `send`/`resize` — so a reconnect swaps the underlying client without
@@ -17,7 +17,10 @@ final class TerminalSession {
         case connecting
         case authenticating
         case ready
+        /// The link dropped (Mac asleep / network) and we're retrying.
+        case reconnecting
         case failed(String)
+        /// The shell itself exited — nothing to resume.
         case ended
     }
 
@@ -33,11 +36,16 @@ final class TerminalSession {
     private let port: UInt16
     private let token: String
     private let password: String
+    /// Seconds between reconnect attempts while the Mac is unreachable.
+    private let retryInterval: TimeInterval = 3
 
     /// The Mac shell id to resume; nil on first connect, set once authenticated.
     private var resumeSessionID: String?
+    private var backgrounded = false
+    private var closed = false
     @ObservationIgnored private var client: TerminalClient?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
 
     /// Set by the terminal view to receive shell output bytes.
     @ObservationIgnored var outputHandler: (@MainActor (Data) -> Void)?
@@ -49,34 +57,24 @@ final class TerminalSession {
         self.password = password
     }
 
-    /// Opens the channel and authenticates. Idempotent enough to call again for
-    /// a foreground reconnect — it tears down any prior client first.
+    /// First connection.
     func connect() async {
-        pumpTask?.cancel()
-        client?.close()
-
         phase = .connecting
-        let client = TerminalClient(host: host, port: port, pairingToken: token)
-        self.client = client
-        do {
-            try await client.connect()
-        } catch {
-            phase = .failed("Could not reach the Mac’s terminal service.")
-            return
-        }
-        phase = .authenticating
-        client.authenticate(passwordProof: password, token: token, resumeSessionID: resumeSessionID)
-        pump(client)
+        await attempt()
     }
 
-    /// Re-establishes the session after returning from the background, resuming
-    /// the same Mac shell. No-op while a connection is still live/connecting.
-    func reconnectIfNeeded() async {
-        switch phase {
-        case .ready, .connecting, .authenticating:
-            return // still attached (or attaching)
-        case .failed, .ended:
-            await connect()
+    /// Called on scene-phase changes. iOS kills the socket seconds after the app
+    /// backgrounds, so on returning to the foreground we resume the shell.
+    func scenePhaseChanged(active: Bool) {
+        if active {
+            // Returning to the foreground: the socket was killed while backgrounded,
+            // so resume the shell. No-op on the very first activation.
+            if backgrounded, !closed {
+                backgrounded = false
+                startReconnectLoop()
+            }
+        } else {
+            backgrounded = true
         }
     }
 
@@ -84,10 +82,47 @@ final class TerminalSession {
     func resize(cols: Int, rows: Int) { client?.resize(cols: cols, rows: rows) }
 
     func close() {
+        closed = true
+        retryTask?.cancel(); retryTask = nil
+        pumpTask?.cancel(); pumpTask = nil
+        client?.close(); client = nil
+    }
+
+    // MARK: - Connection
+
+    /// One connection attempt: open the channel, authenticate, start pumping.
+    /// Leaves `phase` for the pump to advance to `.ready` on success.
+    private func attempt() async {
         pumpTask?.cancel()
-        pumpTask = nil
         client?.close()
-        client = nil
+
+        let client = TerminalClient(host: host, port: port, pairingToken: token)
+        self.client = client
+        do {
+            try await client.connect(timeout: 8)
+        } catch {
+            return // couldn't reach the Mac; the retry loop tries again
+        }
+        guard !closed else { client.close(); return }
+        client.authenticate(passwordProof: password, token: token, resumeSessionID: resumeSessionID)
+        pump(client)
+    }
+
+    /// Keeps reconnecting (resuming the shell) until it succeeds or the screen
+    /// closes — so a sleeping Mac coming back online reconnects on its own.
+    private func startReconnectLoop() {
+        guard !closed else { return }
+        if phase != .reconnecting { phase = .reconnecting }
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            while let self, !self.closed, self.phase != .ready {
+                await self.attempt()
+                // Let the auth handshake land before deciding to retry.
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if self.phase == .ready { break }
+                try? await Task.sleep(for: .seconds(self.retryInterval))
+            }
+        }
     }
 
     private func pump(_ client: TerminalClient) {
@@ -99,16 +134,22 @@ final class TerminalSession {
                 case let .authenticated(sessionID):
                     self.resumeSessionID = sessionID
                     self.generation += 1
+                    self.retryTask?.cancel()
                     self.phase = .ready
                 case let .output(data):
                     self.outputHandler?(data)
                 case let .authFailed(reason):
                     self.lastAuthFailReason = reason
+                    self.retryTask?.cancel()
                     self.phase = .failed(Self.message(for: reason))
                 case .ended:
-                    // Backgrounding kills the socket; keep resumeSessionID so a
-                    // foreground reconnect resumes the same shell.
-                    if self.phase == .ready { self.phase = .ended }
+                    // The shell process exited — nothing to resume.
+                    self.retryTask?.cancel()
+                    self.phase = .ended
+                case .disconnected:
+                    // The link dropped (Mac asleep / Wi-Fi). Keep resumeSessionID
+                    // and retry — unless the user closed the screen.
+                    if !self.closed { self.startReconnectLoop() }
                 }
             }
         }

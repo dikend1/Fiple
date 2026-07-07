@@ -1,5 +1,6 @@
 import FipleKit
 import Foundation
+import Network
 import Observation
 
 /// Owns the Mac's privileged terminal feature: the on/off preference, the master
@@ -36,6 +37,7 @@ final class TerminalController {
 
     private static let enabledKey = "com.fiple.terminal.enabled"
     private static let passwordKey = "com.fiple.terminal.password"
+    private static let portKey = "com.fiple.terminal.lastPort"
 
     init() {
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
@@ -86,16 +88,29 @@ final class TerminalController {
             Task { @MainActor in self?.activeSessions = count }
         }
         do {
-            let boundPort = try await service.start()
+            // Reuse the last port so a phone with an open terminal reconnects to
+            // the same target after a restart; fall back to any if it's taken.
+            let preferred = UInt16(UserDefaults.standard.integer(forKey: Self.portKey))
+            let boundPort = try await startService(service, preferredPort: preferred)
             self.service = service
             self.serviceToken = token
             self.serviceRecord = record
             self.port = boundPort
+            UserDefaults.standard.set(Int(boundPort), forKey: Self.portKey)
             FipleLog.connection.info("terminal service listening on \(boundPort)")
         } catch {
             FipleLog.connection.error("terminal service failed to start: \(error.localizedDescription)")
             self.port = 0
         }
+    }
+
+    /// Starts the service on the preferred port, retrying on any free port if
+    /// that one is unavailable.
+    private func startService(_ service: TerminalService, preferredPort: UInt16) async throws -> UInt16 {
+        if preferredPort != 0, let port = NWEndpoint.Port(rawValue: preferredPort) {
+            if let bound = try? await service.start(port: port) { return bound }
+        }
+        return try await service.start(port: .any)
     }
 
     private func stopService() {

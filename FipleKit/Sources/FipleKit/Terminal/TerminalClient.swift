@@ -16,8 +16,13 @@ public final class TerminalClient: @unchecked Sendable {
         case authFailed(TerminalAuthFailReason)
         /// Shell output bytes to feed the terminal renderer.
         case output(Data)
-        /// The shell exited (or the channel ended), with its code if known.
+        /// The shell process itself exited, with its code if known — the session
+        /// is truly over (the user typed `exit`, or it crashed).
         case ended(exitCode: Int32?)
+        /// The channel dropped without the shell exiting — the Mac went to sleep,
+        /// Wi-Fi blipped, etc. The shell may still be alive (within its grace
+        /// period), so the client should reconnect and resume it.
+        case disconnected
     }
 
     private let connection: NWConnection
@@ -47,9 +52,11 @@ public final class TerminalClient: @unchecked Sendable {
                     if once.claim() { cont.resume() }
                 case .failed(let error):
                     if once.claim() { cont.resume(throwing: error) }
-                    self?.finish(exitCode: nil)
+                    self?.emit(.disconnected)
                 case .cancelled:
-                    self?.finish(exitCode: nil)
+                    // A no-op if we already finished (e.g. user close); otherwise
+                    // the peer dropped us.
+                    self?.emit(.disconnected)
                 default:
                     break
                 }
@@ -86,8 +93,10 @@ public final class TerminalClient: @unchecked Sendable {
     }
 
     public func close() {
+        // User-initiated teardown: finish the stream without a `.disconnected`
+        // event (which would otherwise trigger a reconnect).
+        finishSilently()
         connection.cancel()
-        finish(exitCode: nil)
     }
 
     // MARK: - internals
@@ -99,7 +108,7 @@ public final class TerminalClient: @unchecked Sendable {
                 for frame in frames { self.handle(frame) }
             }
             if isComplete || error != nil {
-                self.finish(exitCode: nil)
+                self.emit(.disconnected)
                 return
             }
             self.receive()
@@ -117,7 +126,7 @@ public final class TerminalClient: @unchecked Sendable {
                 self.sessionID = sessionID
                 continuation.yield(.authenticated(sessionID: sessionID))
             case let .authFailed(reason): continuation.yield(.authFailed(reason))
-            case let .sessionEnded(code): finish(exitCode: code)
+            case let .sessionEnded(code): emit(.ended(exitCode: code))
             }
         case .ping:
             sendFrame(TerminalFrame(type: .pong))
@@ -137,11 +146,20 @@ public final class TerminalClient: @unchecked Sendable {
     }
 
     private var finished = false
-    private func finish(exitCode: Int32?) {
+    /// Emits a terminal event and finishes the stream, exactly once.
+    private func emit(_ event: Event) {
         queue.async { [weak self] in
             guard let self, !self.finished else { return }
             self.finished = true
-            self.continuation.yield(.ended(exitCode: exitCode))
+            self.continuation.yield(event)
+            self.continuation.finish()
+        }
+    }
+    /// Finishes the stream with no event (user closed the screen).
+    private func finishSilently() {
+        queue.async { [weak self] in
+            guard let self, !self.finished else { return }
+            self.finished = true
             self.continuation.finish()
         }
     }
