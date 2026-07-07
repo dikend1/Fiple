@@ -113,10 +113,12 @@ public final class TerminalService: @unchecked Sendable {
         )
         connections[ObjectIdentifier(session)] = session
         session.onFinished = { [weak self] in
-            self?.queue.async { self?.connections[ObjectIdentifier(session)] = nil }
+            guard let self else { return }
+            self.queue.async { self.connections[ObjectIdentifier(session)] = nil }
         }
         session.onActiveChange = { [weak self] delta in
-            self?.queue.async { self?.updateActiveCount(by: delta) }
+            guard let self else { return }
+            self.queue.async { self.updateActiveCount(by: delta) }
         }
         session.start()
     }
