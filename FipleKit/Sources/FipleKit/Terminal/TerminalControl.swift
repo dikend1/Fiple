@@ -34,6 +34,11 @@ public enum TerminalClientControl: Sendable, Equatable {
     /// grace period), the Mac reattaches to it and replays its buffer; otherwise
     /// a fresh shell is started. Nil on a first connection.
     case auth(token: String, passwordProof: String, resumeSessionID: String?)
+    /// The phone closed a session tab: end that shell now instead of letting it
+    /// idle through the reattach grace period. Only honoured on an authenticated
+    /// connection. An older Mac skips this unknown type — the shell then simply
+    /// dies at grace expiry (soft degradation).
+    case endSession(sessionID: String)
 }
 
 extension TerminalClientControl: WireTypeTagged {
@@ -41,8 +46,8 @@ extension TerminalClientControl: WireTypeTagged {
 }
 
 extension TerminalClientControl: Codable {
-    private enum Tag: String, Codable, CaseIterable { case auth }
-    private enum CodingKeys: String, CodingKey { case type, token, passwordProof, resumeSessionID }
+    private enum Tag: String, Codable, CaseIterable { case auth, endSession }
+    private enum CodingKeys: String, CodingKey { case type, token, passwordProof, resumeSessionID, sessionID }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,6 +58,8 @@ extension TerminalClientControl: Codable {
                 passwordProof: try c.decode(String.self, forKey: .passwordProof),
                 resumeSessionID: try c.decodeIfPresent(String.self, forKey: .resumeSessionID)
             )
+        case .endSession:
+            self = .endSession(sessionID: try c.decode(String.self, forKey: .sessionID))
         }
     }
 
@@ -64,6 +71,9 @@ extension TerminalClientControl: Codable {
             try c.encode(token, forKey: .token)
             try c.encode(passwordProof, forKey: .passwordProof)
             try c.encodeIfPresent(resumeSessionID, forKey: .resumeSessionID)
+        case let .endSession(sessionID):
+            try c.encode(Tag.endSession, forKey: .type)
+            try c.encode(sessionID, forKey: .sessionID)
         }
     }
 }

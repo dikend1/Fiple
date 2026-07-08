@@ -34,6 +34,9 @@ final class TerminalSession {
     /// Bumped on every successful (re)connect, so the terminal view can force a
     /// fresh emulator and cleanly redraw the replayed scrollback.
     private(set) var generation = 0
+    /// When shell output last arrived — the session-menu "unseen output" signal
+    /// for tabs running in the background.
+    private(set) var lastOutputAt: Date?
 
     private let host: String
     private let port: UInt16
@@ -95,6 +98,13 @@ final class TerminalSession {
 
     func send(_ data: Data) { client?.send(data) }
     func resize(cols: Int, rows: Int) { client?.resize(cols: cols, rows: rows) }
+
+    /// Closes this tab for good: tells the Mac to end the shell now (instead of
+    /// letting it idle through the grace period), then tears the channel down.
+    func endShell() {
+        if let id = resumeSessionID { client?.endSession(sessionID: id) }
+        close()
+    }
 
     func close() {
         closed = true
@@ -173,6 +183,7 @@ final class TerminalSession {
                     self.generation += 1
                     self.phase = .ready
                 case let .output(data):
+                    self.lastOutputAt = Date()
                     self.outputHandler?(data)
                 case let .authFailed(reason):
                     self.lastAuthFailReason = reason

@@ -81,6 +81,12 @@ public final class TerminalClient: @unchecked Sendable {
         sendControl(.auth(token: token, passwordProof: passwordProof, resumeSessionID: resumeSessionID))
     }
 
+    /// Asks the Mac to end a shell session now (the user closed its tab) rather
+    /// than letting it linger through the reattach grace period.
+    public func endSession(sessionID: String) {
+        sendControl(.endSession(sessionID: sessionID))
+    }
+
     /// Sends keystrokes to the shell.
     public func send(_ data: Data) {
         sendFrame(TerminalFrame(type: .data, payload: data))

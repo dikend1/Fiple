@@ -122,6 +122,12 @@ final class TerminalSessionRegistry: @unchecked Sendable {
         return session
     }
 
+    /// Ends one session for good (the phone closed its tab). Call on `queue`.
+    func end(id: String) {
+        sessions[id]?.close()
+        sessions[id] = nil
+    }
+
     /// Closes and drops every session (service stopping). Call on `queue`.
     func closeAll() {
         for session in sessions.values { session.close() }
