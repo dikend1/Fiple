@@ -216,7 +216,16 @@ private final class ConnectionSession: @unchecked Sendable {
             }
         case .ping:
             send(TerminalFrame(type: .pong))
-        case .control, .pong:
+        case .control:
+            // Post-auth control: the phone closing one of its session tabs.
+            // Unknown control types from a newer phone are skipped, not fatal.
+            guard let control = try? MessageCodec.decodeIfKnown(TerminalClientControl.self, from: frame.payload)
+            else { return }
+            if case let .endSession(sessionID) = control {
+                if shell?.id == sessionID { shell = nil }
+                registry.end(id: sessionID)
+            }
+        case .pong:
             break
         }
     }

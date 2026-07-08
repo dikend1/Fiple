@@ -8,7 +8,8 @@ struct TerminalControlTests {
     func clientRoundTrip() throws {
         let messages: [TerminalClientControl] = [
             .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: nil),
-            .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: "sess-1")
+            .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: "sess-1"),
+            .endSession(sessionID: "sess-2")
         ]
         for message in messages {
             let data = try MessageCodec.encode(message)

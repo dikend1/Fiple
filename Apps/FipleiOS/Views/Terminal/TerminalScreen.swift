@@ -3,10 +3,36 @@ import UIKit
 import Combine
 import FipleKit
 
-/// Full-screen terminal on the phone. Owns a ``TerminalSession`` that connects,
-/// authenticates, and — crucially on iOS — resumes the same Mac shell when the
-/// app returns from the background (the OS kills the socket within seconds of
-/// backgrounding).
+/// One tab in the terminal: a named, independently connected shell on the Mac.
+/// All open tabs stay connected in parallel — each keeps its own SwiftTerm
+/// emulator mounted (hidden when inactive) so background output accumulates and
+/// is there the moment you switch.
+@MainActor
+@Observable
+final class TerminalTab: Identifiable {
+    let id = UUID()
+    let name: String
+    let session: TerminalSession
+    /// When the user last looked at this tab, for the unseen-output dot.
+    var lastSeenAt = Date()
+
+    init(name: String, session: TerminalSession) {
+        self.name = name
+        self.session = session
+    }
+
+    /// Output arrived after the user last had this tab on screen.
+    var hasUnseenOutput: Bool {
+        guard let output = session.lastOutputAt else { return false }
+        return output > lastSeenAt
+    }
+}
+
+/// Full-screen terminal on the phone. Owns up to ``maxTabs`` independent
+/// ``TerminalSession`` tabs (e.g. three Claude Code chats side by side); a menu
+/// in the top bar switches between them. Each session connects, authenticates,
+/// and — crucially on iOS — resumes the same Mac shell when the app returns
+/// from the background (the OS kills the socket within seconds).
 struct TerminalScreen: View {
     let host: String
     let port: UInt16
@@ -16,7 +42,13 @@ struct TerminalScreen: View {
     /// biometrics once it authenticates, so next time is one-tap Face ID.
     var rememberOnSuccess: Bool = false
 
-    @State private var session: TerminalSession?
+    static let maxTabs = 5
+
+    @State private var tabs: [TerminalTab] = []
+    @State private var activeTabID: UUID?
+    /// Session numbering keeps counting up ("Session 4" after closing 1–3), so a
+    /// name never refers to two different shells within one screen's lifetime.
+    @State private var nextSessionNumber = 1
     @State private var didRemember = false
     /// A password the user typed on the inline retry field, to remember once it
     /// authenticates (may differ from the one passed in).
@@ -36,11 +68,15 @@ struct TerminalScreen: View {
     /// double-count).
     private var keyboardInset: CGFloat { max(0, keyboardHeight - bottomSafeArea) }
 
+    private var activeTab: TerminalTab? {
+        tabs.first { $0.id == activeTabID } ?? tabs.first
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let session {
-                content(for: session)
+            if let tab = activeTab {
+                content(for: tab)
             } else {
                 ProgressView().tint(.white)
             }
@@ -59,21 +95,14 @@ struct TerminalScreen: View {
             withAnimation(.easeOut(duration: 0.2)) { keyboardHeight = 0 }
         }
         .task {
-            guard session == nil else { return }
-            let session = TerminalSession(
-                host: host, port: port, token: pairingToken, password: masterPassword,
-                // A Face-ID password (not a fresh typed one) was valid before, so
-                // allow quiet retries if the Mac rejects it right after a restart.
-                passwordPrevalidated: !rememberOnSuccess
-            )
-            self.session = session
-            await session.connect()
+            guard tabs.isEmpty else { return }
+            await openNewTab()
         }
         .onChange(of: scenePhase) { _, phase in
-            session?.scenePhaseChanged(active: phase == .active)
+            for tab in tabs { tab.session.scenePhaseChanged(active: phase == .active) }
         }
-        .onChange(of: session?.phase) { _, phase in
-            guard let phase else { return }
+        .onChange(of: activeTab?.session.phase) { _, phase in
+            guard let phase, let session = activeTab?.session else { return }
             if phase == .ready, !didRemember {
                 // Remember whichever password just authenticated: a corrected one
                 // typed on the inline field wins, else the initial typed one.
@@ -85,17 +114,59 @@ struct TerminalScreen: View {
                     TerminalCredentialStore.save(masterPassword)
                 }
             }
-            if case .failed = phase, session?.lastAuthFailReason == .badPassword {
+            if case .failed = phase, session.lastAuthFailReason == .badPassword {
                 // A wrong (likely stale) saved password — forget it so it isn't
                 // reused; the inline field below lets the user correct it.
                 TerminalCredentialStore.clear()
             }
         }
-        .onDisappear { session?.close() }
+        // Closing the screen detaches every shell (they survive the grace period
+        // on the Mac); it doesn't kill them — only closing a tab does that.
+        .onDisappear { for tab in tabs { tab.session.close() } }
+    }
+
+    // MARK: Tabs
+
+    /// The password that most recently authenticated — new tabs reuse it, so
+    /// opening "Session 2" never re-asks what "Session 1" already proved.
+    private var currentPassword: String {
+        pendingRememberPassword ?? masterPassword
+    }
+
+    private func openNewTab() async {
+        guard tabs.count < Self.maxTabs else { return }
+        let session = TerminalSession(
+            host: host, port: port, token: pairingToken, password: currentPassword,
+            // The first tab's password may be fresh-typed; every later tab uses a
+            // password that already authenticated a sibling, so quiet retries are
+            // safe for it too.
+            passwordPrevalidated: !rememberOnSuccess || !tabs.isEmpty
+        )
+        let tab = TerminalTab(name: "Session \(nextSessionNumber)", session: session)
+        nextSessionNumber += 1
+        tabs.append(tab)
+        activate(tab)
+        await session.connect()
+    }
+
+    private func activate(_ tab: TerminalTab) {
+        // Stamp the tab we're leaving so its dot only lights for output that
+        // arrives after this moment.
+        if let current = activeTab { current.lastSeenAt = Date() }
+        activeTabID = tab.id
+        tab.lastSeenAt = Date()
+    }
+
+    private func closeTab(_ tab: TerminalTab) {
+        tab.session.endShell()
+        tabs.removeAll { $0.id == tab.id }
+        if activeTabID == tab.id { activeTabID = tabs.first?.id }
+        if tabs.isEmpty { dismiss() }
     }
 
     @ViewBuilder
-    private func content(for session: TerminalSession) -> some View {
+    private func content(for tab: TerminalTab) -> some View {
+        let session = tab.session
         switch session.phase {
         case .connecting, .authenticating:
             ProgressView(session.phase == .connecting ? "Connecting…" : "Authenticating…")
@@ -116,9 +187,18 @@ struct TerminalScreen: View {
         case .ready:
             VStack(spacing: 0) {
                 terminalTopBar
-                // A fresh emulator per connection redraws the replayed scrollback
-                // cleanly instead of appending it to stale content.
-                SwiftTermView(session: session).id(session.generation)
+                // EVERY ready tab keeps its emulator mounted — hidden tabs keep
+                // consuming output, so switching shows what accumulated. A fresh
+                // emulator per connection (`generation`) redraws the replayed
+                // scrollback cleanly instead of appending it to stale content.
+                ZStack {
+                    ForEach(tabs.filter { $0.session.phase == .ready }) { readyTab in
+                        SwiftTermView(session: readyTab.session)
+                            .id("\(readyTab.id)-\(readyTab.session.generation)")
+                            .opacity(readyTab.id == tab.id ? 1 : 0)
+                            .allowsHitTesting(readyTab.id == tab.id)
+                    }
+                }
                 TerminalAccessoryBar(session: session)
             }
             // Lift the whole terminal above the keyboard so the line you're
@@ -142,8 +222,11 @@ struct TerminalScreen: View {
         }
     }
 
-    /// A slim bar over the terminal with the way out — the shell keeps running on
-    /// the Mac (detached), so this just closes the screen, it doesn't kill it.
+    /// A slim bar over the terminal. Leading: Done (detaches, never kills — the
+    /// shells keep running on the Mac). Centre: the session menu — the current
+    /// session's name opens the switcher, one row per tab with an activity dot
+    /// (orange = unseen output, green = live, gray = reconnecting), plus New /
+    /// Close Session.
     private var terminalTopBar: some View {
         HStack {
             Button { dismiss() } label: {
@@ -154,13 +237,7 @@ struct TerminalScreen: View {
             }
             .tint(.white)
             Spacer()
-            HStack(spacing: 7) {
-                Circle().fill(Theme.Palette.brand).frame(width: 7, height: 7)
-                    .shadow(color: Theme.Palette.brand.opacity(0.7), radius: 3)
-                Text("Terminal")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.85))
-            }
+            sessionMenu
             Spacer()
             // Balances the leading button so the title stays centred.
             HStack(spacing: 4) {
@@ -172,6 +249,65 @@ struct TerminalScreen: View {
         .padding(.vertical, 11)
         .background(Color(white: 0.06))
         .overlay(Rectangle().fill(Color.white.opacity(0.08)).frame(height: 0.5), alignment: .bottom)
+    }
+
+    private var sessionMenu: some View {
+        Menu {
+            ForEach(tabs) { tab in
+                Button {
+                    activate(tab)
+                } label: {
+                    if tab.id == activeTab?.id {
+                        Label(tab.name, systemImage: "checkmark")
+                    } else if tab.hasUnseenOutput {
+                        // The "which Claude finished?" signal: output arrived
+                        // while this tab was in the background.
+                        Label(tab.name, systemImage: "circle.fill")
+                    } else {
+                        Text(tab.name)
+                    }
+                }
+            }
+            Divider()
+            Button {
+                Task { await openNewTab() }
+            } label: {
+                Label("New Session", systemImage: "plus")
+            }
+            .disabled(tabs.count >= Self.maxTabs)
+            Button(role: .destructive) {
+                if let tab = activeTab { closeTab(tab) }
+            } label: {
+                Label("Close Session", systemImage: "xmark")
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(anyUnseenOutput ? Color.orange : Theme.Palette.brand)
+                    .frame(width: 7, height: 7)
+                    .shadow(color: (anyUnseenOutput ? Color.orange : Theme.Palette.brand).opacity(0.7), radius: 3)
+                Text(activeTab?.name ?? "Terminal")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.85))
+                if tabs.count > 1 {
+                    Text("\(tabs.count)")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.white.opacity(0.85), in: Capsule())
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .accessibilityLabel("Sessions, \(activeTab?.name ?? "Terminal") active, \(tabs.count) open")
+    }
+
+    /// Any background tab produced output since it was last viewed.
+    private var anyUnseenOutput: Bool {
+        tabs.contains { $0.id != activeTab?.id && $0.hasUnseenOutput }
     }
 
     @ViewBuilder
@@ -299,7 +435,7 @@ struct TerminalScreen: View {
     private func submitRetry() {
         guard retryPassword.count >= 4 else { return }
         pendingRememberPassword = retryPassword // remember it if it works
-        session?.retry(withPassword: retryPassword)
+        activeTab?.session.retry(withPassword: retryPassword)
         retryPassword = ""
     }
 
