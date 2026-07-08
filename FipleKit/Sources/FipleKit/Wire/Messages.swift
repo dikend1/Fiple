@@ -14,6 +14,21 @@ public enum ClientMessage: Sendable, Equatable {
     /// only if it exists — so a client can never have the Mac execute an
     /// arbitrary, client-supplied action.
     case runAction(actionID: UUID)
+    /// Ask for a Smart Trash candidate's thumbnail (fetched lazily per visible
+    /// grid cell). The Mac answers with `trashThumbnail` or ignores unknown ids.
+    case trashThumbnail(candidateID: UUID)
+    /// Review decision for a batch of Smart Trash candidates. Ids only — the
+    /// Mac resolves them against its own candidate store and acts solely on
+    /// matches (server-authoritative, like `runAction`).
+    case trashAction(ids: [UUID], decision: TrashDecision)
+}
+
+/// The phone's verdict on Smart Trash candidates.
+public enum TrashDecision: String, Sendable, Equatable, Codable {
+    /// Move to the system macOS Trash now.
+    case trash
+    /// Keep forever — excluded from all future scans.
+    case keep
 }
 
 extension ClientMessage: WireTypeTagged {
@@ -23,8 +38,8 @@ extension ClientMessage: WireTypeTagged {
 }
 
 extension ClientMessage: Codable {
-    private enum Tag: String, Codable, CaseIterable { case pair, reconnect, run, runAction }
-    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID, version }
+    private enum Tag: String, Codable, CaseIterable { case pair, reconnect, run, runAction, trashThumbnail, trashAction }
+    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID, version, candidateID, ids, decision }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -33,6 +48,16 @@ extension ClientMessage: Codable {
         case .reconnect: self = .reconnect(token: try c.decode(String.self, forKey: .token))
         case .run: self = .run(tileID: try c.decode(UUID.self, forKey: .tileID))
         case .runAction: self = .runAction(actionID: try c.decode(UUID.self, forKey: .actionID))
+        case .trashThumbnail:
+            self = .trashThumbnail(candidateID: try c.decode(UUID.self, forKey: .candidateID))
+        case .trashAction:
+            // Tolerate an unknown decision from a newer peer by treating it as
+            // the non-destructive one.
+            let raw = try c.decode(String.self, forKey: .decision)
+            self = .trashAction(
+                ids: try c.decode([UUID].self, forKey: .ids),
+                decision: TrashDecision(rawValue: raw) ?? .keep
+            )
         }
     }
 
@@ -53,6 +78,13 @@ extension ClientMessage: Codable {
         case let .runAction(actionID):
             try c.encode(Tag.runAction, forKey: .type)
             try c.encode(actionID, forKey: .actionID)
+        case let .trashThumbnail(candidateID):
+            try c.encode(Tag.trashThumbnail, forKey: .type)
+            try c.encode(candidateID, forKey: .candidateID)
+        case let .trashAction(ids, decision):
+            try c.encode(Tag.trashAction, forKey: .type)
+            try c.encode(ids, forKey: .ids)
+            try c.encode(decision.rawValue, forKey: .decision)
         }
     }
 }
@@ -87,6 +119,15 @@ public enum ServerMessage: Sendable, Equatable {
     case fipleBar(actions: [Action])
     /// Per-action result of a triggered tile.
     case runResult(RunResult)
+    /// The current Smart Trash candidate list (metadata only — files stay on
+    /// disk). Sent on connect when the feature is enabled and re-pushed after
+    /// every change (new scan, review action, deadline enforcement).
+    case trashCandidates(candidates: [TrashCandidate])
+    /// One candidate's QuickLook thumbnail (JPEG), answering `trashThumbnail`.
+    case trashThumbnail(candidateID: UUID, jpeg: Data)
+    /// Typed outcome of a `trashAction`: which ids were trashed / kept, and
+    /// which the Mac didn't recognize (already evicted or forged).
+    case trashActionResult(trashed: [UUID], kept: [UUID], unknown: [UUID])
 }
 
 extension ServerMessage: WireTypeTagged {
@@ -95,9 +136,13 @@ extension ServerMessage: WireTypeTagged {
 }
 
 extension ServerMessage: Codable {
-    private enum Tag: String, Codable, CaseIterable { case paired, deviceInfo, pairRejected, tilesSnapshot, fipleBar, runResult }
+    private enum Tag: String, Codable, CaseIterable {
+        case paired, deviceInfo, pairRejected, tilesSnapshot, fipleBar, runResult,
+             trashCandidates, trashThumbnail, trashActionResult
+    }
     private enum CodingKeys: String, CodingKey {
-        case type, macID, macName, macKind, token, reason, tiles, actions, result, version
+        case type, macID, macName, macKind, token, reason, tiles, actions, result, version,
+             candidates, candidateID, jpeg, trashed, kept, unknown
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,6 +170,19 @@ extension ServerMessage: Codable {
             self = .fipleBar(actions: try c.decode([Action].self, forKey: .actions))
         case .runResult:
             self = .runResult(try c.decode(RunResult.self, forKey: .result))
+        case .trashCandidates:
+            self = .trashCandidates(candidates: try c.decode([TrashCandidate].self, forKey: .candidates))
+        case .trashThumbnail:
+            self = .trashThumbnail(
+                candidateID: try c.decode(UUID.self, forKey: .candidateID),
+                jpeg: try c.decode(Data.self, forKey: .jpeg)
+            )
+        case .trashActionResult:
+            self = .trashActionResult(
+                trashed: try c.decode([UUID].self, forKey: .trashed),
+                kept: try c.decode([UUID].self, forKey: .kept),
+                unknown: try c.decode([UUID].self, forKey: .unknown)
+            )
         }
     }
 
@@ -152,6 +210,18 @@ extension ServerMessage: Codable {
         case let .runResult(result):
             try c.encode(Tag.runResult, forKey: .type)
             try c.encode(result, forKey: .result)
+        case let .trashCandidates(candidates):
+            try c.encode(Tag.trashCandidates, forKey: .type)
+            try c.encode(candidates, forKey: .candidates)
+        case let .trashThumbnail(candidateID, jpeg):
+            try c.encode(Tag.trashThumbnail, forKey: .type)
+            try c.encode(candidateID, forKey: .candidateID)
+            try c.encode(jpeg, forKey: .jpeg)
+        case let .trashActionResult(trashed, kept, unknown):
+            try c.encode(Tag.trashActionResult, forKey: .type)
+            try c.encode(trashed, forKey: .trashed)
+            try c.encode(kept, forKey: .kept)
+            try c.encode(unknown, forKey: .unknown)
         }
     }
 }
