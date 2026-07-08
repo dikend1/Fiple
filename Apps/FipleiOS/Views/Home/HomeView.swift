@@ -127,33 +127,62 @@ struct HomeView: View {
 
     // MARK: Smart Trash
 
-    /// Entry card into the review grid, shown only while the Mac has candidates
-    /// — a count badge makes "there's something to clean up" visible at a glance.
+    /// Entry card into the review grid, shown only while the Mac has candidates.
+    /// Leads with the payoff — how much space a clean-up frees — not the feature
+    /// name, and carries a warm "clean-up" tint so it reads as a to-do, not
+    /// another tool row like Terminal above it.
     private var trashEntry: some View {
-        NavigationLink {
+        let candidates = controller.trashCandidates
+        let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
+        let total = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+
+        return NavigationLink {
             TrashReviewView(controller: controller)
         } label: {
             HStack(spacing: Theme.Spacing.md) {
-                Image(systemName: "trash.fill").font(.fiple(20, .semibold))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.orange.opacity(0.16))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "trash.fill")
+                        .font(.fiple(19, .semibold))
+                        .foregroundStyle(.orange)
+                }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Smart Trash").font(.fiple(17, .semibold))
-                    Text("Stale files found on your Mac").font(.fiple(13)).foregroundStyle(.secondary)
+                    Text("Free up \(total)")
+                        .font(.fiple(17, .bold))
+                    Text(trashSubtitle(candidates))
+                        .font(.fiple(13))
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(controller.trashCandidates.count)")
-                    .font(.fiple(13, .bold))
+                Text("Review")
+                    .font(.fiple(14, .semibold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Theme.Palette.brand, in: Capsule())
-                Image(systemName: "chevron.right").font(.fiple(13, .semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(.orange, in: Capsule())
             }
             .foregroundStyle(Theme.Palette.label)
             .padding(Theme.Spacing.lg)
             .frame(maxWidth: .infinity)
-            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+            .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.orange.opacity(0.25))
+            )
         }
         .buttonStyle(.plain)
+    }
+
+    /// "5 unused files · first auto-trash in 3 days" — the count plus the reason
+    /// to act now, so urgency is visible before opening the screen.
+    private func trashSubtitle(_ candidates: [TrashCandidate]) -> String {
+        let count = candidates.count == 1 ? "1 unused file" : "\(candidates.count) unused files"
+        guard let nearest = candidates.map(\.deadline).min() else { return count }
+        let days = max(0, Int(nearest.timeIntervalSinceNow / 86_400))
+        let when = days == 0 ? "today" : (days == 1 ? "in 1 day" : "in \(days) days")
+        return "\(count) · first auto-trash \(when)"
     }
 
     // MARK: Header

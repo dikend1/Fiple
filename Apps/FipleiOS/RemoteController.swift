@@ -686,6 +686,23 @@ final class RemoteController {
             LaunchRecord(tile: demo[2], at: Date().addingTimeInterval(-90000)),
             LaunchRecord(tile: demo[4], at: Date().addingTimeInterval(-180000)),
         ]
+        trashCandidates = [
+            TrashCandidate(path: "/Users/demo/Downloads/Invoice-Q3-final.pdf", sizeBytes: 2_400_000,
+                           lastOpened: Date().addingTimeInterval(-70 * 86_400), addedAt: Date().addingTimeInterval(-6 * 86_400),
+                           deadline: Date().addingTimeInterval(1 * 86_400)),
+            TrashCandidate(path: "/Users/demo/Downloads/screen-recording-standup.mov", sizeBytes: 184_000_000,
+                           lastOpened: Date().addingTimeInterval(-90 * 86_400), addedAt: Date().addingTimeInterval(-3 * 86_400),
+                           deadline: Date().addingTimeInterval(4 * 86_400)),
+            TrashCandidate(path: "/Users/demo/Downloads/node-v20-installer.pkg", sizeBytes: 61_500_000,
+                           lastOpened: Date().addingTimeInterval(-120 * 86_400), addedAt: Date().addingTimeInterval(-2 * 86_400),
+                           deadline: Date().addingTimeInterval(5 * 86_400)),
+            TrashCandidate(path: "/Users/demo/Downloads/IMG_4821 copy.HEIC", sizeBytes: 4_100_000,
+                           lastOpened: Date().addingTimeInterval(-65 * 86_400), addedAt: Date().addingTimeInterval(-1 * 86_400),
+                           deadline: Date().addingTimeInterval(6 * 86_400)),
+            TrashCandidate(path: "/Users/demo/Downloads/design-assets-v2.zip", sizeBytes: 320_000_000,
+                           lastOpened: Date().addingTimeInterval(-80 * 86_400), addedAt: Date(),
+                           deadline: Date().addingTimeInterval(7 * 86_400)),
+        ]
         phase = .connected
     }
 
