@@ -37,6 +37,10 @@ struct SettingsView: View {
                     terminalSection
                 }
 
+                section("Smart Trash") {
+                    trashSection
+                }
+
                 section("About") {
                     settingRow(title: "Version", value: version)
                     Divider().padding(.leading, Theme.Spacing.md)
@@ -210,6 +214,112 @@ struct SettingsView: View {
             Image(systemName: "lock.shield").font(.system(size: 12))
                 .foregroundStyle(.secondary).frame(width: 28)
             Text("Anyone with the master password and your paired iPhone can run any command on this Mac.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.bottom, Theme.Spacing.md)
+    }
+
+    // MARK: Smart Trash
+
+    @ViewBuilder
+    private var trashSection: some View {
+        let trash = server.trash
+        VStack(alignment: .leading, spacing: 0) {
+            trashHeaderRow(trash)
+
+            if trash.enabled {
+                Divider().padding(.leading, 52)
+                trashThresholdRow(trash)
+                Divider().padding(.leading, 52)
+                trashFoldersRows(trash)
+                trashNote
+            }
+        }
+    }
+
+    private func trashHeaderRow(_ trash: TrashController) -> some View {
+        HStack(spacing: Theme.Spacing.md) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Theme.Palette.brand.opacity(0.15))
+                .frame(width: 28, height: 28)
+                .overlay(Image(systemName: "trash.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.brand))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Smart Trash").font(.system(size: 14, weight: .medium))
+                Text("Find stale files and review them from your iPhone.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Toggle("Smart Trash", isOn: Binding(
+                get: { trash.enabled },
+                set: { trash.setEnabled($0) }
+            ))
+            .labelsHidden().toggleStyle(.switch).tint(Theme.Palette.brand)
+        }
+        .padding(Theme.Spacing.md)
+    }
+
+    private func trashThresholdRow(_ trash: TrashController) -> some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "calendar").font(.system(size: 12))
+                .foregroundStyle(.secondary).frame(width: 28)
+            Text("Consider files stale after").font(.system(size: 14, weight: .medium))
+            Spacer()
+            Picker("Staleness threshold", selection: Binding(
+                get: { trash.thresholdDays },
+                set: { trash.setThresholdDays($0) }
+            )) {
+                Text("30 days").tag(30)
+                Text("60 days").tag(60)
+                Text("90 days").tag(90)
+            }
+            .labelsHidden()
+            .frame(width: 110)
+        }
+        .padding(Theme.Spacing.md)
+    }
+
+    @ViewBuilder
+    private func trashFoldersRows(_ trash: TrashController) -> some View {
+        ForEach(trash.folders, id: \.self) { folder in
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: "folder.fill").font(.system(size: 12))
+                    .foregroundStyle(.secondary).frame(width: 28)
+                Text(folder.lastPathComponent).font(.system(size: 14, weight: .medium))
+                Text(folder.path).font(.system(size: 11)).foregroundStyle(.tertiary)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Button("Remove") { trash.removeFolder(folder) }
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
+            Divider().padding(.leading, 52)
+        }
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: "plus.circle").font(.system(size: 12))
+                .foregroundStyle(.secondary).frame(width: 28)
+            Button(trash.folders.isEmpty ? "Choose Folders to Scan…" : "Add Folder…") {
+                trash.grantFolder()
+            }
+            .controlSize(.regular)
+            Spacer()
+            if trash.folders.isEmpty {
+                Text("No folders granted yet").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+        }
+        .padding(Theme.Spacing.md)
+    }
+
+    private var trashNote: some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+            Image(systemName: "arrow.uturn.backward").font(.system(size: 12))
+                .foregroundStyle(.secondary).frame(width: 28)
+            Text("Files stay in place until you review them. Anything removed goes to the macOS Trash, never deleted permanently.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)

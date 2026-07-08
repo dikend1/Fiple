@@ -32,6 +32,9 @@ final class ServerController {
     /// The privileged terminal feature. Its listener is separate from the tile
     /// server; this controller advertises it to the paired phone.
     @ObservationIgnored let terminal: TerminalController
+    /// Smart Trash: candidate scanning and review live here; this controller
+    /// only relays snapshots/decisions between it and the paired phone.
+    @ObservationIgnored let trash: TrashController
     @ObservationIgnored private let server = FipleServer()
     @ObservationIgnored private let executor = MacActionExecutor()
     @ObservationIgnored private let gestureExecutor = GestureExecutor()
@@ -56,10 +59,15 @@ final class ServerController {
     /// explicit restart — never when a connection drops.
     @ObservationIgnored private var throttle = PairingThrottle(lockoutDuration: 10)
 
-    init(store: TileStore, pinned: PinnedAppsStore, terminal: TerminalController = TerminalController()) {
+    init(
+        store: TileStore, pinned: PinnedAppsStore,
+        terminal: TerminalController = TerminalController(),
+        trash: TrashController = TrashController()
+    ) {
         self.store = store
         self.pinned = pinned
         self.terminal = terminal
+        self.trash = trash
         sessionToken = Self.loadToken()
         store.didChange = { [weak self] in
             Task { await self?.pushSnapshot() }
@@ -69,6 +77,9 @@ final class ServerController {
         }
         terminal.didChange = { [weak self] in
             Task { await self?.pushTerminalInfo() }
+        }
+        trash.didChange = { [weak self] in
+            Task { await self?.pushTrashCandidates() }
         }
     }
 
@@ -272,6 +283,24 @@ final class ServerController {
             didRunAction?(action)
             try? await peer.send(ServerMessage.runResult(result))
 
+        case let .trashThumbnail(candidateID):
+            guard peer === self.peer, isPaired else {
+                FipleLog.execution.notice("trashThumbnail ignored — not the authenticated peer")
+                return
+            }
+            guard let jpeg = await trash.thumbnail(for: candidateID) else { return }
+            try? await peer.send(ServerMessage.trashThumbnail(candidateID: candidateID, jpeg: jpeg))
+
+        case let .trashAction(ids, decision):
+            guard peer === self.peer, isPaired else {
+                FipleLog.execution.notice("trashAction ignored — not the authenticated peer")
+                return
+            }
+            // Server-authoritative: ids resolved against the Mac's own store;
+            // the fresh snapshot follows via trash.didChange.
+            let result = trash.applyReview(ids: ids, decision: decision)
+            try? await peer.send(result)
+
         case let .gesture(action):
             guard peer === self.peer, isPaired else {
                 FipleLog.execution.notice("gesture ignored — not the authenticated peer")
@@ -336,6 +365,18 @@ final class ServerController {
         // to the token) and tell the phone whether/where it can connect.
         await terminal.syncService(pairingToken: token)
         try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled, port: terminal.port))
+        // Smart Trash snapshot (metadata only). Sent even when empty so the
+        // phone clears any stale list from a previous session.
+        if trash.enabled {
+            try? await peer.send(ServerMessage.trashCandidates(candidates: trash.candidates))
+        }
+    }
+
+    /// Pushes the current Smart Trash candidate list to the paired phone
+    /// (called on every change: scan, review, deadline enforcement, disable).
+    private func pushTrashCandidates() async {
+        guard isPaired, let peer else { return }
+        try? await peer.send(ServerMessage.trashCandidates(candidates: trash.candidates))
     }
 
     /// Re-advertises the terminal service to the connected phone after the Mac
