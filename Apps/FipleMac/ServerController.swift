@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import FipleKit
 import Foundation
 import Observation
@@ -33,6 +34,10 @@ final class ServerController {
     @ObservationIgnored let terminal: TerminalController
     @ObservationIgnored private let server = FipleServer()
     @ObservationIgnored private let executor = MacActionExecutor()
+    @ObservationIgnored private let gestureExecutor = GestureExecutor()
+    /// Whether we've already nudged the user toward the Accessibility settings
+    /// this launch, so a stream of gestures can't spam the system prompt.
+    @ObservationIgnored private var didPromptAccessibility = false
     @ObservationIgnored private var peer: PeerConnection?
     @ObservationIgnored private var isPaired = false
     @ObservationIgnored private var acceptTask: Task<Void, Never>?
@@ -266,6 +271,39 @@ final class ServerController {
             lastRun = result
             didRunAction?(action)
             try? await peer.send(ServerMessage.runResult(result))
+
+        case let .gesture(action):
+            guard peer === self.peer, isPaired else {
+                FipleLog.execution.notice("gesture ignored — not the authenticated peer")
+                return
+            }
+            // Fire-and-forget, like a tile run: no result frame. If we're not
+            // trusted for Accessibility, guide the user once instead of silently
+            // dropping every gesture.
+            switch gestureExecutor.perform(action) {
+            case .performed, .ignored:
+                break
+            case .notTrusted:
+                FipleLog.execution.notice("gesture needs Accessibility permission")
+                promptForAccessibilityOnce()
+            }
+        }
+    }
+
+    /// Show the system Accessibility prompt and open the settings pane — at most
+    /// once per launch — so the user can grant the permission gestures need.
+    private func promptForAccessibilityOnce() {
+        guard !didPromptAccessibility else { return }
+        didPromptAccessibility = true
+        // The key is the stable string behind `kAXTrustedCheckOptionPrompt`;
+        // using the literal sidesteps a Swift 6 concurrency warning on the
+        // imported global CFString.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        if let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) {
+            NSWorkspace.shared.open(url)
         }
     }
 

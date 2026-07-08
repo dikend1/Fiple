@@ -422,6 +422,27 @@ final class RemoteController {
         }
     }
 
+    /// Whether a Mac is currently connected — used by the global gesture layer to
+    /// decide between a "sent" and a "declined" haptic before it even sends.
+    var isConnected: Bool { phase == .connected }
+
+    /// Send a recognized multi-touch gesture to the Mac. Fire-and-forget, like a
+    /// tile run: there is no result frame. Returns whether it was actually sent
+    /// (a Mac is connected and the send succeeded) so the caller can pick the
+    /// right haptic.
+    @discardableResult
+    func sendGesture(_ action: GestureAction) async -> Bool {
+        guard phase == .connected, let peer else { return false }
+        do {
+            try await peer.send(ClientMessage.gesture(action))
+            FipleLog.execution.info("sent gesture \(action.rawValue)")
+            return true
+        } catch {
+            FipleLog.execution.error("gesture send failed: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     /// The Mac normally answers in well under a second; if nothing comes back,
     /// stop the spinner and say so instead of letting it spin forever (dropped
     /// result, Mac asleep, tile deleted on an old build that never replies).

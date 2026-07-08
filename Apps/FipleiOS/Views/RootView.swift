@@ -1,4 +1,6 @@
+import FipleKit
 import SwiftUI
+import UIKit
 
 /// The tabbed interface is **always** shown — pairing never gates the whole app
 /// (Recent and Settings remain browsable off-network). Code entry is a
@@ -14,6 +16,7 @@ struct RootView: View {
 
     var body: some View {
         MainTabView(controller: controller)
+            .overlay { GestureOverlay(onGesture: handleGesture) }
             .sheet(isPresented: $showPairing, onDismiss: {
                 if controller.phase != .connected { userDismissedPairing = true }
             }) {
@@ -56,6 +59,18 @@ struct RootView: View {
             }
             .onAppear { syncPairingSheet(controller.phase) }
             .onChange(of: controller.phase) { _, phase in syncPairingSheet(phase) }
+    }
+
+    /// A recognized global gesture: give immediate haptic feedback, then (if a
+    /// Mac is connected) send it. The "declined" tap when nothing is connected
+    /// keeps the gesture from feeling broken/silent.
+    private func handleGesture(_ action: GestureAction) {
+        guard controller.isConnected else {
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            return
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task { await controller.sendGesture(action) }
     }
 
     private func syncPairingSheet(_ phase: RemoteController.Phase) {
