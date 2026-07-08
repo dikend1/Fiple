@@ -19,6 +19,31 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
+            #if DEBUG
+            // "-demo-trash" (with -demo): open straight into the review screen,
+            // for previews/screenshots without tapping through.
+            if ProcessInfo.processInfo.arguments.contains("-demo-trash") {
+                TrashReviewView(controller: controller)
+            } else {
+                homeContent
+            }
+            #else
+            homeContent
+            #endif
+        }
+        .sheet(isPresented: $showTerminalSheet) { terminalPasswordSheet }
+        .fullScreenCover(isPresented: $openTerminal) {
+            if let target = controller.terminalTarget {
+                TerminalScreen(
+                    host: target.host, port: target.port,
+                    pairingToken: target.token, masterPassword: terminalPassword,
+                    rememberOnSuccess: !terminalFromBiometrics
+                )
+            }
+        }
+    }
+
+    private var homeContent: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
                     header
@@ -43,17 +68,6 @@ struct HomeView: View {
             }
             .background(Theme.Palette.background)
             .toolbar(.hidden, for: .navigationBar)
-        }
-        .sheet(isPresented: $showTerminalSheet) { terminalPasswordSheet }
-        .fullScreenCover(isPresented: $openTerminal) {
-            if let target = controller.terminalTarget {
-                TerminalScreen(
-                    host: target.host, port: target.port,
-                    pairingToken: target.token, masterPassword: terminalPassword,
-                    rememberOnSuccess: !terminalFromBiometrics
-                )
-            }
-        }
     }
 
     // MARK: Terminal
@@ -127,10 +141,10 @@ struct HomeView: View {
 
     // MARK: Smart Trash
 
-    /// Entry card into the review grid, shown only while the Mac has candidates.
-    /// Leads with the payoff — how much space a clean-up frees — not the feature
-    /// name, and carries a warm "clean-up" tint so it reads as a to-do, not
-    /// another tool row like Terminal above it.
+    /// Entry row into the review grid, shown only while the Mac has candidates.
+    /// Deliberately the same quiet surface row as Terminal above it — they're the
+    /// two Mac tools on this screen, and consistency is the design system. The
+    /// payoff ("Free up 1,2 GB") is the subtitle; the count sits in a small badge.
     private var trashEntry: some View {
         let candidates = controller.trashCandidates
         let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
@@ -140,49 +154,26 @@ struct HomeView: View {
             TrashReviewView(controller: controller)
         } label: {
             HStack(spacing: Theme.Spacing.md) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.orange.opacity(0.16))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "trash.fill")
-                        .font(.fiple(19, .semibold))
-                        .foregroundStyle(.orange)
-                }
+                Image(systemName: "trash.fill").font(.fiple(20, .semibold))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Free up \(total)")
-                        .font(.fiple(17, .bold))
-                    Text(trashSubtitle(candidates))
-                        .font(.fiple(13))
-                        .foregroundStyle(.secondary)
+                    Text("Smart Trash").font(.fiple(17, .semibold))
+                    Text("Free up \(total)").font(.fiple(13)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("Review")
-                    .font(.fiple(14, .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(.orange, in: Capsule())
+                Text("\(candidates.count)")
+                    .font(.fiple(13, .semibold))
+                    .foregroundStyle(Theme.Palette.secondary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(Theme.Palette.secondary.opacity(0.12), in: Capsule())
+                Image(systemName: "chevron.right").font(.fiple(13, .semibold)).foregroundStyle(.secondary)
             }
             .foregroundStyle(Theme.Palette.label)
             .padding(Theme.Spacing.lg)
             .frame(maxWidth: .infinity)
-            .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Color.orange.opacity(0.25))
-            )
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
-    }
-
-    /// "5 unused files · first auto-trash in 3 days" — the count plus the reason
-    /// to act now, so urgency is visible before opening the screen.
-    private func trashSubtitle(_ candidates: [TrashCandidate]) -> String {
-        let count = candidates.count == 1 ? "1 unused file" : "\(candidates.count) unused files"
-        guard let nearest = candidates.map(\.deadline).min() else { return count }
-        let days = max(0, Int(nearest.timeIntervalSinceNow / 86_400))
-        let when = days == 0 ? "today" : (days == 1 ? "in 1 day" : "in \(days) days")
-        return "\(count) · first auto-trash \(when)"
     }
 
     // MARK: Header

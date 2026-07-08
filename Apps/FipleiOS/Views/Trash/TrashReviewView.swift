@@ -1,11 +1,11 @@
 import FipleKit
 import SwiftUI
 
-/// The Smart Trash review screen. A summary header states the job ("N files,
-/// X reclaimable"), a two-column grid of large thumbnails is multi-selected by
-/// tap (no swipes — the design's explicit choice), and the Keep / Move-to-Trash
-/// bar is **always visible** so the mechanic is discoverable before anything is
-/// selected; the buttons carry the live selection count.
+/// The Smart Trash review screen. One compact header line carries the shared
+/// facts (count · size, the batch's nearest auto-trash date, the safety net);
+/// the grid itself stays quiet — per-cell chrome appears only when it says
+/// something unique (an urgent deadline, a selection). Selection follows the
+/// system Photos pattern: tap to select, filled checkmark in the corner.
 struct TrashReviewView: View {
     let controller: RemoteController
 
@@ -79,7 +79,7 @@ struct TrashReviewView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                 summaryHeader
 
-                LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
+                LazyVGrid(columns: columns, spacing: Theme.Spacing.lg) {
                     ForEach(controller.trashCandidates) { candidate in
                         TrashCandidateCell(
                             candidate: candidate,
@@ -97,66 +97,67 @@ struct TrashReviewView: View {
                 }
             }
             .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.top, Theme.Spacing.md)
+            .padding(.top, Theme.Spacing.sm)
             .padding(.bottom, Theme.Spacing.xxl)
         }
     }
 
-    /// States the job and the safety net in two lines, so the screen explains
-    /// itself: what these files are, and that nothing is deleted permanently.
+    /// The shared facts, said once: count · size on the first line; the batch
+    /// deadline and the safety net in one short secondary line.
     private var summaryHeader: some View {
         let candidates = controller.trashCandidates
         let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
         let total = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
         let count = candidates.count == 1 ? "1 file" : "\(candidates.count) files"
 
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: 3) {
             Text("\(count) · \(total)")
                 .font(.fiple(22, .bold))
-            Text("These haven't been opened in a while. Tap to select, then keep or trash — trashed files go to your Mac's Trash, never deleted permanently.")
+            Text("\(deadlineText(candidates)) · recoverable from the Mac's Trash")
                 .font(.fiple(13))
                 .foregroundStyle(Theme.Palette.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// Always on screen. With nothing selected the buttons are disabled and a
-    /// hint says what to do; with a selection they show exactly what will happen
-    /// ("Trash 3 · 1.2 GB").
+    private func deadlineText(_ candidates: [TrashCandidate]) -> String {
+        guard let nearest = candidates.map(\.deadline).min() else { return "" }
+        let days = Int(nearest.timeIntervalSinceNow / 86_400)
+        if days <= 0 { return "Auto-trash starts today" }
+        return days == 1 ? "Auto-trash in 1 day" : "Auto-trash in \(days) days"
+    }
+
+    /// Always visible so the mechanic needs no discovery. Keep is quiet (it's
+    /// the safe no-op); Move to Trash is the one prominent action and carries
+    /// the live count. Both disabled until something is selected.
     private var actionBar: some View {
         let count = selection.count
         let size = ByteCountFormatter.string(fromByteCount: selectedBytes, countStyle: .file)
 
-        return VStack(spacing: Theme.Spacing.sm) {
-            if count == 0 {
-                Text("Select files to review")
-                    .font(.fiple(12, .medium))
-                    .foregroundStyle(Theme.Palette.secondary)
-            } else {
-                Text("\(count) selected · \(size)")
-                    .font(.fiple(12, .medium))
-                    .foregroundStyle(Theme.Palette.secondary)
-                    .contentTransition(.numericText())
-            }
+        return VStack(spacing: 6) {
+            Text(count == 0 ? "Tap files to select" : "\(count) selected · \(size)")
+                .font(.fiple(12))
+                .foregroundStyle(Theme.Palette.secondary)
+                .contentTransition(.numericText())
             HStack(spacing: Theme.Spacing.md) {
                 Button {
                     apply(.keep)
                 } label: {
-                    Label("Keep", systemImage: "checkmark")
+                    Text("Keep")
                         .font(.fiple(15, .semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 12)
                 }
                 .buttonStyle(.bordered)
-                .tint(Theme.Palette.brand)
+                .tint(Theme.Palette.secondary)
+                .foregroundStyle(Theme.Palette.label)
 
                 Button {
                     apply(.trash)
                 } label: {
-                    Label(count > 0 ? "Trash \(count)" : "Trash", systemImage: "trash")
+                    Text(count > 0 ? "Move \(count) to Trash" : "Move to Trash")
                         .font(.fiple(15, .semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 12)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
@@ -165,8 +166,8 @@ struct TrashReviewView: View {
         }
         .animation(.easeOut(duration: 0.15), value: selection.isEmpty)
         .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, Theme.Spacing.sm)
+        .background(.bar)
     }
 
     private func apply(_ decision: TrashDecision) {
@@ -175,9 +176,10 @@ struct TrashReviewView: View {
     }
 }
 
-/// One grid cell: a large QuickLook thumbnail (or a file-type placeholder while
-/// it loads), selection ring + checkmark, file name, size, and a deadline chip
-/// that turns red inside the 2-day window.
+/// One grid cell, Photos-style: the thumbnail on a soft well, a filled brand
+/// checkmark in the corner only when selected, and a red "time left" chip only
+/// when this file's deadline is inside the urgent 2-day window — cells whose
+/// deadline matches the batch header stay chrome-free.
 private struct TrashCandidateCell: View {
     let candidate: TrashCandidate
     let thumbnail: Data?
@@ -186,73 +188,72 @@ private struct TrashCandidateCell: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 8) {
-                thumbnailView
-                    .frame(height: 130)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(alignment: .topTrailing) { selectionBadge }
-                    .overlay(alignment: .bottomLeading) { deadlineChip }
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(
-                                isSelected ? Theme.Palette.brand : Theme.Palette.hairline,
-                                lineWidth: isSelected ? 2.5 : 1
-                            )
-                    )
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Theme.Palette.secondary.opacity(0.08))
+                    thumbnailImage
+                }
+                .frame(height: 130)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(alignment: .bottomTrailing) {
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.fiple(22, .semibold))
+                            .foregroundStyle(.white, Theme.Palette.brand)
+                            .padding(6)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .overlay(alignment: .topLeading) {
+                    if isUrgent {
+                        Text(countdownText)
+                            .font(.fiple(10, .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(.red, in: Capsule())
+                            .padding(6)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            isSelected ? Theme.Palette.brand : Theme.Palette.hairline,
+                            lineWidth: isSelected ? 2 : 1
+                        )
+                )
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(candidate.fileName)
                         .font(.fiple(13, .medium))
                         .foregroundStyle(Theme.Palette.label)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(sizeText)
-                        .font(.fiple(12))
+                        .font(.fiple(11))
                         .foregroundStyle(Theme.Palette.secondary)
                 }
+                .padding(.horizontal, 2)
             }
-            .opacity(isSelected ? 1 : 0.92)
-            .scaleEffect(isSelected ? 0.98 : 1)
             .animation(.easeOut(duration: 0.12), value: isSelected)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(candidate.fileName), \(sizeText), \(countdownText)\(isSelected ? ", selected" : "")")
+        .accessibilityLabel("\(candidate.fileName), \(sizeText), \(countdownText) left\(isSelected ? ", selected" : "")")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    @ViewBuilder private var thumbnailView: some View {
+    @ViewBuilder private var thumbnailImage: some View {
         if let thumbnail, let image = UIImage(data: thumbnail) {
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
         } else {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Theme.Palette.secondary.opacity(0.08))
-                .overlay(
-                    Image(systemName: "doc.fill")
-                        .font(.fiple(28))
-                        .foregroundStyle(Theme.Palette.secondary.opacity(0.5))
-                )
+            Image(systemName: "doc.fill")
+                .font(.fiple(28))
+                .foregroundStyle(Theme.Palette.secondary.opacity(0.4))
         }
-    }
-
-    @ViewBuilder private var selectionBadge: some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(.fiple(20, .semibold))
-            .foregroundStyle(isSelected ? Theme.Palette.brand : .white)
-            .shadow(color: .black.opacity(isSelected ? 0 : 0.35), radius: 2)
-            .padding(8)
-    }
-
-    /// Time-left chip on the thumbnail — the per-file urgency signal.
-    private var deadlineChip: some View {
-        Text(countdownText)
-            .font(.fiple(10, .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(isUrgent ? Color.red : Color.black.opacity(0.55), in: Capsule())
-            .padding(8)
     }
 
     private var sizeText: String {
