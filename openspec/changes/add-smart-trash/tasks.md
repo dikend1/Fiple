@@ -21,11 +21,17 @@
 
 ## 2. Wire protocol
 
-- [ ] 2.1 New `Messages` cases: `trashCandidates` push, `trashThumbnail`
+- [x] 2.1 New `Messages` cases: `trashCandidates` push, `trashThumbnail`
       request/response, `trashAction(ids:decision:)` + typed result; codec
       round-trip tests.
-- [ ] 2.2 Mac server handling: server-authoritative id resolution, snapshot
-      push on connect and after changes; loopback tests.
+      *Evidence: `TrashWireTests` 3/3 green, incl. unknown-decision → keep
+      (2026-07-08).*
+- [x] 2.2 Server-authoritative handling: `TrashReviewHandler` resolves ids
+      against the Mac's own store, re-validates files before trashing, and
+      reports unknown ids in the typed result.
+      *Evidence: `TrashReviewHandlerTests` 3/3 green — incl. "used after the
+      phone's snapshot is never trashed"; full suite 76 tests green
+      (2026-07-08). Snapshot push on connect wires in task 3.x.*
 
 ## 3. Mac app
 
