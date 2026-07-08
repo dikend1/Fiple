@@ -35,23 +35,38 @@
 
 ## 3. Mac app
 
-- [ ] 3.1 Settings section: enable toggle → `NSOpenPanel` folder grant
+- [x] 3.1 Settings section: enable toggle → `NSOpenPanel` folder grant
       (security-scoped bookmarks), threshold picker (30/60/90), granted-folder
       list; off-by-default; disable clears candidates.
-- [ ] 3.2 Local notifications: ≤2-days-to-deadline reminder and auto-trash
+      *Evidence: `TrashController` + Settings "Smart Trash" section;
+      FipleMac builds green (2026-07-08).*
+- [x] 3.2 Local notifications: ≤2-days-to-deadline reminder and auto-trash
       summary.
-- [ ] 3.3 Thumbnail generation via QuickLookThumbnailing (JPEG, cached).
+      *Evidence: `TrashController.notifyUpcomingDeadlines` / `enforceAndNotify`
+      via UserNotifications (2026-07-08).*
+- [x] 3.3 Thumbnail generation via QuickLookThumbnailing (JPEG, cached).
+      *Evidence: `TrashController.thumbnail(for:)`, per-id cache pruned on
+      review (2026-07-08).*
 
 ## 4. iOS app
 
-- [ ] 4.1 Home entry card with candidate-count badge.
-- [ ] 4.2 Trash screen: thumbnail grid, multi-select, bottom bar
+- [x] 4.1 Home entry card with candidate-count badge.
+      *Evidence: `HomeView.trashEntry`, shown only when candidates exist
+      (2026-07-08).*
+- [x] 4.2 Trash screen: thumbnail grid, multi-select, bottom bar
       "Move to Trash" / "Keep", per-item countdown, lazy thumbnail fetch.
-- [ ] 4.3 Local reminder scheduling on each sync (nearest deadline − 2 days).
+      *Evidence: `TrashReviewView` (3-col grid, Select All, urgency-red
+      countdown, `.task` lazy thumbnail requests); FipleiOS builds green
+      (2026-07-08).*
+- [x] 4.3 Local reminder scheduling on each sync (nearest deadline − 2 days).
+      *Evidence: `TrashReminder.reschedule(for:)` called from the
+      `trashCandidates` handler in `RemoteController` (2026-07-08).*
 
 ## 5. Verification & docs
 
-- [ ] 5.1 `cd FipleKit && swift test` green; record evidence here.
+- [x] 5.1 `cd FipleKit && swift test` green; record evidence here.
+      *Evidence: 117 tests in 29 suites green after merging with the gesture
+      wire changes (2026-07-08).*
 - [ ] 5.2 On-device pass: enable → grant folders → candidates appear on phone →
       batch trash lands in macOS Trash → keep excludes → deadline auto-trash.
 - [ ] 5.3 After ship: update `openspec/specs/` and `docs/architecture/`

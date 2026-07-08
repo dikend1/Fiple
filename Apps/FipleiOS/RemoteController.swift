@@ -52,6 +52,14 @@ final class RemoteController {
               let terminalHost, let token = storedToken else { return nil }
         return (terminalHost, terminalPort, token)
     }
+    /// Smart Trash candidates synced from the Mac (metadata only; files stay on
+    /// the Mac). Sorted by nearest deadline so the most urgent items lead.
+    private(set) var trashCandidates: [TrashCandidate] = []
+    /// Lazily fetched QuickLook thumbnails, keyed by candidate id.
+    private(set) var trashThumbnails: [UUID: Data] = [:]
+    /// Set while a batch review decision is in flight (disables the action bar).
+    private(set) var trashActionInFlight = false
+
     /// Phone-side launch history. The Mac keeps its own `RecentStore`, but it is
     /// not sent over the wire, so the remote records what *it* triggers — newest
     /// first, capped and persisted so it survives relaunch.
@@ -368,6 +376,22 @@ final class RemoteController {
             terminalHost = await peer?.remoteHost()
             FipleLog.connection.info("terminal service \(enabled ? "on port \(port)" : "off")")
 
+        case let .trashCandidates(candidates):
+            trashCandidates = candidates.sorted { $0.deadline < $1.deadline }
+            // Drop thumbnails for candidates that left the list.
+            trashThumbnails = trashThumbnails.filter { id, _ in
+                candidates.contains { $0.id == id }
+            }
+            TrashReminder.reschedule(for: trashCandidates)
+
+        case let .trashThumbnail(candidateID, jpeg):
+            trashThumbnails[candidateID] = jpeg
+
+        case .trashActionResult:
+            // The fresh candidate snapshot follows separately; this just
+            // releases the action bar.
+            trashActionInFlight = false
+
         case let .runResult(result):
             if let started = runStartedAt.removeValue(forKey: result.tileID) {
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
@@ -443,6 +467,28 @@ final class RemoteController {
         }
     }
 
+    // MARK: - Smart Trash
+
+    /// Ask the Mac for one candidate's thumbnail (per visible grid cell). The
+    /// reply lands in `trashThumbnails` via the message stream.
+    func requestTrashThumbnail(_ id: UUID) async {
+        guard phase == .connected, let peer, trashThumbnails[id] == nil else { return }
+        try? await peer.send(ClientMessage.trashThumbnail(candidateID: id))
+    }
+
+    /// Send a batch review decision. Ids only — the Mac resolves them against
+    /// its own store and pushes back the updated candidate list.
+    func sendTrashAction(ids: [UUID], decision: TrashDecision) async {
+        guard phase == .connected, let peer, !ids.isEmpty else { return }
+        trashActionInFlight = true
+        do {
+            try await peer.send(ClientMessage.trashAction(ids: ids, decision: decision))
+        } catch {
+            FipleLog.execution.error("trashAction send failed: \(error.localizedDescription)")
+            trashActionInFlight = false
+        }
+    }
+
     /// The Mac normally answers in well under a second; if nothing comes back,
     /// stop the spinner and say so instead of letting it spin forever (dropped
     /// result, Mac asleep, tile deleted on an old build that never replies).
@@ -501,6 +547,9 @@ final class RemoteController {
         terminalEnabled = false
         terminalPort = 0
         terminalHost = nil
+        trashCandidates = []
+        trashThumbnails = [:]
+        trashActionInFlight = false
         macName = nil
         macKind = .laptop
         runningTileID = nil

@@ -29,6 +29,10 @@ struct HomeView: View {
                         terminalEntry
                     }
 
+                    if !controller.trashCandidates.isEmpty {
+                        trashEntry
+                    }
+
                     workspaces
 
                     quickAccess
@@ -119,6 +123,37 @@ struct HomeView: View {
             }
         }
         .presentationDetents([.height(200)])
+    }
+
+    // MARK: Smart Trash
+
+    /// Entry card into the review grid, shown only while the Mac has candidates
+    /// — a count badge makes "there's something to clean up" visible at a glance.
+    private var trashEntry: some View {
+        NavigationLink {
+            TrashReviewView(controller: controller)
+        } label: {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "trash.fill").font(.fiple(20, .semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Smart Trash").font(.fiple(17, .semibold))
+                    Text("Stale files found on your Mac").font(.fiple(13)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(controller.trashCandidates.count)")
+                    .font(.fiple(13, .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Theme.Palette.brand, in: Capsule())
+                Image(systemName: "chevron.right").font(.fiple(13, .semibold)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(Theme.Palette.label)
+            .padding(Theme.Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Header
