@@ -14,6 +14,9 @@ public enum ClientMessage: Sendable, Equatable {
     /// only if it exists — so a client can never have the Mac execute an
     /// arbitrary, client-supplied action.
     case runAction(actionID: UUID)
+    /// Perform a recognized multi-touch gesture on the Mac's frontmost app.
+    /// A closed, named vocabulary (see ``GestureAction``) — never arbitrary input.
+    case gesture(GestureAction)
 }
 
 extension ClientMessage: WireTypeTagged {
@@ -23,8 +26,8 @@ extension ClientMessage: WireTypeTagged {
 }
 
 extension ClientMessage: Codable {
-    private enum Tag: String, Codable, CaseIterable { case pair, reconnect, run, runAction }
-    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID, version }
+    private enum Tag: String, Codable, CaseIterable { case pair, reconnect, run, runAction, gesture }
+    private enum CodingKeys: String, CodingKey { case type, code, token, tileID, actionID, version, action }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -33,6 +36,12 @@ extension ClientMessage: Codable {
         case .reconnect: self = .reconnect(token: try c.decode(String.self, forKey: .token))
         case .run: self = .run(tileID: try c.decode(UUID.self, forKey: .tileID))
         case .runAction: self = .runAction(actionID: try c.decode(UUID.self, forKey: .actionID))
+        case .gesture:
+            // Tolerate an unknown gesture from a newer phone by decoding it to
+            // the receive-only .unknown sentinel (a no-op on the Mac) rather than
+            // throwing — a malformed known type would tear the session down.
+            let raw = try c.decode(String.self, forKey: .action)
+            self = .gesture(GestureAction(rawValue: raw) ?? .unknown)
         }
     }
 
@@ -53,6 +62,9 @@ extension ClientMessage: Codable {
         case let .runAction(actionID):
             try c.encode(Tag.runAction, forKey: .type)
             try c.encode(actionID, forKey: .actionID)
+        case let .gesture(action):
+            try c.encode(Tag.gesture, forKey: .type)
+            try c.encode(action.rawValue, forKey: .action)
         }
     }
 }
