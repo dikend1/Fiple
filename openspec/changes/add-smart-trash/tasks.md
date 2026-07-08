@@ -5,15 +5,19 @@
 
 ## 1. FipleKit core (macOS)
 
-- [ ] 1.1 `TrashCandidateStore`: candidate model (id, path, size, dates,
+- [x] 1.1 `TrashCandidateStore`: candidate model (id, path, size, dates,
       deadline), keep-list, JSON persistence, injected clock; unit tests for
       candidacy, keep-exclusion, and persistence round-trip.
-- [ ] 1.2 `StaleFileScanner`: scan granted folders via
+      *Evidence: `TrashCandidateStoreTests` 5/5 green (2026-07-08).*
+- [x] 1.2 `StaleFileScanner`: scan granted folders via
       `contentAccessDateKey`, threshold filter, auto-evict used/missing
       candidates; unit tests with temp directories + fake clock.
-- [ ] 1.3 Deadline enforcement: expiry → `FileManager.trashItem`, pre-move
+      *Evidence: `StaleFileScannerTests` 4/4 green (2026-07-08).*
+- [x] 1.3 Deadline enforcement: expiry → `FileManager.trashItem`, pre-move
       re-validation, catch-up on launch; unit tests (temp dirs; verify file
       lands in Trash / eviction on re-use).
+      *Evidence: `TrashDeadlineEnforcerTests` 3/3 green; full suite 70 tests
+      green (2026-07-08). Launch catch-up wired in task 3.x app integration.*
 
 ## 2. Wire protocol
 
