@@ -4,7 +4,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// "Send to Mac": pick a photo/video or any file — it lands in the Mac's
-/// Downloads — or type/paste text straight onto the Mac's clipboard.
+/// Downloads — or type/paste text straight onto the Mac's clipboard. Styled as
+/// the app's surface cards, not a settings list; the status strip under the
+/// pickers narrates the transfer.
 struct SendToMacView: View {
     let controller: RemoteController
 
@@ -16,41 +18,15 @@ struct SendToMacView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    PhotosPicker(selection: $pickedPhoto, matching: .any(of: [.images, .videos])) {
-                        Label("Photo or Video", systemImage: "photo.on.rectangle")
-                    }
-                    Button {
-                        showFileImporter = true
-                    } label: {
-                        Label("Choose File", systemImage: "doc")
-                    }
-                } header: {
-                    Text("Send a file to Downloads")
-                } footer: {
-                    beamStatus
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    fileCard
+                    clipboardCard
                 }
-
-                Section {
-                    TextField("Type or paste text…", text: $clipboardText, axis: .vertical)
-                        .lineLimit(1 ... 5)
-                    Button {
-                        Task {
-                            clipboardSent = await controller.sendClipboard(text: clipboardText)
-                            if clipboardSent {
-                                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                            }
-                        }
-                    } label: {
-                        Label(clipboardSent ? "On your Mac's clipboard — press ⌘V" : "Put on Mac's Clipboard",
-                              systemImage: clipboardSent ? "checkmark" : "doc.on.clipboard")
-                    }
-                    .disabled(clipboardText.isEmpty)
-                } header: {
-                    Text("Send text to the clipboard")
-                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.top, Theme.Spacing.md)
             }
+            .background(Theme.Palette.background)
             .navigationTitle("Send to Mac")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -69,22 +45,108 @@ struct SendToMacView: View {
         .onDisappear { controller.resetBeamState() }
     }
 
+    // MARK: File → Downloads
+
+    private var fileCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeader("File to Downloads")
+
+            VStack(spacing: 0) {
+                PhotosPicker(selection: $pickedPhoto, matching: .any(of: [.images, .videos])) {
+                    PickerRow(icon: "photo.on.rectangle.angled", title: "Photo or Video",
+                              subtitle: "From your library")
+                }
+                .buttonStyle(.plain)
+
+                Divider().padding(.leading, 60)
+
+                Button {
+                    showFileImporter = true
+                } label: {
+                    PickerRow(icon: "folder", title: "Choose File",
+                              subtitle: "From Files or iCloud Drive")
+                }
+                .buttonStyle(.plain)
+
+                if hasBeamStatus {
+                    Divider().padding(.leading, 60)
+                    beamStatus
+                        .padding(Theme.Spacing.lg)
+                }
+            }
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+
+    private var hasBeamStatus: Bool {
+        if case .idle = controller.beamState { return false }
+        return true
+    }
+
     @ViewBuilder private var beamStatus: some View {
         switch controller.beamState {
         case .idle:
-            Text("Files arrive in the Downloads folder on your Mac.")
+            EmptyView()
         case let .sending(progress):
-            ProgressView(value: progress) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Sending… \(Int(progress * 100))%")
+                    .font(.fiple(13, .medium))
+                    .foregroundStyle(Theme.Palette.secondary)
+                ProgressView(value: progress).tint(Theme.Palette.brand)
             }
         case let .done(fileName):
-            Label("“\(fileName)” saved to Downloads", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Label {
+                Text("“\(fileName)” saved to Downloads").font(.fiple(14, .medium))
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.Palette.brand)
+            }
         case let .failed(message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+            Label {
+                Text(message).font(.fiple(14))
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
         }
     }
+
+    // MARK: Text → clipboard
+
+    private var clipboardCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            SectionHeader("Text to Clipboard")
+
+            VStack(spacing: Theme.Spacing.md) {
+                TextField("Type or paste text…", text: $clipboardText, axis: .vertical)
+                    .lineLimit(1 ... 5)
+                    .font(.fiple(15))
+                    .padding(Theme.Spacing.md)
+                    .background(Theme.Palette.background, in: RoundedRectangle(cornerRadius: 12))
+
+                Button {
+                    Task {
+                        clipboardSent = await controller.sendClipboard(text: clipboardText)
+                        if clipboardSent {
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        }
+                    }
+                } label: {
+                    Label(clipboardSent ? "On your Mac's clipboard — press ⌘V" : "Put on Mac's Clipboard",
+                          systemImage: clipboardSent ? "checkmark" : "doc.on.clipboard")
+                        .font(.fiple(15, .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(clipboardSent ? .green : Theme.Palette.brand)
+                .disabled(clipboardText.isEmpty)
+            }
+            .padding(Theme.Spacing.lg)
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    // MARK: Sending
 
     private func sendPicked(_ item: PhotosPickerItem) async {
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
@@ -101,5 +163,35 @@ struct SendToMacView: View {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else { return }
         await controller.beamFile(name: url.lastPathComponent, data: data)
+    }
+}
+
+/// One picker row: brand-tinted icon square, title + subtitle, chevron.
+private struct PickerRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.Palette.brand.opacity(0.12))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.fiple(16, .semibold))
+                        .foregroundStyle(Theme.Palette.brand)
+                )
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.fiple(16, .semibold)).foregroundStyle(Theme.Palette.label)
+                Text(subtitle).font(.fiple(13)).foregroundStyle(Theme.Palette.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.fiple(13, .semibold))
+                .foregroundStyle(Theme.Palette.secondary)
+        }
+        .padding(Theme.Spacing.lg)
+        .contentShape(Rectangle())
     }
 }
