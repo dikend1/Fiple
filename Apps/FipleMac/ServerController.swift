@@ -3,6 +3,7 @@ import ApplicationServices
 import FipleKit
 import Foundation
 import Observation
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Drives the Mac side: advertises over the LAN, performs the code handshake,
@@ -48,6 +49,10 @@ final class ServerController {
     @ObservationIgnored private var didPromptAccessibility = false
     @ObservationIgnored private var peer: PeerConnection?
     @ObservationIgnored private var isPaired = false
+    /// Authenticated side channels (the share extension): allowed to beam files
+    /// and set the clipboard, never counted as the main peer — so a guest can't
+    /// evict the app's live connection or receive its snapshots.
+    @ObservationIgnored private var guestPeers: [ObjectIdentifier: PeerConnection] = [:]
     @ObservationIgnored private var acceptTask: Task<Void, Never>?
     @ObservationIgnored private var failureWatchTask: Task<Void, Never>?
     @ObservationIgnored private var connectionTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
@@ -181,6 +186,11 @@ final class ServerController {
 
     // MARK: - Connection handling
 
+    /// Forgets a guest when its socket ends (see `handle`).
+    private func dropGuest(_ peer: PeerConnection) {
+        guestPeers[ObjectIdentifier(peer)] = nil
+    }
+
     private func handle(_ peer: PeerConnection) async {
         // Do NOT evict the currently-paired phone here: an unauthenticated socket
         // must never be able to kick the connected phone or clear `isPaired` just
@@ -208,6 +218,7 @@ final class ServerController {
             // keeps talking to a Mac that stopped listening.
             await peer.close()
         }
+        dropGuest(peer)
         if self.peer === peer { resetToAdvertising() }
     }
 
@@ -244,6 +255,19 @@ final class ServerController {
                 await acceptPairing(on: peer, rotateToken: false)
             } else {
                 FipleLog.pairing.notice("reconnect rejected — token expired")
+                try? await peer.send(ServerMessage.pairRejected(reason: .pairingExpired))
+            }
+
+        case let .guestReconnect(token):
+            if let saved = sessionToken, Self.constantTimeEquals(token, saved) {
+                FipleLog.pairing.info("guest reconnect accepted — side channel authenticated")
+                await peer.markAuthenticated()
+                guestPeers[ObjectIdentifier(peer)] = peer
+                // Just the ack — no snapshots, no supersede; the main peer's
+                // connection is untouched.
+                try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
+            } else {
+                FipleLog.pairing.notice("guest reconnect rejected — token expired")
                 try? await peer.send(ServerMessage.pairRejected(reason: .pairingExpired))
             }
 
@@ -308,22 +332,23 @@ final class ServerController {
             try? await peer.send(result)
 
         case let .beamBegin(transferID, name, totalBytes):
-            guard peer === self.peer, isPaired else { return }
+            guard isBeamAuthorized(peer) else { return }
             if case let .failed(message) = beam.begin(id: transferID, name: name, totalBytes: totalBytes) {
                 try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: false, message: message))
             }
 
         case let .beamChunk(transferID, bytes):
-            guard peer === self.peer, isPaired else { return }
+            guard isBeamAuthorized(peer) else { return }
             if case let .failed(message) = beam.chunk(id: transferID, bytes: bytes) {
                 try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: false, message: message))
             }
 
         case let .beamEnd(transferID):
-            guard peer === self.peer, isPaired else { return }
+            guard isBeamAuthorized(peer) else { return }
             switch beam.end(id: transferID) {
             case let .completed(fileName):
                 FipleLog.execution.info("beam received: \(fileName)")
+                copyImageToClipboardIfImage(fileName)
                 notifyBeamReceived(fileName)
                 try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: true, message: fileName))
             case let .failed(message):
@@ -333,7 +358,7 @@ final class ServerController {
             }
 
         case let .setClipboard(text):
-            guard peer === self.peer, isPaired else { return }
+            guard isBeamAuthorized(peer) else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             FipleLog.execution.info("clipboard set from phone (\(text.count) chars)")
@@ -354,6 +379,25 @@ final class ServerController {
                 promptForAccessibilityOnce()
             }
         }
+    }
+
+    /// Beam and clipboard messages are honoured from the main peer or any
+    /// authenticated guest (the share extension) — never from a raw socket.
+    private func isBeamAuthorized(_ peer: PeerConnection) -> Bool {
+        if peer === self.peer, isPaired { return true }
+        return guestPeers[ObjectIdentifier(peer)] === peer
+    }
+
+    /// A beamed screenshot/photo is almost always headed for ⌘V — put it on the
+    /// clipboard too, alongside the Downloads copy.
+    private func copyImageToClipboardIfImage(_ fileName: String) {
+        let url = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(fileName)
+        guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image),
+              let image = NSImage(contentsOf: url) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
+        FipleLog.execution.info("beamed image copied to clipboard")
     }
 
     /// "«IMG_1234.heic» received from iPhone" — the only signal a headless

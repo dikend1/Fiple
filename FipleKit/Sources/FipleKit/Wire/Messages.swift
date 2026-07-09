@@ -7,6 +7,11 @@ public enum ClientMessage: Sendable, Equatable {
     /// Silently re-authenticate a remembered pairing (no code needed) using the
     /// session token issued at first pair. See PRD `fiple-pairing`.
     case reconnect(token: String)
+    /// A short-lived side channel (the share extension) authenticating with the
+    /// same token WITHOUT claiming the main peer slot — so it never evicts the
+    /// app's live connection (which would immediately reconnect and kill the
+    /// guest mid-transfer). Guests may only beam files and set the clipboard.
+    case guestReconnect(token: String)
     /// Trigger a tile by id.
     case run(tileID: UUID)
     /// Trigger a single Fiple Bar action by id. The client sends only the id;
@@ -52,7 +57,7 @@ extension ClientMessage: WireTypeTagged {
 
 extension ClientMessage: Codable {
     private enum Tag: String, Codable, CaseIterable {
-        case pair, reconnect, run, runAction, gesture, trashThumbnail, trashAction,
+        case pair, reconnect, guestReconnect, run, runAction, gesture, trashThumbnail, trashAction,
              beamBegin, beamChunk, beamEnd, setClipboard
     }
     private enum CodingKeys: String, CodingKey {
@@ -65,6 +70,7 @@ extension ClientMessage: Codable {
         switch try c.decode(Tag.self, forKey: .type) {
         case .pair: self = .pair(code: try c.decode(String.self, forKey: .code))
         case .reconnect: self = .reconnect(token: try c.decode(String.self, forKey: .token))
+        case .guestReconnect: self = .guestReconnect(token: try c.decode(String.self, forKey: .token))
         case .run: self = .run(tileID: try c.decode(UUID.self, forKey: .tileID))
         case .runAction: self = .runAction(actionID: try c.decode(UUID.self, forKey: .actionID))
         case .gesture:
@@ -110,6 +116,10 @@ extension ClientMessage: Codable {
             try c.encode(FipleService.protocolVersion, forKey: .version)
         case let .reconnect(token):
             try c.encode(Tag.reconnect, forKey: .type)
+            try c.encode(token, forKey: .token)
+            try c.encode(FipleService.protocolVersion, forKey: .version)
+        case let .guestReconnect(token):
+            try c.encode(Tag.guestReconnect, forKey: .type)
             try c.encode(token, forKey: .token)
             try c.encode(FipleService.protocolVersion, forKey: .version)
         case let .run(tileID):

@@ -12,6 +12,7 @@ struct BeamWireTests {
             .beamChunk(transferID: id, bytes: Data([1, 2, 3, 4])),
             .beamEnd(transferID: id),
             .setClipboard(text: "https://example.com/from-qr"),
+            .guestReconnect(token: "guest-token"),
         ]
         for message in messages {
             let data = try MessageCodec.encode(message)
