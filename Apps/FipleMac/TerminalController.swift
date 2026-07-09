@@ -22,11 +22,6 @@ final class TerminalController {
     private(set) var port: UInt16 = 0
     /// How many phones are currently connected to the terminal.
     private(set) var activeSessions = 0
-    /// How long a detached shell keeps running before it's killed, in minutes.
-    /// One of 15/30/60/90; applied live to the running service.
-    private(set) var graceMinutes: Int
-
-    static let graceOptions = [15, 30, 60, 90]
 
     /// Fires when the advertised (enabled, port) may have changed, so the server
     /// controller re-sends the terminal info to the connected phone.
@@ -43,22 +38,10 @@ final class TerminalController {
     private static let enabledKey = "com.fiple.terminal.enabled"
     private static let passwordKey = "com.fiple.terminal.password"
     private static let portKey = "com.fiple.terminal.lastPort"
-    private static let graceKey = "com.fiple.terminal.graceMinutes"
 
     init() {
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
         hasPassword = Self.loadStoredRecordString() != nil
-        let stored = UserDefaults.standard.integer(forKey: Self.graceKey)
-        graceMinutes = Self.graceOptions.contains(stored) ? stored : 30
-    }
-
-    /// Changes how long detached shells survive. Applied live — running shells
-    /// keep going and pick up the new grace on their next detach.
-    func setGraceMinutes(_ minutes: Int) {
-        guard Self.graceOptions.contains(minutes) else { return }
-        graceMinutes = minutes
-        UserDefaults.standard.set(minutes, forKey: Self.graceKey)
-        service?.setGraceInterval(TimeInterval(minutes) * 60)
     }
 
     /// Sets or replaces the master password. Enabling is only allowed afterward.
@@ -100,12 +83,11 @@ final class TerminalController {
         if service != nil, serviceToken == token, serviceRecord == record { return }
         stopService()
 
-        // A detached shell (phone backgrounded, screen closed, network dropped)
-        // keeps running for the chosen grace so you can leave and come back to a
-        // long task without losing it.
+        // 30-minute grace: a detached shell (phone backgrounded, screen closed,
+        // network dropped) keeps running for half an hour so you can leave and
+        // come back to a long task without losing it.
         let service = TerminalService(
-            pairingToken: token, passwordRecord: record,
-            graceInterval: TimeInterval(graceMinutes) * 60
+            pairingToken: token, passwordRecord: record, graceInterval: 1800
         )
         service.onActiveSessionsChanged = { [weak self] count in
             Task { @MainActor in self?.activeSessions = count }

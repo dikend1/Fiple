@@ -111,8 +111,6 @@ struct SettingsView: View {
 
             if terminal.enabled {
                 Divider().padding(.leading, 52)
-                terminalGraceRow(terminal)
-                Divider().padding(.leading, 52)
                 terminalStatusRow(terminal)
                 terminalSecurityNote
             }
@@ -186,31 +184,6 @@ struct SettingsView: View {
             }
             .padding(Theme.Spacing.md)
         }
-    }
-
-    /// How long a shell keeps running after you leave the terminal.
-    private func terminalGraceRow(_ terminal: TerminalController) -> some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "clock.arrow.circlepath").font(.system(size: 12))
-                .foregroundStyle(.secondary).frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Keep shells running for").font(.system(size: 14, weight: .medium))
-                Text("After you leave the terminal, a running task stays alive this long.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Picker("Keep shells running for", selection: Binding(
-                get: { terminal.graceMinutes },
-                set: { terminal.setGraceMinutes($0) }
-            )) {
-                ForEach(TerminalController.graceOptions, id: \.self) { minutes in
-                    Text("\(minutes) min").tag(minutes)
-                }
-            }
-            .labelsHidden()
-            .frame(width: 100)
-        }
-        .padding(Theme.Spacing.md)
     }
 
     /// A humane status: a coloured dot + plain-language state instead of a port.

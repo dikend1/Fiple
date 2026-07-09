@@ -93,12 +93,6 @@ public final class TerminalService: @unchecked Sendable {
         listener.start(queue: queue)
     }
 
-    /// Updates the detach grace applied to shells from now on — takes effect on
-    /// the next detach, no restart, live shells keep running.
-    public func setGraceInterval(_ seconds: TimeInterval) {
-        queue.async { [weak self] in self?.registry.graceInterval = seconds }
-    }
-
     public func stop() {
         queue.sync {
             for connection in connections.values { connection.teardown() }
