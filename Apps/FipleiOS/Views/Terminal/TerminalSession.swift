@@ -45,12 +45,6 @@ final class TerminalSession {
 
     /// The Mac shell id to resume; nil on first connect, set once authenticated.
     private var resumeSessionID: String?
-    /// The Mac shell id this tab is attached to (for persistence/restore).
-    var sessionID: String? { resumeSessionID }
-    /// A restored tab must never silently spawn a fresh shell: its auth is
-    /// strict (`resumeOnly`), so a dead remembered shell ends the session
-    /// instead — the screen then drops the tab.
-    private let resumeOnly: Bool
     private var backgrounded = false
     private var closed = false
     /// A Face-ID password was valid before, so a rejection right after an app
@@ -70,17 +64,12 @@ final class TerminalSession {
     /// Set by the terminal view to receive shell output bytes.
     @ObservationIgnored var outputHandler: (@MainActor (Data) -> Void)?
 
-    init(
-        host: String, port: UInt16, token: String, password: String,
-        passwordPrevalidated: Bool = false, restoreSessionID: String? = nil
-    ) {
+    init(host: String, port: UInt16, token: String, password: String, passwordPrevalidated: Bool = false) {
         self.host = host
         self.port = port
         self.token = token
         self.password = password
         self.authRetriesLeft = passwordPrevalidated ? 3 : 0
-        self.resumeSessionID = restoreSessionID
-        self.resumeOnly = restoreSessionID != nil
     }
 
     /// First connection.
@@ -185,10 +174,7 @@ final class TerminalSession {
         }
         guard !closed else { client.close(); return }
         if phase != .ready { phase = .authenticating }
-        client.authenticate(
-            passwordProof: password, token: token,
-            resumeSessionID: resumeSessionID, resumeOnly: resumeOnly
-        )
+        client.authenticate(passwordProof: password, token: token, resumeSessionID: resumeSessionID)
         pump(client)
     }
 
@@ -199,15 +185,6 @@ final class TerminalSession {
                 guard let self else { return }
                 switch event {
                 case let .authenticated(sessionID):
-                    // Strict restore against an older Mac (no resumeOnly
-                    // support): a changed id means it spawned a fresh shell we
-                    // didn't ask for — kill it and end this tab instead.
-                    if self.resumeOnly, let requested = self.resumeSessionID, requested != sessionID {
-                        client.endSession(sessionID: sessionID)
-                        self.phase = .ended
-                        self.close()
-                        return
-                    }
                     self.resumeSessionID = sessionID
                     self.generation += 1
                     self.phase = .ready
