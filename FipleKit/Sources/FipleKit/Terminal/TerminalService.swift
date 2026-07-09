@@ -201,8 +201,8 @@ private final class ConnectionSession: @unchecked Sendable {
             guard frame.type == .control,
                   let control = try? MessageCodec.decode(TerminalClientControl.self, from: frame.payload)
             else { return }
-            if case let .auth(token, proof, resumeSessionID) = control {
-                authenticate(token: token, proof: proof, resumeSessionID: resumeSessionID)
+            if case let .auth(token, proof, resumeSessionID, resumeOnly) = control {
+                authenticate(token: token, proof: proof, resumeSessionID: resumeSessionID, resumeOnly: resumeOnly)
             }
             return
         }
@@ -230,11 +230,11 @@ private final class ConnectionSession: @unchecked Sendable {
         }
     }
 
-    private func authenticate(token: String, proof: String, resumeSessionID: String?) {
+    private func authenticate(token: String, proof: String, resumeSessionID: String?, resumeOnly: Bool) {
         switch authenticator.authenticate(token: token, passwordProof: proof, now: Date()) {
         case .authorized:
             authenticated = true
-            attachShell(resumeSessionID: resumeSessionID)
+            attachShell(resumeSessionID: resumeSessionID, resumeOnly: resumeOnly)
         case let .rejected(reason):
             // Send the rejection, then drop the socket only once it has flushed.
             if let payload = try? MessageCodec.encode(TerminalServerControl.authFailed(reason: reason)),
@@ -249,11 +249,17 @@ private final class ConnectionSession: @unchecked Sendable {
         }
     }
 
-    private func attachShell(resumeSessionID: String?) {
+    private func attachShell(resumeSessionID: String?, resumeOnly: Bool = false) {
         // Resume the named session if it's still alive; otherwise start fresh.
         let session: ShellSession
         if let id = resumeSessionID, let existing = registry.session(id: id) {
             session = existing
+        } else if resumeOnly {
+            // A strict restore of a shell that's gone: report it ended rather
+            // than silently handing back a fresh shell the user didn't ask for.
+            sendControl(.sessionEnded(exitCode: nil))
+            finish()
+            return
         } else {
             do {
                 session = try registry.create()

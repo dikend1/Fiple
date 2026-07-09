@@ -77,8 +77,14 @@ public final class TerminalClient: @unchecked Sendable {
     /// password. If `resumeSessionID` names a shell still alive on the Mac, it is
     /// resumed (buffer replayed); otherwise a fresh shell starts. Watch
     /// ``events`` for `.authenticated` or `.authFailed`.
-    public func authenticate(passwordProof: String, token: String, resumeSessionID: String? = nil) {
-        sendControl(.auth(token: token, passwordProof: passwordProof, resumeSessionID: resumeSessionID))
+    public func authenticate(
+        passwordProof: String, token: String,
+        resumeSessionID: String? = nil, resumeOnly: Bool = false
+    ) {
+        sendControl(.auth(
+            token: token, passwordProof: passwordProof,
+            resumeSessionID: resumeSessionID, resumeOnly: resumeOnly
+        ))
     }
 
     /// Asks the Mac to end a shell session now (the user closed its tab) rather
