@@ -83,7 +83,12 @@ final class TerminalController {
         if service != nil, serviceToken == token, serviceRecord == record { return }
         stopService()
 
-        let service = TerminalService(pairingToken: token, passwordRecord: record)
+        // 30-minute grace: a detached shell (phone backgrounded, screen closed,
+        // network dropped) keeps running for half an hour so you can leave and
+        // come back to a long task without losing it.
+        let service = TerminalService(
+            pairingToken: token, passwordRecord: record, graceInterval: 1800
+        )
         service.onActiveSessionsChanged = { [weak self] count in
             Task { @MainActor in self?.activeSessions = count }
         }
