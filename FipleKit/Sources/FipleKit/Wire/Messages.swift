@@ -24,6 +24,16 @@ public enum ClientMessage: Sendable, Equatable {
     /// Mac resolves them against its own candidate store and acts solely on
     /// matches (server-authoritative, like `runAction`).
     case trashAction(ids: [UUID], decision: TrashDecision)
+    /// Start beaming a file to the Mac's Downloads. Chunks follow; frames cap
+    /// at 8 MB (and Data rides as base64), hence the chunked transfer.
+    case beamBegin(transferID: UUID, name: String, totalBytes: Int64)
+    /// One ~1 MB slice of the file, in order.
+    case beamChunk(transferID: UUID, bytes: Data)
+    /// The file is complete — the Mac finalizes it into ~/Downloads and
+    /// answers with `beamResult`.
+    case beamEnd(transferID: UUID)
+    /// Put text on the Mac's clipboard (the QR / live-text bridge).
+    case setClipboard(text: String)
 }
 
 /// The phone's verdict on Smart Trash candidates.
@@ -42,10 +52,12 @@ extension ClientMessage: WireTypeTagged {
 
 extension ClientMessage: Codable {
     private enum Tag: String, Codable, CaseIterable {
-        case pair, reconnect, run, runAction, gesture, trashThumbnail, trashAction
+        case pair, reconnect, run, runAction, gesture, trashThumbnail, trashAction,
+             beamBegin, beamChunk, beamEnd, setClipboard
     }
     private enum CodingKeys: String, CodingKey {
-        case type, code, token, tileID, actionID, version, action, candidateID, ids, decision
+        case type, code, token, tileID, actionID, version, action, candidateID, ids, decision,
+             transferID, name, totalBytes, bytes, text
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +83,21 @@ extension ClientMessage: Codable {
                 ids: try c.decode([UUID].self, forKey: .ids),
                 decision: TrashDecision(rawValue: raw) ?? .keep
             )
+        case .beamBegin:
+            self = .beamBegin(
+                transferID: try c.decode(UUID.self, forKey: .transferID),
+                name: try c.decode(String.self, forKey: .name),
+                totalBytes: try c.decode(Int64.self, forKey: .totalBytes)
+            )
+        case .beamChunk:
+            self = .beamChunk(
+                transferID: try c.decode(UUID.self, forKey: .transferID),
+                bytes: try c.decode(Data.self, forKey: .bytes)
+            )
+        case .beamEnd:
+            self = .beamEnd(transferID: try c.decode(UUID.self, forKey: .transferID))
+        case .setClipboard:
+            self = .setClipboard(text: try c.decode(String.self, forKey: .text))
         }
     }
 
@@ -101,6 +128,21 @@ extension ClientMessage: Codable {
             try c.encode(Tag.trashAction, forKey: .type)
             try c.encode(ids, forKey: .ids)
             try c.encode(decision.rawValue, forKey: .decision)
+        case let .beamBegin(transferID, name, totalBytes):
+            try c.encode(Tag.beamBegin, forKey: .type)
+            try c.encode(transferID, forKey: .transferID)
+            try c.encode(name, forKey: .name)
+            try c.encode(totalBytes, forKey: .totalBytes)
+        case let .beamChunk(transferID, bytes):
+            try c.encode(Tag.beamChunk, forKey: .type)
+            try c.encode(transferID, forKey: .transferID)
+            try c.encode(bytes, forKey: .bytes)
+        case let .beamEnd(transferID):
+            try c.encode(Tag.beamEnd, forKey: .type)
+            try c.encode(transferID, forKey: .transferID)
+        case let .setClipboard(text):
+            try c.encode(Tag.setClipboard, forKey: .type)
+            try c.encode(text, forKey: .text)
         }
     }
 }
@@ -150,6 +192,9 @@ public enum ServerMessage: Sendable, Equatable {
     /// Typed outcome of a `trashAction`: which ids were trashed / kept, and
     /// which the Mac didn't recognize (already evicted or forged).
     case trashActionResult(trashed: [UUID], kept: [UUID], unknown: [UUID])
+    /// Outcome of a beamed file: sent on `beamEnd` (landed in Downloads) or
+    /// mid-transfer on a fatal error (over cap, disk, superseded).
+    case beamResult(transferID: UUID, ok: Bool, message: String?)
 }
 
 extension ServerMessage: WireTypeTagged {
@@ -160,11 +205,12 @@ extension ServerMessage: WireTypeTagged {
 extension ServerMessage: Codable {
     private enum Tag: String, Codable, CaseIterable {
         case paired, deviceInfo, pairRejected, tilesSnapshot, fipleBar, runResult,
-             terminalService, trashCandidates, trashThumbnail, trashActionResult
+             terminalService, trashCandidates, trashThumbnail, trashActionResult, beamResult
     }
     private enum CodingKeys: String, CodingKey {
         case type, macID, macName, macKind, token, reason, tiles, actions, result, version,
-             enabled, terminalPort, candidates, candidateID, jpeg, trashed, kept, unknown
+             enabled, terminalPort, candidates, candidateID, jpeg, trashed, kept, unknown,
+             transferID, ok, message
     }
 
     public init(from decoder: Decoder) throws {
@@ -210,6 +256,12 @@ extension ServerMessage: Codable {
                 kept: try c.decode([UUID].self, forKey: .kept),
                 unknown: try c.decode([UUID].self, forKey: .unknown)
             )
+        case .beamResult:
+            self = .beamResult(
+                transferID: try c.decode(UUID.self, forKey: .transferID),
+                ok: try c.decode(Bool.self, forKey: .ok),
+                message: try c.decodeIfPresent(String.self, forKey: .message)
+            )
         }
     }
 
@@ -253,6 +305,11 @@ extension ServerMessage: Codable {
             try c.encode(trashed, forKey: .trashed)
             try c.encode(kept, forKey: .kept)
             try c.encode(unknown, forKey: .unknown)
+        case let .beamResult(transferID, ok, message):
+            try c.encode(Tag.beamResult, forKey: .type)
+            try c.encode(transferID, forKey: .transferID)
+            try c.encode(ok, forKey: .ok)
+            try c.encodeIfPresent(message, forKey: .message)
         }
     }
 }

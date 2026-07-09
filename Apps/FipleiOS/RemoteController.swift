@@ -387,6 +387,13 @@ final class RemoteController {
         case let .trashThumbnail(candidateID, jpeg):
             trashThumbnails[candidateID] = jpeg
 
+        case let .beamResult(_, ok, message):
+            beamState = ok
+                ? .done(fileName: message ?? "File")
+                : .failed(message ?? "The Mac couldn't save the file")
+            beamContinuation?.resume()
+            beamContinuation = nil
+
         case .trashActionResult:
             // The fresh candidate snapshot follows separately; this just
             // releases the action bar.
@@ -466,6 +473,78 @@ final class RemoteController {
             return false
         }
     }
+
+    // MARK: - Beam (send file / clipboard text to the Mac)
+
+    enum BeamState: Equatable {
+        case idle
+        case sending(progress: Double)
+        case done(fileName: String)
+        case failed(String)
+    }
+    private(set) var beamState: BeamState = .idle
+    @ObservationIgnored private var beamContinuation: CheckedContinuation<Void, Never>?
+
+    private static let beamChunkSize = 1024 * 1024
+
+    /// Streams a file to the Mac's Downloads in ~1 MB chunks, driving
+    /// `beamState` for the progress UI. One transfer at a time.
+    func beamFile(name: String, data: Data) async {
+        guard phase == .connected, let peer else {
+            beamState = .failed("Not connected to your Mac")
+            return
+        }
+        guard case .sending = beamState else {
+            let transferID = UUID()
+            beamState = .sending(progress: 0)
+            do {
+                try await peer.send(ClientMessage.beamBegin(
+                    transferID: transferID, name: name, totalBytes: Int64(data.count)
+                ))
+                var sent = 0
+                while sent < data.count {
+                    let end = min(sent + Self.beamChunkSize, data.count)
+                    try await peer.send(ClientMessage.beamChunk(
+                        transferID: transferID, bytes: data[sent ..< end]
+                    ))
+                    sent = end
+                    beamState = .sending(progress: Double(sent) / Double(data.count))
+                }
+                try await peer.send(ClientMessage.beamEnd(transferID: transferID))
+                // The result lands via `beamResult`; time out rather than spin
+                // forever if the Mac never answers.
+                await withCheckedContinuation { continuation in
+                    beamContinuation = continuation
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .seconds(15))
+                        guard let self, self.beamContinuation != nil else { return }
+                        self.beamState = .failed("The Mac didn't confirm the transfer")
+                        self.beamContinuation?.resume()
+                        self.beamContinuation = nil
+                    }
+                }
+            } catch {
+                FipleLog.execution.error("beam failed: \(error.localizedDescription)")
+                beamState = .failed("Couldn't reach your Mac — nothing was sent")
+            }
+            return
+        }
+    }
+
+    /// Puts text on the Mac's clipboard (QR / live-text bridge). Returns whether
+    /// the send succeeded.
+    @discardableResult
+    func sendClipboard(text: String) async -> Bool {
+        guard phase == .connected, let peer else { return false }
+        do {
+            try await peer.send(ClientMessage.setClipboard(text: text))
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func resetBeamState() { beamState = .idle }
 
     // MARK: - Smart Trash
 

@@ -3,6 +3,7 @@ import ApplicationServices
 import FipleKit
 import Foundation
 import Observation
+import UserNotifications
 
 /// Drives the Mac side: advertises over the LAN, performs the code handshake,
 /// pushes tile snapshots, and runs triggered tiles. MVP keeps a single active
@@ -38,6 +39,10 @@ final class ServerController {
     @ObservationIgnored private let server = FipleServer()
     @ObservationIgnored private let executor = MacActionExecutor()
     @ObservationIgnored private let gestureExecutor = GestureExecutor()
+    /// Assembles files beamed from the phone into ~/Downloads.
+    @ObservationIgnored private let beam = BeamReceiver(
+        destination: FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+    )
     /// Whether we've already nudged the user toward the Accessibility settings
     /// this launch, so a stream of gestures can't spam the system prompt.
     @ObservationIgnored private var didPromptAccessibility = false
@@ -301,6 +306,37 @@ final class ServerController {
             let result = trash.applyReview(ids: ids, decision: decision)
             try? await peer.send(result)
 
+        case let .beamBegin(transferID, name, totalBytes):
+            guard peer === self.peer, isPaired else { return }
+            if case let .failed(message) = beam.begin(id: transferID, name: name, totalBytes: totalBytes) {
+                try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: false, message: message))
+            }
+
+        case let .beamChunk(transferID, bytes):
+            guard peer === self.peer, isPaired else { return }
+            if case let .failed(message) = beam.chunk(id: transferID, bytes: bytes) {
+                try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: false, message: message))
+            }
+
+        case let .beamEnd(transferID):
+            guard peer === self.peer, isPaired else { return }
+            switch beam.end(id: transferID) {
+            case let .completed(fileName):
+                FipleLog.execution.info("beam received: \(fileName)")
+                notifyBeamReceived(fileName)
+                try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: true, message: fileName))
+            case let .failed(message):
+                try? await peer.send(ServerMessage.beamResult(transferID: transferID, ok: false, message: message))
+            case .accepted:
+                break // unreachable for end()
+            }
+
+        case let .setClipboard(text):
+            guard peer === self.peer, isPaired else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            FipleLog.execution.info("clipboard set from phone (\(text.count) chars)")
+
         case let .gesture(action):
             guard peer === self.peer, isPaired else {
                 FipleLog.execution.notice("gesture ignored — not the authenticated peer")
@@ -316,6 +352,20 @@ final class ServerController {
                 FipleLog.execution.notice("gesture needs Accessibility permission")
                 promptForAccessibilityOnce()
             }
+        }
+    }
+
+    /// "«IMG_1234.heic» received from iPhone" — the only signal a headless
+    /// (menu-bar-closed) Mac gives that the beam landed.
+    private func notifyBeamReceived(_ fileName: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Received from iPhone"
+        content.body = "“\(fileName)” was saved to Downloads."
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, _ in
+            guard granted else { return }
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: "fiple.beam.\(fileName)", content: content, trigger: nil)
+            )
         }
     }
 
@@ -487,6 +537,7 @@ final class ServerController {
     /// phone reconnects silently.
     private func resetToAdvertising() {
         FipleLog.connection.info("peer dropped — back to advertising (pairing remembered)")
+        beam.abort() // an unfinished transfer can't complete on a new socket
         peer = nil
         isPaired = false
         status = .advertising
