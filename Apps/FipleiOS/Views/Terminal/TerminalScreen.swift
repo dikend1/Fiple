@@ -175,23 +175,25 @@ struct TerminalScreen: View {
         }
         activeTabID = tabs.first?.id
         // Prune restored tabs whose shell expired; poll briskly so a dead
-        // restore never delays landing in a working terminal, and fall back to
-        // a fresh session if none survived.
+        // restore never delays landing in a working terminal. Restoration is
+        // strictly best-effort: any restored tab that hasn't come up within the
+        // deadline is abandoned too — the user must never sit on a spinner for
+        // shells from last time. If nothing survives, open a fresh session.
         Task {
-            for _ in 0 ..< 60 {
+            let deadline = Date().addingTimeInterval(8)
+            while Date() < deadline {
                 try? await Task.sleep(for: .milliseconds(300))
-                let dead = tabs.filter { $0.restored && $0.session.phase == .ended }
-                guard !dead.isEmpty || tabs.isEmpty else { continue }
-                for tab in dead {
-                    tab.session.close()
-                    tabs.removeAll { $0.id == tab.id }
-                }
-                if activeTab == nil { activeTabID = tabs.first?.id }
+                prune { $0.session.phase == .ended }
                 if tabs.isEmpty {
                     await openNewTab()
                     return
                 }
+                // Every restored tab settled (ready or already pruned) — done.
+                if tabs.allSatisfy({ !$0.restored || $0.session.phase == .ready }) { return }
             }
+            // Deadline hit: give up on whatever is still limping.
+            prune { $0.session.phase != .ready }
+            if tabs.isEmpty { await openNewTab() }
         }
     }
 
@@ -217,6 +219,17 @@ struct TerminalScreen: View {
         tabs.append(tab)
         activate(tab)
         await session.connect()
+    }
+
+    /// Drops restored tabs matching `condition` and repairs the active id.
+    private func prune(_ condition: (TerminalTab) -> Bool) {
+        let doomed = tabs.filter { $0.restored && condition($0) }
+        guard !doomed.isEmpty else { return }
+        for tab in doomed {
+            tab.session.close()
+            tabs.removeAll { $0.id == tab.id }
+        }
+        if activeTab == nil { activeTabID = tabs.first?.id }
     }
 
     private func activate(_ tab: TerminalTab) {
