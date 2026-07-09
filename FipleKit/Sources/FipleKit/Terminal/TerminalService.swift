@@ -141,6 +141,12 @@ private final class ConnectionSession: @unchecked Sendable {
     private var authenticated = false
     /// The shell this connection is currently driving (nil until authorized).
     private weak var shell: ShellSession?
+    /// A resumed shell whose scrollback replay waits for the client's first
+    /// RESIZE — replaying into an emulator of unknown size garbles wrapped
+    /// lines and cursor-positioned prompts. A short fallback covers clients
+    /// that never send a size (tests, headless).
+    private weak var pendingReplayShell: ShellSession?
+    private var pendingReplayFallback: DispatchWorkItem?
 
     var onFinished: (@Sendable () -> Void)?
     /// +1 when this connection authenticates, -1 when it drops (once each).
@@ -213,6 +219,9 @@ private final class ConnectionSession: @unchecked Sendable {
         case .resize:
             if let size = try? MessageCodec.decode(TerminalResize.self, from: frame.payload) {
                 shell?.resize(cols: size.cols, rows: size.rows)
+                // The client's size is now known — safe to replay the resumed
+                // shell's buffer without garbling wrapped lines.
+                completePendingReplay()
             }
         case .ping:
             send(TerminalFrame(type: .pong))
@@ -273,6 +282,27 @@ private final class ConnectionSession: @unchecked Sendable {
         if !countedActive { countedActive = true; onActiveChange?(1) }
         sendControl(.authOK(sessionID: session.id))
         // Attach after replying so the phone has the id before buffered bytes.
+        // A resumed shell with scrollback holds its replay until the client
+        // reports its terminal size (first RESIZE) — replaying into an
+        // emulator of unknown width garbles wrapped lines and prompts.
+        if session.hasScrollback {
+            session.holdGrace()
+            pendingReplayShell = session
+            let fallback = DispatchWorkItem { [weak self] in self?.completePendingReplay() }
+            pendingReplayFallback = fallback
+            queue.asyncAfter(deadline: .now() + 1, execute: fallback)
+        } else {
+            session.attach(sink: { [weak self] frame in self?.send(frame) })
+        }
+    }
+
+    /// Wires output + replays the held scrollback (first RESIZE arrived, or
+    /// the fallback fired). Idempotent.
+    private func completePendingReplay() {
+        pendingReplayFallback?.cancel()
+        pendingReplayFallback = nil
+        guard let session = pendingReplayShell else { return }
+        pendingReplayShell = nil
         session.attach(sink: { [weak self] frame in self?.send(frame) })
     }
 
@@ -292,6 +322,9 @@ private final class ConnectionSession: @unchecked Sendable {
     func finish() {
         if finished { return }
         finished = true
+        pendingReplayFallback?.cancel()
+        pendingReplayFallback = nil
+        pendingReplayShell = nil
         if countedActive { countedActive = false; onActiveChange?(-1) }
         shell?.detach()
         shell = nil
