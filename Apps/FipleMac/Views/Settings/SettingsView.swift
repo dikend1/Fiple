@@ -273,6 +273,7 @@ struct SettingsView: View {
                 get: { trash.thresholdDays },
                 set: { trash.setThresholdDays($0) }
             )) {
+                Text("15 days").tag(15)
                 Text("30 days").tag(30)
                 Text("60 days").tag(60)
                 Text("90 days").tag(90)

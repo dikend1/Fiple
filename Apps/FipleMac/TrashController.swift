@@ -42,7 +42,7 @@ final class TrashController {
     init() {
         enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
         let days = UserDefaults.standard.integer(forKey: Self.thresholdKey)
-        thresholdDays = [30, 60, 90].contains(days) ? days : 60
+        thresholdDays = [15, 30, 60, 90].contains(days) ? days : 60
 
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Fiple", isDirectory: true)
