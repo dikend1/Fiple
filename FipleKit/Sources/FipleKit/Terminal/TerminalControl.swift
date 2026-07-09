@@ -33,7 +33,13 @@ public enum TerminalClientControl: Sendable, Equatable {
     /// `resumeSessionID` names a shell session still alive on the Mac (within its
     /// grace period), the Mac reattaches to it and replays its buffer; otherwise
     /// a fresh shell is started. Nil on a first connection.
-    case auth(token: String, passwordProof: String, resumeSessionID: String?)
+    /// `resumeOnly` (default false) makes the resume strict: if
+    /// `resumeSessionID` is no longer alive the Mac answers `sessionEnded`
+    /// instead of silently starting a fresh shell — used when the phone
+    /// restores remembered tabs and must not spawn shells for dead ones. An
+    /// older Mac ignores the unknown key and falls back to the lenient
+    /// behaviour (fresh shell), which the phone detects by the changed id.
+    case auth(token: String, passwordProof: String, resumeSessionID: String?, resumeOnly: Bool = false)
     /// The phone closed a session tab: end that shell now instead of letting it
     /// idle through the reattach grace period. Only honoured on an authenticated
     /// connection. An older Mac skips this unknown type — the shell then simply
@@ -47,7 +53,7 @@ extension TerminalClientControl: WireTypeTagged {
 
 extension TerminalClientControl: Codable {
     private enum Tag: String, Codable, CaseIterable { case auth, endSession }
-    private enum CodingKeys: String, CodingKey { case type, token, passwordProof, resumeSessionID, sessionID }
+    private enum CodingKeys: String, CodingKey { case type, token, passwordProof, resumeSessionID, resumeOnly, sessionID }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -56,7 +62,8 @@ extension TerminalClientControl: Codable {
             self = .auth(
                 token: try c.decode(String.self, forKey: .token),
                 passwordProof: try c.decode(String.self, forKey: .passwordProof),
-                resumeSessionID: try c.decodeIfPresent(String.self, forKey: .resumeSessionID)
+                resumeSessionID: try c.decodeIfPresent(String.self, forKey: .resumeSessionID),
+                resumeOnly: try c.decodeIfPresent(Bool.self, forKey: .resumeOnly) ?? false
             )
         case .endSession:
             self = .endSession(sessionID: try c.decode(String.self, forKey: .sessionID))
@@ -66,11 +73,12 @@ extension TerminalClientControl: Codable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case let .auth(token, passwordProof, resumeSessionID):
+        case let .auth(token, passwordProof, resumeSessionID, resumeOnly):
             try c.encode(Tag.auth, forKey: .type)
             try c.encode(token, forKey: .token)
             try c.encode(passwordProof, forKey: .passwordProof)
             try c.encodeIfPresent(resumeSessionID, forKey: .resumeSessionID)
+            if resumeOnly { try c.encode(true, forKey: .resumeOnly) }
         case let .endSession(sessionID):
             try c.encode(Tag.endSession, forKey: .type)
             try c.encode(sessionID, forKey: .sessionID)

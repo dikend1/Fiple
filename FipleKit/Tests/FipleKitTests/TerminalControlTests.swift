@@ -9,6 +9,7 @@ struct TerminalControlTests {
         let messages: [TerminalClientControl] = [
             .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: nil),
             .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: "sess-1"),
+            .auth(token: "tok-123", passwordProof: "proof-abc", resumeSessionID: "sess-1", resumeOnly: true),
             .endSession(sessionID: "sess-2")
         ]
         for message in messages {

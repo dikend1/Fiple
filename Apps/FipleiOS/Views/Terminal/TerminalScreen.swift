@@ -13,12 +13,16 @@ final class TerminalTab: Identifiable {
     let id = UUID()
     let name: String
     let session: TerminalSession
+    /// Restored from a previous screen visit — dropped silently if its Mac
+    /// shell turns out to have expired, instead of showing an error.
+    let restored: Bool
     /// When the user last looked at this tab, for the unseen-output dot.
     var lastSeenAt = Date()
 
-    init(name: String, session: TerminalSession) {
+    init(name: String, session: TerminalSession, restored: Bool = false) {
         self.name = name
         self.session = session
+        self.restored = restored
     }
 
     /// Output arrived after the user last had this tab on screen.
@@ -96,7 +100,7 @@ struct TerminalScreen: View {
         }
         .task {
             guard tabs.isEmpty else { return }
-            await openNewTab()
+            await restoreOrOpenTabs()
         }
         .onChange(of: scenePhase) { _, phase in
             for tab in tabs { tab.session.scenePhaseChanged(active: phase == .active) }
@@ -121,8 +125,73 @@ struct TerminalScreen: View {
             }
         }
         // Closing the screen detaches every shell (they survive the grace period
-        // on the Mac); it doesn't kill them — only closing a tab does that.
-        .onDisappear { for tab in tabs { tab.session.close() } }
+        // on the Mac); it doesn't kill them — only closing a tab does that. The
+        // remembered tab list lets the next visit reattach to whatever survived.
+        .onDisappear {
+            saveTabs()
+            for tab in tabs { tab.session.close() }
+        }
+    }
+
+    // MARK: Persistence — remember open shells across screen visits
+
+    private struct SavedTab: Codable {
+        let sessionID: String
+        let name: String
+    }
+    private static let savedTabsKey = "fiple.terminal.savedTabs"
+
+    private func saveTabs() {
+        let saved = tabs.compactMap { tab in
+            tab.session.sessionID.map { SavedTab(sessionID: $0, name: tab.name) }
+        }
+        UserDefaults.standard.set(try? JSONEncoder().encode(saved), forKey: Self.savedTabsKey)
+    }
+
+    /// Reattach to the shells a previous visit left running (still within their
+    /// grace period on the Mac). Dead ones are pruned as they report ended; if
+    /// nothing survives, fall back to one fresh session — the user always lands
+    /// in a working terminal.
+    private func restoreOrOpenTabs() async {
+        let saved = (UserDefaults.standard.data(forKey: Self.savedTabsKey))
+            .flatMap { try? JSONDecoder().decode([SavedTab].self, from: $0) } ?? []
+
+        guard !saved.isEmpty else {
+            await openNewTab()
+            return
+        }
+        for entry in saved.prefix(Self.maxTabs) {
+            let session = TerminalSession(
+                host: host, port: port, token: pairingToken, password: currentPassword,
+                passwordPrevalidated: true, restoreSessionID: entry.sessionID
+            )
+            let tab = TerminalTab(name: entry.name, session: session, restored: true)
+            tabs.append(tab)
+            // Keep numbering ahead of restored names ("Session 3" → next is 4).
+            if let number = Int(entry.name.replacingOccurrences(of: "Session ", with: "")) {
+                nextSessionNumber = max(nextSessionNumber, number + 1)
+            }
+            Task { await session.connect() }
+        }
+        activeTabID = tabs.first?.id
+        // Prune restored tabs whose shell expired; give the reconnects a
+        // moment, then fall back to a fresh session if none survived.
+        Task {
+            for _ in 0 ..< 20 {
+                try? await Task.sleep(for: .seconds(1))
+                let dead = tabs.filter { $0.restored && $0.session.phase == .ended }
+                guard !dead.isEmpty || tabs.isEmpty else { continue }
+                for tab in dead {
+                    tab.session.close()
+                    tabs.removeAll { $0.id == tab.id }
+                }
+                if activeTab == nil { activeTabID = tabs.first?.id }
+                if tabs.isEmpty {
+                    await openNewTab()
+                    return
+                }
+            }
+        }
     }
 
     // MARK: Tabs
