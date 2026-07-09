@@ -104,6 +104,7 @@ final class RemoteController {
     func begin() {
         guard discoverTask == nil else { return }
         migrateLegacyToken()
+        normalizeTokenAccessGroup()
         recents = LaunchRecord.load()
         #if DEBUG
         // Offline demo mode (`-demo` launch arg / SwiftUI previews): skip discovery
@@ -740,6 +741,16 @@ final class RemoteController {
         if Keychain.set(legacy, for: Self.tokenKey) {
             UserDefaults.standard.removeObject(forKey: Self.tokenKey)
         }
+    }
+
+    /// Re-adds the token so it lands in the app's *first* keychain access group
+    /// — the one shared with the FipleShare extension. An update-in-place would
+    /// leave a pre-existing item in the old app-private group forever, where
+    /// the extension can't read it.
+    private func normalizeTokenAccessGroup() {
+        guard let token = Keychain.get(Self.tokenKey) else { return }
+        Keychain.remove(Self.tokenKey)
+        Keychain.set(token, for: Self.tokenKey)
     }
 
     private var storedMacID: String? {

@@ -60,6 +60,9 @@ targets:
     dependencies:
       - package: FipleKit
       - package: SwiftTerm
+      # Share-sheet extension: "Share → Fiple" beams files/text to the Mac
+      # without opening the app.
+      - target: FipleShare
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp
@@ -72,3 +75,23 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         CODE_SIGN_ENTITLEMENTS: Apps/FipleiOS/Fiple.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  # "Share → Fiple" from any app: beams the shared file into the Mac's
+  # Downloads (or text/URL onto its clipboard) using the pairing token shared
+  # with the main app via the keychain access group.
+  FipleShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Apps/FipleShare
+    dependencies:
+      - package: FipleKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp.Share
+        PRODUCT_NAME: FipleShare
+        GENERATE_INFOPLIST_FILE: "NO"
+        INFOPLIST_FILE: Apps/FipleShare/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_STRICT_CONCURRENCY: complete
+        CODE_SIGN_ENTITLEMENTS: Apps/FipleShare/FipleShare.entitlements

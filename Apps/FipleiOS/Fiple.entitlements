@@ -8,5 +8,14 @@
 	     LAN-only release (off-LAN Files is disabled via AppFeatures.remoteFiles).
 	     Restore com.apple.developer.icloud-container-identifiers and
 	     com.apple.developer.icloud-services (CloudKit) for the 1.1 Files release. -->
+	<!-- Shared with the FipleShare extension so it can read the pairing token
+	     and beam files without opening the app. Listed FIRST so new writes land
+	     in the shared group; the app-private group stays readable for items
+	     written by older builds. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.maksatov.fipleapp.shared</string>
+		<string>$(AppIdentifierPrefix)com.maksatov.fipleapp</string>
+	</array>
 </dict>
 </plist>
