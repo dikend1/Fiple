@@ -13,46 +13,43 @@ struct WorkspaceCardView: View {
     private var base: Color { Color(hex: tile.colorHex) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             TileIcon(
                 iconImageData: tile.iconImageData,
                 systemName: tile.iconSystemName,
                 colorHex: tile.colorHex,
-                size: 48
+                size: 40
             )
             // A soft coloured drop-shadow lifts the icon off the card without
             // the muddy halo a blurred backing plate created.
             .shadow(color: base.opacity(0.25), radius: 6, y: 3)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(tile.name)
-                    .font(Theme.Typography.cardTitle)
-                    .tracking(-0.3)
-                    .foregroundStyle(Theme.Palette.label)
-                Text(tile.subtitle ?? "\(tile.actions.count) actions")
-                    .font(.fiple(14))
-                    .foregroundStyle(Theme.Palette.secondary)
-                    .lineSpacing(2)
-                    // One line, so a wordy tagline can't push the card past its
-                    // fixed height and clip the action row below.
-                    .lineLimit(1)
-            }
+            Spacer(minLength: 0)
 
-            Spacer(minLength: Theme.Spacing.md)
-
-            HStack(alignment: .center) {
-                actionIcons
-                Spacer(minLength: Theme.Spacing.sm)
+            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tile.name)
+                        .font(Theme.Typography.cardTitle)
+                        .tracking(-0.3)
+                        .foregroundStyle(Theme.Palette.label)
+                        .lineLimit(1)
+                    // Just the count — the contained apps' icons lived here once
+                    // and doubled the card's height for information the run
+                    // button doesn't need.
+                    Text("\(tile.actions.count) action\(tile.actions.count == 1 ? "" : "s")")
+                        .font(.fiple(13))
+                        .foregroundStyle(Theme.Palette.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
                 runButton
             }
         }
         .padding(Theme.Spacing.lg)
-        // A FIXED height, not a minimum: every card is exactly this tall no
-        // matter how many actions it carries (the icon row already caps at
-        // 3 + "+N") or how long its tagline is — so a busy workspace can never
-        // stretch itself or, via row/carousel equalisation, its neighbours.
+        // A FIXED height, not a minimum: no tile content can stretch the card
+        // or, via carousel equalisation, its neighbours.
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(height: 196)
+        .frame(height: 124)
         .background {
             ZStack {
                 Theme.Palette.surface
@@ -99,7 +96,7 @@ struct WorkspaceCardView: View {
                         .offset(x: 1) // optically centre the triangle
                 }
             }
-            .frame(width: 46, height: 46)
+            .frame(width: 40, height: 40)
             .background(accent.buttonGradient, in: Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
             .shadow(color: base.opacity(0.45), radius: 10, y: 4)
@@ -109,33 +106,6 @@ struct WorkspaceCardView: View {
         .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
     }
 
-    /// The real icons of the apps / sites / files this workspace launches — the
-    /// at-a-glance "what's inside" preview. Shown as the raw app icons (which
-    /// carry their own shape and colour) with just a soft lift, rather than boxed
-    /// in white chips that fought the icons' own backgrounds.
-    private var actionIcons: some View {
-        let actions = tile.actions
-        let maxVisible = 4
-        let visible = actions.count > maxVisible ? Array(actions.prefix(3)) : actions
-        let overflow = actions.count - visible.count
-        return HStack(spacing: 9) {
-            ForEach(visible) { action in
-                QuickActionIcon(
-                    action: QuickAction(action: action, tileID: tile.id),
-                    size: 34,
-                    cornerRadius: 9
-                )
-                .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
-            }
-            if overflow > 0 {
-                Text("+\(overflow)")
-                    .font(.fiple(13, .semibold, design: .rounded))
-                    .foregroundStyle(base)
-                    .frame(width: 34, height: 34)
-                    .background(base.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            }
-        }
-    }
 }
 
 /// A tactile press for the run button — a firm scale-down with a touch of dim,
