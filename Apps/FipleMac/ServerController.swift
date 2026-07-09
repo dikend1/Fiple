@@ -173,6 +173,7 @@ final class ServerController {
         isPaired = false
         sessionToken = nil
         Keychain.remove(Self.tokenKey)
+        UserDefaults.standard.removeObject(forKey: Self.tokenKey) // dev-build fallback copy
         throttle.reset()
         status = .advertising
         regenerateCode()
@@ -404,7 +405,7 @@ final class ServerController {
         // a token reconnect keeps the credential it just presented.
         let token = rotateToken ? UUID().uuidString : (sessionToken ?? UUID().uuidString)
         sessionToken = token
-        Keychain.set(token, for: Self.tokenKey)
+        Self.storeToken(token)
         try? await peer.send(ServerMessage.paired(macID: macID, macName: macName, token: token))
         // Follow the pairing ack with the hardware family so the remote shows
         // the right device icon. Older remotes skip this unknown message type.
@@ -551,6 +552,20 @@ final class ServerController {
     private static let authTimeoutSeconds = 15
 
     private static let tokenKey = "com.fiple.sessionToken"
+
+    /// Persists the pairing token, verifying the Keychain write actually took —
+    /// a non-sandboxed dev build can't write the data-protection keychain, and
+    /// silently losing the token here meant every Mac app restart forgot the
+    /// phone (token expired → re-enter the code → terminal shells all die with
+    /// the restarted service). Falls back to UserDefaults like the terminal's
+    /// password verifier; the sandboxed 1.0 build stays Keychain-only.
+    private static func storeToken(_ token: String) {
+        UserDefaults.standard.removeObject(forKey: tokenKey) // clear stale fallback
+        Keychain.set(token, for: tokenKey)
+        if Keychain.get(tokenKey) == token { return }
+        FipleLog.pairing.notice("keychain unavailable — storing pairing token in UserDefaults")
+        UserDefaults.standard.set(token, forKey: tokenKey)
+    }
 
     /// Loads the session token from the Keychain, migrating a token left in
     /// UserDefaults by an earlier build (then scrubbing the plaintext copy).
