@@ -266,8 +266,18 @@ private final class ConnectionSession: @unchecked Sendable {
         } else if resumeOnly {
             // A strict restore of a shell that's gone: report it ended rather
             // than silently handing back a fresh shell the user didn't ask for.
-            sendControl(.sessionEnded(exitCode: nil))
-            finish()
+            // Flush before dropping the socket — cancelling immediately loses
+            // the control frame and the phone misreads it as a network blip.
+            FipleLog.connection.notice("terminal: strict resume of unknown session — ending")
+            if let payload = try? MessageCodec.encode(TerminalServerControl.sessionEnded(exitCode: nil)),
+               let bytes = try? TerminalFrameCodec.frame(TerminalFrame(type: .control, payload: payload)) {
+                connection.send(content: bytes, completion: .contentProcessed { [weak self] _ in
+                    guard let self else { return }
+                    self.queue.async { self.finish() }
+                })
+            } else {
+                finish()
+            }
             return
         } else {
             do {

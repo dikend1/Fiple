@@ -93,6 +93,7 @@ final class ShellSession: @unchecked Sendable {
     }
 
     private func expire() {
+        FipleLog.connection.notice("terminal: shell session expired (\(self.id.prefix(8)))")
         let notify = onExpired
         onExpired = nil // fire once
         close()
@@ -123,6 +124,7 @@ final class TerminalSessionRegistry: @unchecked Sendable {
     /// Spawns a fresh shell session. Call on `queue`.
     func create() throws -> ShellSession {
         let id = UUID().uuidString
+        FipleLog.connection.info("terminal: shell session created (\(id.prefix(8)))")
         let pty = try PTYSession(shellPath: shellPath, arguments: shellArguments)
         let session = ShellSession(
             id: id, pty: pty, queue: queue, graceInterval: graceInterval,
@@ -134,12 +136,16 @@ final class TerminalSessionRegistry: @unchecked Sendable {
 
     /// Ends one session for good (the phone closed its tab). Call on `queue`.
     func end(id: String) {
+        FipleLog.connection.info("terminal: shell session ended by phone (\(id.prefix(8)))")
         sessions[id]?.close()
         sessions[id] = nil
     }
 
     /// Closes and drops every session (service stopping). Call on `queue`.
     func closeAll() {
+        if !sessions.isEmpty {
+            FipleLog.connection.notice("terminal: closing ALL \(self.sessions.count) shell session(s) — service stopping")
+        }
         for session in sessions.values { session.close() }
         sessions.removeAll()
     }

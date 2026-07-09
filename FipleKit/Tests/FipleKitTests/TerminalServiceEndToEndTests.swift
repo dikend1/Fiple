@@ -107,6 +107,74 @@ struct TerminalServiceEndToEndTests {
         service.stop()
     }
 
+    @Test("A strict (resumeOnly) reconnect resumes a live shell — the phone restore path")
+    func strictResumeWorks() async throws {
+        let service = makeService()
+        let port = try await service.start()
+
+        let first = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await first.connect()
+        first.authenticate(passwordProof: password, token: token)
+        var sessionID: String?
+        var firstOutput = ""
+        for await event in first.events {
+            switch event {
+            case let .authenticated(id):
+                sessionID = id
+                first.send(Data("strict-restore\n".utf8))
+            case let .output(data):
+                firstOutput += String(decoding: data, as: UTF8.self)
+            default: break
+            }
+            if firstOutput.contains("strict-restore") { break }
+        }
+        let resumeID = try #require(sessionID)
+        first.close()
+
+        // Exactly what a restored phone tab sends: resumeOnly + a resize soon
+        // after auth (the deferred replay waits for it).
+        let second = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await second.connect()
+        second.authenticate(passwordProof: password, token: token, resumeSessionID: resumeID, resumeOnly: true)
+
+        var resumedID: String?
+        var replay = ""
+        var sentResize = false
+        for await event in second.events {
+            switch event {
+            case let .authenticated(id):
+                resumedID = id
+                if !sentResize { sentResize = true; second.resize(cols: 80, rows: 24) }
+            case let .output(data):
+                replay += String(decoding: data, as: UTF8.self)
+            case .ended:
+                Issue.record("strict resume of a LIVE shell must not end the session")
+            default: break
+            }
+            if replay.contains("strict-restore") { break }
+        }
+        #expect(resumedID == resumeID)
+        #expect(replay.contains("strict-restore"))
+        second.close()
+
+        // And a strict resume of a DEAD session must end, not spawn a shell.
+        service.stop()
+        let service2 = makeService()
+        let port2 = try await service2.start()
+        let third = TerminalClient(host: "127.0.0.1", port: port2, pairingToken: token)
+        try await third.connect()
+        third.authenticate(passwordProof: password, token: token, resumeSessionID: resumeID, resumeOnly: true)
+        var endedForDead = false
+        for await event in third.events {
+            if case .ended = event { endedForDead = true; break }
+            if case .authenticated = event { Issue.record("dead strict resume must not authenticate"); break }
+            if case .disconnected = event { break }
+        }
+        #expect(endedForDead)
+        third.close()
+        service2.stop()
+    }
+
     @Test("A wrong master password is rejected with no shell attached")
     func wrongPasswordRejected() async throws {
         let service = makeService()
