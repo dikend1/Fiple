@@ -152,41 +152,30 @@ struct TrashReviewView: View {
         let count = selection.count
         let size = ByteCountFormatter.string(fromByteCount: selectedBytes, countStyle: .file)
 
-        return VStack(spacing: 6) {
-            Text(count == 0 ? "Tap files to select" : "\(count) selected · \(size)")
-                .font(.fiple(12))
+        // A system edit-toolbar (Mail/Photos selection pattern): quiet text
+        // actions at the edges, the selection count in the middle — not two
+        // shouting full-width pills.
+        return HStack {
+            Button("Keep") { apply(.keep) }
+                .font(.fiple(16, .medium))
+                .tint(Theme.Palette.brand)
+                .disabled(count == 0 || controller.trashActionInFlight)
+
+            Spacer()
+            Text(count == 0 ? "Tap files to select" : "\(count) · \(size)")
+                .font(.fiple(13))
                 .foregroundStyle(Theme.Palette.secondary)
                 .contentTransition(.numericText())
-            HStack(spacing: Theme.Spacing.md) {
-                Button {
-                    apply(.keep)
-                } label: {
-                    Text("Keep")
-                        .font(.fiple(15, .semibold))
-                        .foregroundStyle(Theme.Palette.label)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Palette.hairline))
-                }
-                .buttonStyle(.plain)
+            Spacer()
 
-                Button {
-                    apply(.trash)
-                } label: {
-                    Text(count > 0 ? "Move \(count) to Trash" : "Move to Trash")
-                        .font(.fiple(15, .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.borderedProminent)
+            Button(count > 1 ? "Trash \(count)" : "Trash") { apply(.trash) }
+                .font(.fiple(16, .semibold))
                 .tint(.red)
-            }
-            .disabled(count == 0 || controller.trashActionInFlight)
+                .disabled(count == 0 || controller.trashActionInFlight)
         }
         .animation(.easeOut(duration: 0.15), value: selection.isEmpty)
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, 14)
         .background(.bar)
     }
 
@@ -209,21 +198,27 @@ private struct TrashCandidateCell: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 6) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Theme.Palette.secondary.opacity(0.08))
-                    thumbnailImage
-                    // A video's first frame is often near-black — the play glyph
-                    // says "this is a video" at a glance.
-                    if isVideo {
-                        Image(systemName: "play.circle.fill")
-                            .font(.fiple(30))
-                            .foregroundStyle(.white.opacity(0.9), .black.opacity(0.35))
+                // Color.clear owns the layout; the fill image lives in an
+                // overlay so its intrinsic size can never inflate the cell
+                // (a .fill image as a layout child stretched cells unevenly,
+                // pushing the right column off the screen edge).
+                Color.clear
+                    .frame(height: 130)
+                    .frame(maxWidth: .infinity)
+                    .overlay {
+                        ZStack {
+                            Rectangle().fill(Theme.Palette.secondary.opacity(0.08))
+                            thumbnailImage
+                            // A video's first frame is often near-black — the
+                            // play glyph says "this is a video" at a glance.
+                            if isVideo {
+                                Image(systemName: "play.circle.fill")
+                                    .font(.fiple(30))
+                                    .foregroundStyle(.white.opacity(0.9), .black.opacity(0.35))
+                            }
+                        }
                     }
-                }
-                .frame(height: 130)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     if isSelected {
                         Image(systemName: "checkmark.circle.fill")
@@ -265,9 +260,12 @@ private struct TrashCandidateCell: View {
                         )
                 )
 
+                // Name without the extension (the chip already says the type)
+                // and the size on one quiet line — the caption supports the
+                // thumbnail instead of competing with it.
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(candidate.fileName)
-                        .font(.fiple(13, .medium))
+                    Text((candidate.fileName as NSString).deletingPathExtension)
+                        .font(.fiple(12, .medium))
                         .foregroundStyle(Theme.Palette.label)
                         .lineLimit(1)
                         .truncationMode(.middle)
