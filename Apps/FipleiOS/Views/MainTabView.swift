@@ -7,7 +7,7 @@ import SwiftUI
 struct MainTabView: View {
     let controller: RemoteController
 
-    enum Tab: Hashable { case home, recent, settings }
+    enum Tab: Hashable { case home, tools, recent, settings }
 
     @State private var selection: Tab = .home
 
@@ -30,6 +30,10 @@ struct MainTabView: View {
             )
             .tag(Tab.home)
             .tabItem { Label("Home", systemImage: "house.fill") }
+
+            ToolsView(controller: controller)
+                .tag(Tab.tools)
+                .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver.fill") }
 
             RecentView(controller: controller)
                 .tag(Tab.recent)
