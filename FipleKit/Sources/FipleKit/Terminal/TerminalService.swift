@@ -242,9 +242,11 @@ private final class ConnectionSession: @unchecked Sendable {
     private func authenticate(token: String, proof: String, resumeSessionID: String?, resumeOnly: Bool) {
         switch authenticator.authenticate(token: token, passwordProof: proof, now: Date()) {
         case .authorized:
+            FipleLog.connection.info("terminal: auth accepted (resume: \(resumeSessionID?.prefix(8) ?? "none"), strict: \(resumeOnly))")
             authenticated = true
             attachShell(resumeSessionID: resumeSessionID, resumeOnly: resumeOnly)
         case let .rejected(reason):
+            FipleLog.connection.notice("terminal: auth rejected — \(reason.rawValue)")
             // Send the rejection, then drop the socket only once it has flushed.
             if let payload = try? MessageCodec.encode(TerminalServerControl.authFailed(reason: reason)),
                let bytes = try? TerminalFrameCodec.frame(TerminalFrame(type: .control, payload: payload)) {
