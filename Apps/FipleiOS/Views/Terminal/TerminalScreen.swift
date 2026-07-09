@@ -180,7 +180,7 @@ struct TerminalScreen: View {
         // deadline is abandoned too — the user must never sit on a spinner for
         // shells from last time. If nothing survives, open a fresh session.
         Task {
-            let deadline = Date().addingTimeInterval(3)
+            let deadline = Date().addingTimeInterval(1)
             while Date() < deadline {
                 try? await Task.sleep(for: .milliseconds(300))
                 prune { $0.session.phase == .ended }
