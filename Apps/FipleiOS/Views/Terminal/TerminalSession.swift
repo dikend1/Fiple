@@ -148,8 +148,14 @@ final class TerminalSession {
                 attempt += 1
 
                 await self.attemptOnce()
-                // Wait for the auth result (or a drop) to land.
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                // Wait for the auth result (or a drop) to land — but poll, so a
+                // fast success opens the terminal in ~100 ms instead of a flat
+                // 2-second stall.
+                for _ in 0 ..< 30 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if self.closed || self.phase == .ready || self.phase == .ended
+                        || self.stopReason != nil { break }
+                }
 
                 if self.closed { break }
                 if self.phase == .ready || self.phase == .ended { break }

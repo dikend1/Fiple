@@ -174,11 +174,12 @@ struct TerminalScreen: View {
             Task { await session.connect() }
         }
         activeTabID = tabs.first?.id
-        // Prune restored tabs whose shell expired; give the reconnects a
-        // moment, then fall back to a fresh session if none survived.
+        // Prune restored tabs whose shell expired; poll briskly so a dead
+        // restore never delays landing in a working terminal, and fall back to
+        // a fresh session if none survived.
         Task {
-            for _ in 0 ..< 20 {
-                try? await Task.sleep(for: .seconds(1))
+            for _ in 0 ..< 60 {
+                try? await Task.sleep(for: .milliseconds(300))
                 let dead = tabs.filter { $0.restored && $0.session.phase == .ended }
                 guard !dead.isEmpty || tabs.isEmpty else { continue }
                 for tab in dead {
