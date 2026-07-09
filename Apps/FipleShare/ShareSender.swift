@@ -137,7 +137,10 @@ final class ShareSender {
             if Date() > deadline { break }
             guard let peer = try? await client.connect(to: endpoint, timeout: .seconds(4)) else { continue }
             do {
-                try await peer.send(ClientMessage.reconnect(token: token))
+                // Guest auth: never claims the main peer slot, so the app's own
+                // live connection isn't evicted (it would instantly reconnect
+                // and kill this transfer).
+                try await peer.send(ClientMessage.guestReconnect(token: token))
             } catch {
                 await peer.close()
                 continue
