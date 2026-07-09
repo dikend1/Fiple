@@ -26,7 +26,7 @@ struct SettingsView: View {
                 PageHeader(title: "Settings", subtitle: "About Fiple and app controls.")
 
                 section("Connection") {
-                    settingRow(title: "Connection", value: connectionText)
+                    connectionRow
                 }
 
                 section("Preferences") {
@@ -61,6 +61,7 @@ struct SettingsView: View {
             }
             .padding(Theme.Spacing.xxl)
             .padding(.top, Theme.Spacing.sm)
+            .pageColumn(maxWidth: 800)
         }
         .onAppear { launchAtLogin = SMAppService.mainApp.status == .enabled }
     }
@@ -73,11 +74,35 @@ struct SettingsView: View {
         }
     }
 
+    private var connectionColor: Color {
+        switch server.status {
+        case .connected: Theme.Palette.connected
+        case .advertising: .orange
+        case .idle: .secondary.opacity(0.5)
+        }
+    }
+
     // MARK: Rows
+
+    /// Same anatomy as the feature sections (icon tile + title + trailing
+    /// state), so the page reads as one system instead of two row styles.
+    private var connectionRow: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            settingIcon("iphone.gen3")
+            Text("iPhone").font(.system(size: 14, weight: .medium))
+            Spacer()
+            HStack(spacing: 7) {
+                Circle().fill(connectionColor).frame(width: 8, height: 8)
+                Text(connectionText).font(.system(size: 14)).foregroundStyle(.secondary)
+            }
+        }
+        .padding(Theme.Spacing.md)
+    }
 
     private var launchAtLoginRow: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            HStack {
+            HStack(spacing: Theme.Spacing.md) {
+                settingIcon("power")
                 Text("Launch at Login").font(.system(size: 14, weight: .medium))
                 Spacer()
                 Toggle("Launch at Login", isOn: Binding(
@@ -92,10 +117,20 @@ struct SettingsView: View {
                 Text(launchAtLoginError)
                     .font(.system(size: 12))
                     .foregroundStyle(.red)
+                    .padding(.leading, 40)
             }
         }
-        .padding(.vertical, Theme.Spacing.sm)
-        .padding(.horizontal, Theme.Spacing.md)
+        .padding(Theme.Spacing.md)
+    }
+
+    /// The small tinted icon square every feature header uses.
+    private func settingIcon(_ systemName: String) -> some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Theme.Palette.brand.opacity(0.15))
+            .frame(width: 28, height: 28)
+            .overlay(Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.Palette.brand))
     }
 
     // MARK: Terminal

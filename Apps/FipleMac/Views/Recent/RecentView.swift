@@ -31,6 +31,7 @@ struct RecentView: View {
                 .fipleCard()
             }
             .padding(Theme.Spacing.xxl)
+            .pageColumn(maxWidth: 900)
             .padding(.top, Theme.Spacing.sm)
         }
         .alert("Clear launch history?", isPresented: $confirmingClear) {

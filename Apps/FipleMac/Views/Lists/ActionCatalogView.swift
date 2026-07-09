@@ -91,6 +91,7 @@ struct ActionCatalogView: View {
                 }
             }
             .padding(Theme.Spacing.xxl)
+            .pageColumn(maxWidth: 1180)
             .padding(.top, Theme.Spacing.sm)
         }
         .alert(
