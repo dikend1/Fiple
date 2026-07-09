@@ -395,6 +395,7 @@ final class RemoteController {
                 : .failed(message ?? "The Mac couldn't save the file")
             beamContinuation?.resume()
             beamContinuation = nil
+            beamWaitID = nil
 
         case .trashActionResult:
             // The fresh candidate snapshot follows separately; this just
@@ -486,6 +487,9 @@ final class RemoteController {
     }
     private(set) var beamState: BeamState = .idle
     @ObservationIgnored private var beamContinuation: CheckedContinuation<Void, Never>?
+    /// Identifies the transfer the current continuation belongs to, so a stale
+    /// 15s timeout from a *previous* transfer can never kill the next one's wait.
+    @ObservationIgnored private var beamWaitID: UUID?
 
     private static let beamChunkSize = 1024 * 1024
 
@@ -514,15 +518,19 @@ final class RemoteController {
                 }
                 try await peer.send(ClientMessage.beamEnd(transferID: transferID))
                 // The result lands via `beamResult`; time out rather than spin
-                // forever if the Mac never answers.
+                // forever if the Mac never answers. The timeout is keyed to THIS
+                // transfer so it can't fire into a later one's wait.
                 await withCheckedContinuation { continuation in
                     beamContinuation = continuation
+                    beamWaitID = transferID
                     Task { [weak self] in
                         try? await Task.sleep(for: .seconds(15))
-                        guard let self, self.beamContinuation != nil else { return }
+                        guard let self, self.beamWaitID == transferID,
+                              self.beamContinuation != nil else { return }
                         self.beamState = .failed("The Mac didn't confirm the transfer")
                         self.beamContinuation?.resume()
                         self.beamContinuation = nil
+                        self.beamWaitID = nil
                     }
                 }
             } catch {
@@ -559,16 +567,21 @@ final class RemoteController {
     /// copied screenshot/photo) via beam, which also lands it on the Mac's
     /// clipboard. Zero taps: copy on the phone, open Fiple, ⌘V on the Mac.
     func syncClipboardToMacIfNew() async {
-        guard phase == .connected else { return }
         let pasteboard = UIPasteboard.general
         guard pasteboard.changeCount != syncedPasteboardChange else { return }
+
+        // iOS killed our socket seconds after the app backgrounded (where the
+        // user was busy copying); the silent reconnect races this sync, so wait
+        // for a live peer instead of failing instantly on every second use.
+        guard await waitForLivePeer(timeout: 6) else { return }
+
         // Mark before reading: even if the send fails we don't want to re-prompt
         // the paste permission on every foreground until the clipboard changes.
         syncedPasteboardChange = pasteboard.changeCount
 
-        if pasteboard.hasImages, let image = pasteboard.image, let png = image.pngData() {
+        if pasteboard.hasImages, let image = pasteboard.image, let payload = Self.imagePayload(image) {
             let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
-            await beamFile(name: "iPhone Clipboard \(stamp).png", data: png)
+            await beamFile(name: "iPhone Clipboard \(stamp).\(payload.ext)", data: payload.data)
             if case .done = beamState {
                 clipboardSyncedAt = Date()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -580,6 +593,30 @@ final class RemoteController {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         }
+    }
+
+    /// Polls until the tile channel is genuinely usable (socket alive, paired) —
+    /// `phase` alone lies here: after a drop the UI deliberately stays
+    /// `.connected` while `peer` is nil during the silent reconnect.
+    private func waitForLivePeer(timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if phase == .connected, peer != nil { return true }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return false
+    }
+
+    /// PNG keeps screenshots crisp; a big camera photo would balloon as PNG
+    /// (tens of MB), so anything over ~6 MB falls back to high-quality JPEG.
+    private static func imagePayload(_ image: UIImage) -> (data: Data, ext: String)? {
+        if let png = image.pngData(), png.count <= 6 * 1024 * 1024 {
+            return (png, "png")
+        }
+        if let jpeg = image.jpegData(compressionQuality: 0.9) {
+            return (jpeg, "jpg")
+        }
+        return nil
     }
 
     // MARK: - Smart Trash
