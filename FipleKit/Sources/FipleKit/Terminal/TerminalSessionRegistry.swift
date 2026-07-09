@@ -14,18 +14,20 @@ final class ShellSession: @unchecked Sendable {
     let id: String
     private let pty: PTYSession
     private let queue: DispatchQueue
-    private let graceInterval: TimeInterval
+    /// Read fresh on each detach so a live grace-period change (Settings picker)
+    /// applies without restarting the service or killing running shells.
+    private let graceProvider: () -> TimeInterval
     private var scrollback = ScrollbackBuffer()
     /// The attached connection's frame sink, or nil while detached.
     private var sink: ((TerminalFrame) -> Void)?
     private var graceItem: DispatchWorkItem?
     private var onExpired: ((String) -> Void)?
 
-    init(id: String, pty: PTYSession, queue: DispatchQueue, graceInterval: TimeInterval, onExpired: @escaping (String) -> Void) {
+    init(id: String, pty: PTYSession, queue: DispatchQueue, graceProvider: @escaping () -> TimeInterval, onExpired: @escaping (String) -> Void) {
         self.id = id
         self.pty = pty
         self.queue = queue
-        self.graceInterval = graceInterval
+        self.graceProvider = graceProvider
         self.onExpired = onExpired
 
         pty.onOutput = { [weak self] data in
@@ -62,13 +64,16 @@ final class ShellSession: @unchecked Sendable {
     /// keeps running; if no one reattaches before it lapses, SIGHUP ends it.
     func detach() {
         sink = nil
+        let grace = graceProvider()
+        // A non-finite grace means "keep running until explicitly closed".
+        guard grace.isFinite else { return }
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.pty.hangup()
             self.expire()
         }
         graceItem = item
-        queue.asyncAfter(deadline: .now() + graceInterval, execute: item)
+        queue.asyncAfter(deadline: .now() + grace, execute: item)
     }
 
     func write(_ data: Data) { pty.write(data) }
@@ -94,7 +99,9 @@ final class ShellSession: @unchecked Sendable {
 /// can resume the shell it started. One session per paired device in Phase 1.
 final class TerminalSessionRegistry: @unchecked Sendable {
     private let queue: DispatchQueue
-    private let graceInterval: TimeInterval
+    /// Current detach grace, read live by each shell so a Settings change takes
+    /// effect immediately without restarting the service.
+    var graceInterval: TimeInterval
     private let shellPath: String?
     private let shellArguments: [String]?
     private var sessions: [String: ShellSession] = [:]
@@ -115,7 +122,8 @@ final class TerminalSessionRegistry: @unchecked Sendable {
         let id = UUID().uuidString
         let pty = try PTYSession(shellPath: shellPath, arguments: shellArguments)
         let session = ShellSession(
-            id: id, pty: pty, queue: queue, graceInterval: graceInterval,
+            id: id, pty: pty, queue: queue,
+            graceProvider: { [weak self] in self?.graceInterval ?? 1800 },
             onExpired: { [weak self] expiredID in self?.sessions[expiredID] = nil }
         )
         sessions[id] = session
