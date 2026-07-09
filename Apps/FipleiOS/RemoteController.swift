@@ -2,6 +2,7 @@ import FipleKit
 import Foundation
 import Network
 import Observation
+import UIKit
 
 /// Drives the iPhone remote: silent discovery, code/token authentication,
 /// rendering the Mac's tiles, and triggering them. Pure remote — never edits.
@@ -546,6 +547,40 @@ final class RemoteController {
     }
 
     func resetBeamState() { beamState = .idle }
+
+    /// The pasteboard change we've already pushed, so returning to the app
+    /// doesn't resend the same content forever.
+    @ObservationIgnored private var syncedPasteboardChange: Int = -1
+    /// Set briefly after a clipboard auto-sync so the UI can flash a confirm.
+    private(set) var clipboardSyncedAt: Date?
+
+    /// Foreground clipboard bridge: if the phone's pasteboard changed since the
+    /// last visit, push it to the Mac — text via setClipboard, an image (a
+    /// copied screenshot/photo) via beam, which also lands it on the Mac's
+    /// clipboard. Zero taps: copy on the phone, open Fiple, ⌘V on the Mac.
+    func syncClipboardToMacIfNew() async {
+        guard phase == .connected else { return }
+        let pasteboard = UIPasteboard.general
+        guard pasteboard.changeCount != syncedPasteboardChange else { return }
+        // Mark before reading: even if the send fails we don't want to re-prompt
+        // the paste permission on every foreground until the clipboard changes.
+        syncedPasteboardChange = pasteboard.changeCount
+
+        if pasteboard.hasImages, let image = pasteboard.image, let png = image.pngData() {
+            let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
+            await beamFile(name: "iPhone Clipboard \(stamp).png", data: png)
+            if case .done = beamState {
+                clipboardSyncedAt = Date()
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+            resetBeamState()
+        } else if pasteboard.hasStrings, let text = pasteboard.string, !text.isEmpty {
+            if await sendClipboard(text: text) {
+                clipboardSyncedAt = Date()
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        }
+    }
 
     // MARK: - Smart Trash
 
