@@ -58,6 +58,10 @@ struct HomeView: View {
                         trashEntry
                     }
 
+                    if controller.isConnected {
+                        beamEntries
+                    }
+
                     workspaces
 
                     quickAccess
@@ -172,6 +176,45 @@ struct HomeView: View {
             .padding(Theme.Spacing.lg)
             .frame(maxWidth: .infinity)
             .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Send / Scan to Mac
+
+    @State private var showSendSheet = false
+    @State private var showScanSheet = false
+
+    /// The two phone→Mac bridges, as one card of two rows (they're siblings:
+    /// both move something from your hand onto the Mac).
+    private var beamEntries: some View {
+        VStack(spacing: 0) {
+            toolRow(icon: "square.and.arrow.up", title: "Send to Mac",
+                    subtitle: "Files to Downloads, text to clipboard") { showSendSheet = true }
+            Divider().padding(.leading, 52)
+            toolRow(icon: "qrcode.viewfinder", title: "Scan to Mac",
+                    subtitle: "QR or text from camera to clipboard") { showScanSheet = true }
+        }
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+        .sheet(isPresented: $showSendSheet) { SendToMacView(controller: controller) }
+        .sheet(isPresented: $showScanSheet) { ScanToMacView(controller: controller) }
+    }
+
+    private func toolRow(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.md) {
+                Image(systemName: icon).font(.fiple(20, .semibold)).frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.fiple(17, .semibold))
+                    Text(subtitle).font(.fiple(13)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.fiple(13, .semibold)).foregroundStyle(.secondary)
+            }
+            .foregroundStyle(Theme.Palette.label)
+            .padding(Theme.Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
