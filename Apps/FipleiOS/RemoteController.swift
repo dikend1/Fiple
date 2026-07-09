@@ -2,7 +2,6 @@ import FipleKit
 import Foundation
 import Network
 import Observation
-import UIKit
 
 /// Drives the iPhone remote: silent discovery, code/token authentication,
 /// rendering the Mac's tiles, and triggering them. Pure remote — never edits.
@@ -555,69 +554,6 @@ final class RemoteController {
     }
 
     func resetBeamState() { beamState = .idle }
-
-    /// The pasteboard change we've already pushed, so returning to the app
-    /// doesn't resend the same content forever.
-    @ObservationIgnored private var syncedPasteboardChange: Int = -1
-    /// Set briefly after a clipboard auto-sync so the UI can flash a confirm.
-    private(set) var clipboardSyncedAt: Date?
-
-    /// Foreground clipboard bridge: if the phone's pasteboard changed since the
-    /// last visit, push it to the Mac — text via setClipboard, an image (a
-    /// copied screenshot/photo) via beam, which also lands it on the Mac's
-    /// clipboard. Zero taps: copy on the phone, open Fiple, ⌘V on the Mac.
-    func syncClipboardToMacIfNew() async {
-        let pasteboard = UIPasteboard.general
-        guard pasteboard.changeCount != syncedPasteboardChange else { return }
-
-        // iOS killed our socket seconds after the app backgrounded (where the
-        // user was busy copying); the silent reconnect races this sync, so wait
-        // for a live peer instead of failing instantly on every second use.
-        guard await waitForLivePeer(timeout: 6) else { return }
-
-        // Mark before reading: even if the send fails we don't want to re-prompt
-        // the paste permission on every foreground until the clipboard changes.
-        syncedPasteboardChange = pasteboard.changeCount
-
-        if pasteboard.hasImages, let image = pasteboard.image, let payload = Self.imagePayload(image) {
-            let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
-            await beamFile(name: "iPhone Clipboard \(stamp).\(payload.ext)", data: payload.data)
-            if case .done = beamState {
-                clipboardSyncedAt = Date()
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            }
-            resetBeamState()
-        } else if pasteboard.hasStrings, let text = pasteboard.string, !text.isEmpty {
-            if await sendClipboard(text: text) {
-                clipboardSyncedAt = Date()
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            }
-        }
-    }
-
-    /// Polls until the tile channel is genuinely usable (socket alive, paired) —
-    /// `phase` alone lies here: after a drop the UI deliberately stays
-    /// `.connected` while `peer` is nil during the silent reconnect.
-    private func waitForLivePeer(timeout: TimeInterval) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if phase == .connected, peer != nil { return true }
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        return false
-    }
-
-    /// PNG keeps screenshots crisp; a big camera photo would balloon as PNG
-    /// (tens of MB), so anything over ~6 MB falls back to high-quality JPEG.
-    private static func imagePayload(_ image: UIImage) -> (data: Data, ext: String)? {
-        if let png = image.pngData(), png.count <= 6 * 1024 * 1024 {
-            return (png, "png")
-        }
-        if let jpeg = image.jpegData(compressionQuality: 0.9) {
-            return (jpeg, "jpg")
-        }
-        return nil
-    }
 
     // MARK: - Smart Trash
 
