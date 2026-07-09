@@ -41,9 +41,25 @@ struct SidebarView: View {
     }
 
     private var navigation: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            ForEach(Array(SidebarSection.groups.enumerated()), id: \.offset) { _, group in
-                VStack(spacing: Theme.Spacing.xs) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            ForEach(Array(SidebarSection.groups.enumerated()), id: \.offset) { index, group in
+                if index > 0 {
+                    // A hairline anchors each group; the old bare gaps left the
+                    // items floating in the dark.
+                    Rectangle()
+                        .fill(Color.white.opacity(0.07))
+                        .frame(height: 1)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                }
+                if let label = Self.groupLabels[index] {
+                    Text(label)
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(1.4)
+                        .foregroundStyle(Theme.Palette.sidebarSecondary)
+                        .padding(.horizontal, Theme.Spacing.md)
+                        .padding(.top, 2)
+                }
+                VStack(spacing: 2) {
                     ForEach(group) { item in
                         SidebarRow(item: item, isSelected: section == item) {
                             section = item
@@ -54,6 +70,10 @@ struct SidebarView: View {
         }
         .padding(.horizontal, Theme.Spacing.md)
     }
+
+    /// Only the Tools group carries a label — it names a concept that isn't
+    /// self-evident; the navigation and system groups explain themselves.
+    private static let groupLabels: [Int: String] = [2: "TOOLS"]
 
     private var footer: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -66,9 +86,14 @@ struct SidebarView: View {
                 Text(server.status == .connected ? "iPhone" : "No device")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.Palette.sidebarText)
-                Text(connectionLabel)
-                    .font(.system(size: 11))
-                    .foregroundStyle(server.status == .connected ? Theme.Palette.connected : Theme.Palette.sidebarSecondary)
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(server.status == .connected ? Theme.Palette.connected : Color.orange)
+                        .frame(width: 6, height: 6)
+                    Text(connectionLabel)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Palette.sidebarSecondary)
+                }
             }
             Spacer()
         }
@@ -104,9 +129,19 @@ private struct SidebarRow: View {
                 Spacer()
             }
             .foregroundStyle(isSelected ? Theme.Palette.brand : Theme.Palette.sidebarText)
-            .padding(.vertical, 9)
+            .padding(.vertical, 8)
             .padding(.horizontal, Theme.Spacing.md)
             .background(rowBackground)
+            // The selected pill gets a small brand accent bar — a stronger
+            // "you are here" than tinted text alone.
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Capsule()
+                        .fill(Theme.Palette.brand)
+                        .frame(width: 3, height: 16)
+                        .offset(x: 4)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
