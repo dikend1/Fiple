@@ -46,6 +46,9 @@ final class ShellSession: @unchecked Sendable {
         }
     }
 
+    /// Whether there is buffered output a reattach would replay.
+    var hasScrollback: Bool { !scrollback.snapshot().isEmpty }
+
     /// Attaches a connection: cancels any pending grace expiry, wires output to
     /// `sink`, and replays the buffered scrollback so the phone redraws.
     func attach(sink: @escaping (TerminalFrame) -> Void) {
@@ -56,6 +59,13 @@ final class ShellSession: @unchecked Sendable {
         if !buffered.isEmpty {
             sink(TerminalFrame(type: .data, payload: buffered))
         }
+    }
+
+    /// Cancels a pending grace expiry without wiring output — used while a
+    /// reattach waits for the client's terminal size before replaying.
+    func holdGrace() {
+        graceItem?.cancel()
+        graceItem = nil
     }
 
     /// Detaches the current connection and starts the grace countdown. The shell
