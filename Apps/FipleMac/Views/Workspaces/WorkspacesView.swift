@@ -44,6 +44,7 @@ struct WorkspacesView: View {
             }
             .padding(Theme.Spacing.xxl)
             .padding(.top, Theme.Spacing.sm) // breathing room under traffic lights
+            .pageColumn(maxWidth: 1180)
         }
         .sheet(item: $editingTile) { TileEditorView(store: store, tile: $0) }
         .sheet(isPresented: $isCreating) { TileEditorView(store: store, tile: nil) }

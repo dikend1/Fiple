@@ -186,3 +186,14 @@ struct Panel<Content: View>: View {
         .fipleCard()
     }
 }
+
+/// Constrains a page's content to a readable column on wide windows — full-width
+/// settings rows and grids scattered across a 1600-pt window read as unfinished.
+/// The column stays left-anchored next to the sidebar (like System Settings),
+/// centering only the whitespace it gives up.
+extension View {
+    func pageColumn(maxWidth: CGFloat) -> some View {
+        frame(maxWidth: maxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}

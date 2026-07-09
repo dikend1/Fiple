@@ -12,6 +12,7 @@ struct DevicesView: View {
                 card
             }
             .padding(Theme.Spacing.xxl)
+            .pageColumn(maxWidth: 800)
             .padding(.top, Theme.Spacing.sm)
         }
     }

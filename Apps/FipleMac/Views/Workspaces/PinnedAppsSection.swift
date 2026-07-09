@@ -13,8 +13,10 @@ struct PinnedAppsSection: View {
     @State private var scrolledPage: Int?
     @State private var isAdding = false
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.lg), count: 4)
-    private let perPage = 8
+    // 6×2 per page: on the constrained content column this gives app-launcher
+    // density instead of four icons adrift in whitespace.
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.lg), count: 6)
+    private let perPage = 12
 
     private enum Slot: Identifiable {
         case action(Action)
@@ -88,7 +90,7 @@ struct PinnedAppsSection: View {
     }
 
     private func grid(_ slots: [Slot]) -> some View {
-        LazyVGrid(columns: columns, spacing: Theme.Spacing.xl) {
+        LazyVGrid(columns: columns, spacing: Theme.Spacing.lg) {
             ForEach(slots) { slot in
                 switch slot {
                 case let .action(action):
