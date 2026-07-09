@@ -12,6 +12,17 @@ struct MainTabView: View {
     @State private var selection: Tab = .home
 
     var body: some View {
+        // App Store-style bar on iOS 26: shrinks to a compact pill while
+        // scrolling down, expands again on scroll-up. Earlier iOS keeps the
+        // standard bar.
+        if #available(iOS 26.0, *) {
+            tabs.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            tabs
+        }
+    }
+
+    private var tabs: some View {
         TabView(selection: $selection) {
             HomeView(
                 controller: controller,

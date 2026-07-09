@@ -33,8 +33,9 @@ struct WorkspaceCardView: View {
                     .font(.fiple(14))
                     .foregroundStyle(Theme.Palette.secondary)
                     .lineSpacing(2)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // One line, so a wordy tagline can't push the card past its
+                    // fixed height and clip the action row below.
+                    .lineLimit(1)
             }
 
             Spacer(minLength: Theme.Spacing.md)
@@ -46,10 +47,12 @@ struct WorkspaceCardView: View {
             }
         }
         .padding(Theme.Spacing.lg)
-        // A tighter minimum so short cards don't leave a dead band of empty
-        // space in the middle; two cards in a grid row still equalise to the
-        // taller one.
-        .frame(maxWidth: .infinity, minHeight: 196, alignment: .topLeading)
+        // A FIXED height, not a minimum: every card is exactly this tall no
+        // matter how many actions it carries (the icon row already caps at
+        // 3 + "+N") or how long its tagline is — so a busy workspace can never
+        // stretch itself or, via row/carousel equalisation, its neighbours.
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: 196)
         .background {
             ZStack {
                 Theme.Palette.surface
