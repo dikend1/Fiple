@@ -4,6 +4,7 @@ import Foundation
 enum SidebarSection: String, CaseIterable, Identifiable {
     case workspaces, apps, websites
     case recent
+    case terminal, smartTrash
     case devices, settings
 
     var id: String { rawValue }
@@ -14,6 +15,8 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .apps: "Apps"
         case .websites: "Websites"
         case .recent: "Recent"
+        case .terminal: "Terminal"
+        case .smartTrash: "Smart Trash"
         case .devices: "Devices"
         case .settings: "Settings"
         }
@@ -25,15 +28,20 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .apps: "shippingbox"
         case .websites: "globe"
         case .recent: "clock"
+        case .terminal: "terminal"
+        case .smartTrash: "trash"
         case .devices: "iphone.gen3"
         case .settings: "gearshape"
         }
     }
 
-    /// Visual grouping with separators between groups, matching the reference.
+    /// Visual grouping with separators between groups. Terminal and Smart Trash
+    /// are product features, not app preferences — they live as first-class
+    /// pages (mirroring the iOS Tools tab), leaving Settings to app meta.
     static let groups: [[SidebarSection]] = [
         [.workspaces, .apps, .websites],
         [.recent],
+        [.terminal, .smartTrash],
         [.devices, .settings],
     ]
 }

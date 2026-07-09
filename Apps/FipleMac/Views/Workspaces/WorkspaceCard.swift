@@ -16,13 +16,13 @@ struct WorkspaceCard: View {
     private var base: Color { Color(hex: tile.colorHex) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             HStack(alignment: .top) {
                 IconTile(
                     iconImageData: tile.iconImageData,
                     systemName: tile.iconSystemName,
                     colorHex: tile.colorHex,
-                    size: 50
+                    size: 42
                 )
                 Spacer()
                 // Edit is the card's primary button below, so the "…" menu only
@@ -41,25 +41,17 @@ struct WorkspaceCard: View {
                 .fixedSize()
             }
 
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(tile.name).font(Theme.Font.cardTitle).lineLimit(1)
-                Text(tile.subtitle ?? "\(tile.actions.count) actions")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            HStack(spacing: 0) {
-                StatColumn(value: tile.appCount, label: "Apps")
-                statDivider
-                StatColumn(value: tile.websiteCount, label: "Websites")
-                Spacer()
-            }
-
-            HStack(spacing: Theme.Spacing.sm) {
-                Label("Launch from your iPhone", systemImage: "iphone.gen3")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            // Name + one composition line. The old stat columns and per-card
+            // "Launch from your iPhone" footer said the same things again in
+            // twice the height — the page subtitle carries the hint once now.
+            HStack(alignment: .center, spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(tile.name).font(Theme.Font.cardTitle).lineLimit(1)
+                    Text(composition)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 Button(action: onEdit) {
                     HStack(spacing: 5) {
@@ -75,7 +67,7 @@ struct WorkspaceCard: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(Theme.Spacing.xl)
+        .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             ZStack {
@@ -92,10 +84,11 @@ struct WorkspaceCard: View {
         .shadow(color: base.opacity(0.14), radius: 12, y: 4)
     }
 
-    private var statDivider: some View {
-        Rectangle()
-            .fill(Theme.Palette.hairline)
-            .frame(width: 1, height: 28)
-            .padding(.horizontal, Theme.Spacing.lg)
+    /// "4 apps · 1 website" — the whole composition in one quiet line.
+    private var composition: String {
+        var parts: [String] = []
+        if tile.appCount > 0 { parts.append("\(tile.appCount) app\(tile.appCount == 1 ? "" : "s")") }
+        if tile.websiteCount > 0 { parts.append("\(tile.websiteCount) website\(tile.websiteCount == 1 ? "" : "s")") }
+        return parts.isEmpty ? "Empty — add apps or websites" : parts.joined(separator: " · ")
     }
 }

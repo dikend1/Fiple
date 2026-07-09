@@ -61,6 +61,10 @@ struct MainWindowView: View {
             ActionCatalogView(store: store, pinned: pinned, kind: .websites)
         case .recent:
             RecentView(recents: recents, onRun: run(record:))
+        case .terminal:
+            TerminalToolView(server: server)
+        case .smartTrash:
+            SmartTrashToolView(server: server)
         case .devices:
             DevicesView(server: server)
         case .settings:

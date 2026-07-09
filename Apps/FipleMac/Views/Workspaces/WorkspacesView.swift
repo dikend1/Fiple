@@ -20,7 +20,7 @@ struct WorkspacesView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 PageHeader(
                     title: "Workspaces",
-                    subtitle: "Create, organize and manage your work environments."
+                    subtitle: "Set up your work environments here — launch them from your iPhone."
                 ) {
                     DeviceChip(server: server)
                 }
