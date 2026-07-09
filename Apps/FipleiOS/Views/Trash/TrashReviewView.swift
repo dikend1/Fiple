@@ -10,11 +10,21 @@ struct TrashReviewView: View {
     let controller: RemoteController
 
     @State private var selection: Set<UUID> = []
+    /// Biggest first by default — the screen's promise is "free up 1,3 GB",
+    /// so the files that actually deliver it lead; deadline order is one tap
+    /// away for "what's about to disappear".
+    @State private var sortBySize = true
 
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
         count: 2
     )
+
+    private var sortedCandidates: [TrashCandidate] {
+        sortBySize
+            ? controller.trashCandidates.sorted { $0.sizeBytes > $1.sizeBytes }
+            : controller.trashCandidates.sorted { $0.deadline < $1.deadline }
+    }
 
     var body: some View {
         Group {
@@ -33,10 +43,19 @@ struct TrashReviewView: View {
         .toolbar {
             if !controller.trashCandidates.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(allSelected ? "Deselect All" : "Select All") {
-                        selection = allSelected ? [] : Set(controller.trashCandidates.map(\.id))
+                    Menu {
+                        Picker("Sort", selection: $sortBySize) {
+                            Label("Biggest first", systemImage: "arrow.down.circle").tag(true)
+                            Label("Deadline first", systemImage: "clock").tag(false)
+                        }
+                        Divider()
+                        Button(allSelected ? "Deselect All" : "Select All") {
+                            selection = allSelected ? [] : Set(controller.trashCandidates.map(\.id))
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down.circle")
+                            .font(.fiple(16, .medium))
                     }
-                    .font(.fiple(14, .medium))
                 }
             }
         }
@@ -80,7 +99,7 @@ struct TrashReviewView: View {
                 summaryHeader
 
                 LazyVGrid(columns: columns, spacing: Theme.Spacing.lg) {
-                    ForEach(controller.trashCandidates) { candidate in
+                    ForEach(sortedCandidates) { candidate in
                         TrashCandidateCell(
                             candidate: candidate,
                             thumbnail: controller.trashThumbnails[candidate.id],
@@ -144,12 +163,13 @@ struct TrashReviewView: View {
                 } label: {
                     Text("Keep")
                         .font(.fiple(15, .semibold))
+                        .foregroundStyle(Theme.Palette.label)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
+                        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.Palette.hairline))
                 }
-                .buttonStyle(.bordered)
-                .tint(Theme.Palette.secondary)
-                .foregroundStyle(Theme.Palette.label)
+                .buttonStyle(.plain)
 
                 Button {
                     apply(.trash)
@@ -193,6 +213,13 @@ private struct TrashCandidateCell: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Theme.Palette.secondary.opacity(0.08))
                     thumbnailImage
+                    // A video's first frame is often near-black — the play glyph
+                    // says "this is a video" at a glance.
+                    if isVideo {
+                        Image(systemName: "play.circle.fill")
+                            .font(.fiple(30))
+                            .foregroundStyle(.white.opacity(0.9), .black.opacity(0.35))
+                    }
                 }
                 .frame(height: 130)
                 .frame(maxWidth: .infinity)
@@ -204,6 +231,19 @@ private struct TrashCandidateCell: View {
                             .foregroundStyle(.white, Theme.Palette.brand)
                             .padding(6)
                             .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    // The extension chip carries the "what kind of file" signal
+                    // the thumbnails alone can't (a .db, a spreadsheet, a video).
+                    if let ext = fileExtension {
+                        Text(ext)
+                            .font(.fiple(9, .bold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .padding(6)
                     }
                 }
                 .overlay(alignment: .topLeading) {
@@ -258,6 +298,18 @@ private struct TrashCandidateCell: View {
 
     private var sizeText: String {
         ByteCountFormatter.string(fromByteCount: candidate.sizeBytes, countStyle: .file)
+    }
+
+    /// Uppercased extension for the type chip; nil when the name has none.
+    private var fileExtension: String? {
+        let ext = (candidate.fileName as NSString).pathExtension
+        return ext.isEmpty ? nil : ext.uppercased()
+    }
+
+    private var isVideo: Bool {
+        ["mp4", "mov", "m4v", "avi", "mkv", "webm"].contains(
+            (candidate.fileName as NSString).pathExtension.lowercased()
+        )
     }
 
     private var isUrgent: Bool {
