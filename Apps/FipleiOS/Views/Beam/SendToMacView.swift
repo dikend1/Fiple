@@ -4,16 +4,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// "Send to Mac": pick a photo/video or any file — it lands in the Mac's
-/// Downloads — or type/paste text straight onto the Mac's clipboard. Styled as
-/// the app's surface cards, not a settings list; the status strip under the
-/// pickers narrates the transfer.
+/// Downloads (images also on its clipboard). Text/clipboard has no UI here:
+/// Universal Clipboard and Share → Fiple already own that path.
 struct SendToMacView: View {
     let controller: RemoteController
 
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var showFileImporter = false
-    @State private var clipboardText = ""
-    @State private var clipboardSent = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -21,7 +18,6 @@ struct SendToMacView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     fileCard
-                    clipboardCard
                 }
                 .padding(.horizontal, Theme.Spacing.lg)
                 .padding(.top, Theme.Spacing.md)
@@ -37,7 +33,6 @@ struct SendToMacView: View {
             guard let item else { return }
             Task { await sendPicked(item) }
         }
-        .onChange(of: clipboardText) { _, _ in clipboardSent = false }
         .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
             guard case let .success(url) = result else { return }
             Task { await sendFile(at: url) }
@@ -107,42 +102,6 @@ struct SendToMacView: View {
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
-        }
-    }
-
-    // MARK: Text → clipboard
-
-    private var clipboardCard: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeader("Text to Clipboard")
-
-            VStack(spacing: Theme.Spacing.md) {
-                TextField("Type or paste text…", text: $clipboardText, axis: .vertical)
-                    .lineLimit(1 ... 5)
-                    .font(.fiple(15))
-                    .padding(Theme.Spacing.md)
-                    .background(Theme.Palette.background, in: RoundedRectangle(cornerRadius: 12))
-
-                Button {
-                    Task {
-                        clipboardSent = await controller.sendClipboard(text: clipboardText)
-                        if clipboardSent {
-                            UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        }
-                    }
-                } label: {
-                    Label(clipboardSent ? "On your Mac's clipboard — press ⌘V" : "Put on Mac's Clipboard",
-                          systemImage: clipboardSent ? "checkmark" : "doc.on.clipboard")
-                        .font(.fiple(15, .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(clipboardSent ? .green : Theme.Palette.brand)
-                .disabled(clipboardText.isEmpty)
-            }
-            .padding(Theme.Spacing.lg)
-            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
         }
     }
 
