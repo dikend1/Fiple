@@ -39,7 +39,7 @@ struct TrashDeadlineEnforcerTests {
                   now: now, reviewWindow: 7 * day)
 
         let trashed = TrashDeadlineEnforcer().enforce(
-            store: store, scanner: StaleFileScanner(), now: now
+            store: store, scanner: mtimeScanner(), now: now
         )
         #expect(trashed.map(\.path) == [old.path])
         #expect(!FileManager.default.fileExists(atPath: old.path)) // moved away
@@ -54,13 +54,14 @@ struct TrashDeadlineEnforcerTests {
         store.add(path: file.path, sizeBytes: 1, lastOpened: now.addingTimeInterval(-90 * day),
                   now: now.addingTimeInterval(-8 * day), reviewWindow: 7 * day)
 
-        // Opened at the last minute — after candidacy.
+        // Used at the last minute — after candidacy. (The signal is the
+        // modification date: raw reads don't count as use, edits do.)
         var values = URLResourceValues()
-        values.contentAccessDate = now
+        values.contentModificationDate = now
         try file.setResourceValues(values)
 
         let trashed = TrashDeadlineEnforcer().enforce(
-            store: store, scanner: StaleFileScanner(), now: now
+            store: store, scanner: mtimeScanner(), now: now
         )
         #expect(trashed.isEmpty)
         #expect(FileManager.default.fileExists(atPath: file.path)) // still there
@@ -76,7 +77,7 @@ struct TrashDeadlineEnforcerTests {
         try FileManager.default.removeItem(at: file)
 
         let trashed = TrashDeadlineEnforcer().enforce(
-            store: store, scanner: StaleFileScanner(), now: now
+            store: store, scanner: mtimeScanner(), now: now
         )
         #expect(trashed.isEmpty)
         #expect(store.candidates.isEmpty)
