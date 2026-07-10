@@ -10,6 +10,15 @@ struct ToolsView: View {
 
     @State private var showSendSheet = false
 
+    // Terminal unlock flow (moved here from Home with the entry itself).
+    @State private var showTerminalSheet = false
+    @State private var terminalPassword = ""
+    @State private var openTerminal = false
+    /// Whether the current password came from Face ID (already saved) vs typed
+    /// (save it only once it actually authenticates).
+    @State private var terminalFromBiometrics = false
+    @FocusState private var passwordFocused: Bool
+
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
         count: 2
@@ -22,6 +31,21 @@ struct ToolsView: View {
                     PageTitle("Tools")
 
                     LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
+                        Button {
+                            Task { await beginTerminal() }
+                        } label: {
+                            ToolCard(
+                                icon: "terminal.fill",
+                                tint: Theme.Palette.label,
+                                title: "Terminal",
+                                detail: "Run a shell",
+                                caption: "On your Mac"
+                            )
+                        }
+                        .buttonStyle(ToolCardPressStyle())
+                        .disabled(controller.terminalTarget == nil)
+                        .opacity(controller.terminalTarget == nil ? 0.45 : 1)
+
                         Button {
                             showSendSheet = true
                         } label: {
@@ -76,6 +100,66 @@ struct ToolsView: View {
                 .presentationDetents([.height(340)])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showTerminalSheet) { terminalPasswordSheet }
+        .fullScreenCover(isPresented: $openTerminal) {
+            if let target = controller.terminalTarget {
+                TerminalScreen(
+                    host: target.host, port: target.port,
+                    pairingToken: target.token, masterPassword: terminalPassword,
+                    rememberOnSuccess: !terminalFromBiometrics
+                )
+            }
+        }
+    }
+
+    // MARK: Terminal unlock
+
+    /// Opens the terminal: unlock with Face ID if a password is already
+    /// remembered, otherwise ask for it (typed passwords are saved only after
+    /// they successfully authenticate — see TerminalScreen).
+    private func beginTerminal() async {
+        if TerminalCredentialStore.hasStoredPassword() {
+            if let password = await TerminalCredentialStore.retrieve(reason: "Unlock the Mac terminal") {
+                terminalPassword = password
+                terminalFromBiometrics = true
+                openTerminal = true
+                return
+            }
+            // Biometry cancelled or failed — fall back to typing.
+        }
+        terminalPassword = ""
+        terminalFromBiometrics = false
+        showTerminalSheet = true
+    }
+
+    private var terminalPasswordSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Master Password") {
+                    SecureField("Enter master password", text: $terminalPassword)
+                        .textContentType(.password)
+                        .focused($passwordFocused)
+                }
+            }
+            .navigationTitle("Open Terminal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showTerminalSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Open") {
+                        // Don't save yet — only after it authenticates (so a
+                        // wrong password never gets remembered for Face ID).
+                        showTerminalSheet = false
+                        openTerminal = true
+                    }
+                    .disabled(terminalPassword.count < 4)
+                }
+            }
+            .onAppear { passwordFocused = true }
+        }
+        .presentationDetents([.height(200)])
     }
 
     /// The live fact each card leads with.
