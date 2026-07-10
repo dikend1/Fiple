@@ -83,7 +83,7 @@ struct TrashReviewHandlerTests {
 
         let result = TrashReviewHandler().apply(
             ids: [candidate.id, forged], decision: .trash,
-            store: store, scanner: StaleFileScanner(), now: now
+            store: store, scanner: mtimeScanner(), now: now
         )
         #expect(result == .trashActionResult(trashed: [candidate.id], kept: [], unknown: [forged]))
         #expect(!FileManager.default.fileExists(atPath: candidate.path))
@@ -97,7 +97,7 @@ struct TrashReviewHandlerTests {
 
         let result = TrashReviewHandler().apply(
             ids: [candidate.id], decision: .keep,
-            store: store, scanner: StaleFileScanner(), now: now
+            store: store, scanner: mtimeScanner(), now: now
         )
         #expect(result == .trashActionResult(trashed: [], kept: [candidate.id], unknown: []))
         #expect(FileManager.default.fileExists(atPath: candidate.path))
@@ -109,15 +109,16 @@ struct TrashReviewHandlerTests {
         let (dir, store) = try makeFixture()
         let candidate = try candidateFile("c.txt", in: dir, store: store)
 
-        // Used right before the decision arrives.
+        // Used right before the decision arrives. (The signal is the
+        // modification date: raw reads don't count as use, edits do.)
         var url = URL(fileURLWithPath: candidate.path)
         var values = URLResourceValues()
-        values.contentAccessDate = now
+        values.contentModificationDate = now
         try url.setResourceValues(values)
 
         let result = TrashReviewHandler().apply(
             ids: [candidate.id], decision: .trash,
-            store: store, scanner: StaleFileScanner(), now: now.addingTimeInterval(30)
+            store: store, scanner: mtimeScanner(), now: now.addingTimeInterval(30)
         )
         #expect(result == .trashActionResult(trashed: [], kept: [], unknown: [candidate.id]))
         #expect(FileManager.default.fileExists(atPath: candidate.path))

@@ -1,22 +1,63 @@
 import Foundation
+#if os(macOS)
+import CoreServices
+#endif
 
 /// Finds stale files in the granted folders and reconciles the candidate list.
 ///
-/// A file is stale when it hasn't been opened for `stalenessThreshold` (falling
-/// back to the modification date when the system has no access date). The scan
-/// also evicts candidates whose file was used again, changed, or disappeared —
-/// the "used again → leaves the list" guarantee. Pure filesystem + store logic;
-/// no UI, no network. `now` is injected so tests control time.
+/// A file is stale when it hasn't been *meaningfully used* for
+/// `stalenessThreshold`. "Used" is Finder's truth — the most recent of
+/// Spotlight's last-open date (`kMDItemLastUsedDate`), the modification date,
+/// and the date the file was added to its folder — NOT the POSIX access date:
+/// any process that merely reads a file (Spotlight indexing, backups, and
+/// Fiple's own QuickLook thumbnailer feeding the phone's review grid) bumps
+/// atime, which would evict every candidate the moment it was previewed and
+/// then hide it from re-scans for a whole threshold period. The added-to-folder
+/// date also protects freshly downloaded archives that carry old upstream
+/// modification dates.
+///
+/// The scan also evicts candidates whose file was used again, changed,
+/// disappeared, or no longer qualifies under the current threshold — the
+/// "used again → leaves the list" guarantee. Pure filesystem + store logic;
+/// no UI, no network. `now` and the date signal are injectable so tests
+/// control time.
 public struct StaleFileScanner: Sendable {
     public var stalenessThreshold: TimeInterval
     public var reviewWindow: TimeInterval
+    /// Returns when a file was last meaningfully used, or nil to skip it.
+    /// Defaults to ``finderLastUsed``; injectable so tests control dates
+    /// (a real file created in a test is always "just used" by Finder truth).
+    public var lastUsed: @Sendable (URL, URLResourceValues) -> Date?
 
     public init(
         stalenessThreshold: TimeInterval = 60 * 86_400,
-        reviewWindow: TimeInterval = 7 * 86_400
+        reviewWindow: TimeInterval = 7 * 86_400,
+        lastUsed: @escaping @Sendable (URL, URLResourceValues) -> Date? = StaleFileScanner.finderLastUsed
     ) {
         self.stalenessThreshold = stalenessThreshold
         self.reviewWindow = reviewWindow
+        self.lastUsed = lastUsed
+    }
+
+    /// The resource keys the scan fetches and hands to `lastUsed`.
+    private static let dateKeys: Set<URLResourceKey> = [
+        .contentModificationDateKey, .addedToDirectoryDateKey,
+    ]
+
+    /// Finder's "Last Opened" semantics: the most recent of the Spotlight
+    /// last-used date, the modification date, and the added-to-folder date.
+    /// Content *reads* (previews, indexing, backups) move none of these.
+    public static let finderLastUsed: @Sendable (URL, URLResourceValues) -> Date? = { url, values in
+        var dates: [Date] = []
+        if let modified = values.contentModificationDate { dates.append(modified) }
+        if let added = values.addedToDirectoryDate { dates.append(added) }
+        #if os(macOS)
+        if let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL),
+           let used = MDItemCopyAttribute(item, kMDItemLastUsedDate) as? Date {
+            dates.append(used)
+        }
+        #endif
+        return dates.max()
     }
 
     /// One pass: evict stale-no-longer candidates, then add newly stale files.
@@ -26,9 +67,7 @@ public struct StaleFileScanner: Sendable {
         evictUsedOrMissing(store: store, now: now)
 
         var added = 0
-        let keys: Set<URLResourceKey> = [
-            .isRegularFileKey, .contentAccessDateKey, .contentModificationDateKey, .fileSizeKey,
-        ]
+        let keys = Self.dateKeys.union([.isRegularFileKey, .fileSizeKey])
         for folder in folders {
             let entries = (try? FileManager.default.contentsOfDirectory(
                 at: folder, includingPropertiesForKeys: Array(keys),
@@ -37,7 +76,7 @@ public struct StaleFileScanner: Sendable {
             for url in entries {
                 guard let values = try? url.resourceValues(forKeys: keys),
                       values.isRegularFile == true,
-                      let lastUsed = Self.lastUsed(values)
+                      let lastUsed = lastUsed(url, values)
                 else { continue }
                 guard now.timeIntervalSince(lastUsed) >= stalenessThreshold else { continue }
                 if store.add(
@@ -59,13 +98,11 @@ public struct StaleFileScanner: Sendable {
         var evicted: Set<UUID> = []
         for candidate in store.candidates {
             let url = URL(fileURLWithPath: candidate.path)
-            guard let values = try? url.resourceValues(
-                forKeys: [.contentAccessDateKey, .contentModificationDateKey]
-            ) else {
+            guard let values = try? url.resourceValues(forKeys: Self.dateKeys) else {
                 evicted.insert(candidate.id) // gone or unreadable → out
                 continue
             }
-            guard let used = Self.lastUsed(values) else { continue }
+            guard let used = lastUsed(url, values) else { continue }
             if used > candidate.addedAt {
                 evicted.insert(candidate.id)
             } else if now.timeIntervalSince(used) < stalenessThreshold {
@@ -75,15 +112,5 @@ public struct StaleFileScanner: Sendable {
             }
         }
         if !evicted.isEmpty { store.remove(ids: evicted) }
-    }
-
-    /// Most recent of access/modification date — either counts as "used".
-    private static func lastUsed(_ values: URLResourceValues) -> Date? {
-        switch (values.contentAccessDate, values.contentModificationDate) {
-        case let (a?, m?): return max(a, m)
-        case let (a?, nil): return a
-        case let (nil, m?): return m
-        case (nil, nil): return nil
-        }
     }
 }

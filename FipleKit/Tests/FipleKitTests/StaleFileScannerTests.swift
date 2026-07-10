@@ -44,7 +44,7 @@ struct StaleFileScannerTests {
         _ = try writeFile("fresh.png", in: dir, usedDaysAgo: 5)
 
         let store = makeStore()
-        let added = StaleFileScanner().scan(folders: [dir], store: store, now: now)
+        let added = mtimeScanner().scan(folders: [dir], store: store, now: now)
         #expect(added == 1)
         // Canonicalize both sides: the scanner may report /private/var for /var.
         let found = store.candidates.map { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path }
@@ -56,7 +56,7 @@ struct StaleFileScannerTests {
         let dir = try makeTempDir()
         let file = try writeFile("doc.pdf", in: dir, usedDaysAgo: 90)
         let store = makeStore()
-        let scanner = StaleFileScanner()
+        let scanner = mtimeScanner()
         scanner.scan(folders: [dir], store: store, now: now)
         #expect(store.candidates.count == 1)
 
@@ -73,17 +73,32 @@ struct StaleFileScannerTests {
         _ = try writeFile("meh.zip", in: dir, usedDaysAgo: 20)
         let store = makeStore()
 
-        StaleFileScanner(stalenessThreshold: 15 * day).scan(folders: [dir], store: store, now: now)
+        mtimeScanner(stalenessThreshold: 15 * day).scan(folders: [dir], store: store, now: now)
         #expect(store.candidates.count == 1)
 
         // The user switches 15 → 90 days; the rescan must clear the list, not
         // leave the old policy's candidates marching toward their deadline.
-        StaleFileScanner(stalenessThreshold: 90 * day).scan(folders: [dir], store: store, now: now)
+        mtimeScanner(stalenessThreshold: 90 * day).scan(folders: [dir], store: store, now: now)
         #expect(store.candidates.isEmpty)
 
         // Switching back finds it again (fresh review window).
-        StaleFileScanner(stalenessThreshold: 15 * day).scan(folders: [dir], store: store, now: now)
+        mtimeScanner(stalenessThreshold: 15 * day).scan(folders: [dir], store: store, now: now)
         #expect(store.candidates.count == 1)
+    }
+
+    @Test("Finder-truth signal: a freshly added file with an ancient mtime is not stale")
+    func finderSignalProtectsFreshFiles() throws {
+        let dir = try makeTempDir()
+        // An unzipped/downloaded archive often carries an upstream modification
+        // date years in the past — but it landed in this folder TODAY. The
+        // default (non-injected) signal must weigh the added-to-folder date and
+        // refuse to call it stale.
+        _ = try writeFile("archive.zip", in: dir, usedDaysAgo: 400)
+        let store = makeStore()
+
+        let added = StaleFileScanner().scan(folders: [dir], store: store, now: now)
+        #expect(added == 0)
+        #expect(store.candidates.isEmpty)
     }
 
     @Test("A vanished candidate is evicted without action")
@@ -91,7 +106,7 @@ struct StaleFileScannerTests {
         let dir = try makeTempDir()
         let file = try writeFile("gone.txt", in: dir, usedDaysAgo: 90)
         let store = makeStore()
-        let scanner = StaleFileScanner()
+        let scanner = mtimeScanner()
         scanner.scan(folders: [dir], store: store, now: now)
         #expect(store.candidates.count == 1)
 
@@ -105,7 +120,7 @@ struct StaleFileScannerTests {
         let dir = try makeTempDir()
         _ = try writeFile("keepme.png", in: dir, usedDaysAgo: 90)
         let store = makeStore()
-        let scanner = StaleFileScanner()
+        let scanner = mtimeScanner()
         scanner.scan(folders: [dir], store: store, now: now)
         store.keep(ids: Set(store.candidates.map(\.id)))
 
