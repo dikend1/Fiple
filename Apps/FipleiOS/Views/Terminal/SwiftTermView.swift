@@ -60,13 +60,15 @@ struct SwiftTermView: UIViewRepresentable {
             terminal.font = Self.monospaced(fontSize)
             let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
             terminal.addGestureRecognizer(pinch)
-            session.outputHandler = { [weak terminal] data in
+            session.setOutputHandler(owner: self) { [weak terminal] data in
                 terminal?.feed(byteArray: ArraySlice(data))
             }
         }
 
         func detach() {
-            session.outputHandler = nil
+            // Owner-tokened: if a replacement view already attached (reconnect
+            // swap), this dismantled view must not tear its handler down.
+            session.clearOutputHandler(owner: self)
         }
 
         @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {

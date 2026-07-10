@@ -104,6 +104,9 @@ struct TerminalScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             for tab in tabs { tab.session.scenePhaseChanged(active: phase == .active) }
+            // The saved list must survive a background jetsam, not just a
+            // graceful screen close — snapshot it on the way out.
+            if phase != .active { saveTabs() }
         }
         .onChange(of: activeTab?.session.phase) { _, phase in
             guard let phase, let session = activeTab?.session else { return }
@@ -230,6 +233,7 @@ struct TerminalScreen: View {
             tabs.removeAll { $0.id == tab.id }
         }
         if activeTab == nil { activeTabID = tabs.first?.id }
+        saveTabs() // dead restores must not come back next visit
     }
 
     private func activate(_ tab: TerminalTab) {
@@ -244,6 +248,9 @@ struct TerminalScreen: View {
         tab.session.endShell()
         tabs.removeAll { $0.id == tab.id }
         if activeTabID == tab.id { activeTabID = tabs.first?.id }
+        // Drop it from the saved list too, so a jetsam right after this
+        // doesn't restore a tab the user explicitly killed.
+        saveTabs()
         if tabs.isEmpty { dismiss() }
     }
 

@@ -175,6 +175,115 @@ struct TerminalServiceEndToEndTests {
         service2.stop()
     }
 
+    @Test("Wrong-password lockout accumulates across reconnects (service-level throttle)")
+    func lockoutPersistsAcrossConnections() async throws {
+        // The terminal drops the socket after one failed handshake, so brute
+        // force means one guess per fresh connection. If the throttle lived per
+        // connection it would reset every time and the lockout would be
+        // unreachable — this proves it's shared at the service level.
+        let service = makeService() // default throttle: 5 attempts, then lockout
+        let port = try await service.start()
+
+        func guessWrongPassword() async throws -> TerminalAuthFailReason? {
+            let client = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+            try await client.connect()
+            client.authenticate(passwordProof: "wrong", token: token)
+            defer { client.close() }
+            for await event in client.events {
+                if case let .authFailed(reason) = event { return reason }
+                if case .ended = event { return nil }
+                if case .disconnected = event { return nil }
+            }
+            return nil
+        }
+
+        var reasons: [TerminalAuthFailReason?] = []
+        for _ in 0 ..< 6 { reasons.append(try await guessWrongPassword()) }
+
+        // Five accumulated failures trip the lockout; the sixth guess is refused
+        // as locked out, not merely "wrong password".
+        #expect(reasons.last == .lockedOut)
+        #expect(reasons.contains(.lockedOut))
+
+        service.stop()
+    }
+
+    @Test("An oversized frame from an unauthenticated peer drops the connection")
+    func preAuthFrameCapEnforced() async throws {
+        let service = makeService()
+        let port = try await service.start()
+
+        let client = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await client.connect()
+        // 8 KB of "keystrokes" before authenticating — over the 4 KB pre-auth
+        // cap. The service must drop the socket, never answer.
+        client.send(Data(repeating: 0x61, count: 8 * 1024))
+
+        var disconnected = false
+        for await event in client.events {
+            if case .authenticated = event { Issue.record("must not authenticate"); break }
+            if case .disconnected = event { disconnected = true; break }
+        }
+        #expect(disconnected)
+        client.close()
+        service.stop()
+    }
+
+    @Test("After auth the frame cap lifts — a large paste goes through")
+    func postAuthLargeFramePasses() async throws {
+        let service = makeService()
+        let port = try await service.start()
+
+        let client = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await client.connect()
+        client.authenticate(passwordProof: password, token: token)
+
+        // ~60 KB in ONE frame (well over the 4 KB pre-auth cap). Newline-broken
+        // lines keep the pty's canonical line discipline happy; the marker at
+        // the end proves the whole frame was accepted and reached the shell.
+        var paste = String(repeating: String(repeating: "a", count: 59) + "\n", count: 1000)
+        paste += "BIGMARKER\n"
+
+        var output = ""
+        for await event in client.events {
+            switch event {
+            case .authenticated:
+                client.send(Data(paste.utf8))
+            case let .output(data):
+                output += String(decoding: data, as: UTF8.self)
+            case .authFailed, .ended, .disconnected:
+                Issue.record("channel must survive a large post-auth frame")
+            }
+            if output.contains("BIGMARKER") { break }
+        }
+        #expect(output.contains("BIGMARKER"))
+        client.close()
+        service.stop()
+    }
+
+    @Test("A connection that never authenticates is reaped at the deadline")
+    func unauthenticatedConnectionIsReaped() async throws {
+        let service = TerminalService(
+            pairingToken: token,
+            passwordRecord: MasterPassword.make(password, iterations: 1_000),
+            shellPath: "/bin/cat", shellArguments: ["/bin/cat"],
+            authTimeout: 0.5
+        )
+        let port = try await service.start()
+
+        let client = TerminalClient(host: "127.0.0.1", port: port, pairingToken: token)
+        try await client.connect()
+        // Send nothing. The service must hang up on its own.
+        var disconnected = false
+        for await event in client.events {
+            if case .disconnected = event { disconnected = true }
+            break
+        }
+        #expect(disconnected)
+        client.close()
+        service.stop()
+    }
+
     @Test("A wrong master password is rejected with no shell attached")
     func wrongPasswordRejected() async throws {
         let service = makeService()
@@ -193,6 +302,26 @@ struct TerminalServiceEndToEndTests {
 
         client.close()
         service.stop()
+    }
+
+    @Test("The registry refuses shells beyond its cap")
+    func registryCapsSessions() throws {
+        let queue = DispatchQueue(label: "test.registry")
+        let registry = TerminalSessionRegistry(
+            queue: queue, graceInterval: 60,
+            shellPath: "/bin/cat", shellArguments: ["/bin/cat"]
+        )
+        var sessions: [ShellSession] = []
+        for _ in 0 ..< TerminalSessionRegistry.maxSessions {
+            sessions.append(try registry.create())
+        }
+        #expect(throws: TerminalSessionRegistry.RegistryError.sessionLimitReached) {
+            _ = try registry.create()
+        }
+        // Ending one frees a slot again.
+        registry.end(id: sessions[0].id)
+        #expect((try? registry.create()) != nil)
+        registry.closeAll()
     }
 }
 #endif
