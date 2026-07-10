@@ -16,10 +16,28 @@ public final class PTYSession: @unchecked Sendable {
     private let masterFD: Int32
     /// The shell's process id, for signalling and reaping.
     private let pid: pid_t
+    /// Reads (the drain of shell output) and reaping run here.
     private let ioQueue = DispatchQueue(label: "com.fiple.pty.io")
+    /// Writes run on their OWN queue, never on `ioQueue`. A large write to a
+    /// full pty buffer blocks until the shell drains it — and the shell can
+    /// only drain if its echoed output is being read. If writes shared the read
+    /// queue, that big write would sit ahead of the read handler and deadlock
+    /// (a paste of more than the pty buffer would hang the shell). Separate
+    /// queues let reads keep draining while a write is parked.
+    private let writeQueue = DispatchQueue(label: "com.fiple.pty.write")
     private var readSource: DispatchSourceRead?
     private var processSource: DispatchSourceProcess?
-    private var closed = false
+
+    /// `closed`/`reaped` are read from `writeQueue` (write/resize/hangup) and
+    /// written from `ioQueue`/`close()`, so they're guarded by this lock rather
+    /// than confined to one queue.
+    private let stateLock = NSLock()
+    private var _closed = false
+    private var _reaped = false
+    private var isClosed: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _closed }
+    /// Set once the child has been `waitpid`-reaped. After that the pid may be
+    /// recycled by the OS, so signalling it again could hit an innocent process.
+    private var isReaped: Bool { stateLock.lock(); defer { stateLock.unlock() }; return _reaped }
 
     /// Called with each chunk of shell output, on an internal queue.
     public var onOutput: (@Sendable (Data) -> Void)?
@@ -74,14 +92,21 @@ public final class PTYSession: @unchecked Sendable {
         startReaping()
     }
 
-    /// Writes bytes to the shell's input (keystrokes from the phone).
+    /// Writes bytes to the shell's input (keystrokes / pastes from the phone).
+    /// Runs on `writeQueue` so a large blocking write never starves the read
+    /// drain. A write racing `close()` must not touch the fd afterward — the
+    /// number may already belong to a different file.
     public func write(_ data: Data) {
-        ioQueue.async { [masterFD] in
+        writeQueue.async { [weak self] in
+            guard let self, !self.isClosed else { return }
             data.withUnsafeBytes { raw in
                 var offset = 0
                 let base = raw.bindMemory(to: UInt8.self).baseAddress!
                 while offset < raw.count {
-                    let n = Darwin.write(masterFD, base + offset, raw.count - offset)
+                    // Re-check before each partial write: a big paste can block
+                    // here for a while, and close() may land mid-way.
+                    if self.isClosed { break }
+                    let n = Darwin.write(self.masterFD, base + offset, raw.count - offset)
                     if n <= 0 { break }
                     offset += n
                 }
@@ -91,15 +116,19 @@ public final class PTYSession: @unchecked Sendable {
 
     /// Updates the pty window size so full-screen apps reflow.
     public func resize(cols: Int, rows: Int) {
-        ioQueue.async { [masterFD] in
+        writeQueue.async { [weak self] in
+            guard let self, !self.isClosed else { return }
             var size = winsize(ws_row: UInt16(rows), ws_col: UInt16(cols), ws_xpixel: 0, ws_ypixel: 0)
-            _ = ioctl(masterFD, TIOCSWINSZ, &size)
+            _ = ioctl(self.masterFD, TIOCSWINSZ, &size)
         }
     }
 
     /// Sends SIGHUP to the shell — used when a session's grace period lapses.
     public func hangup() {
-        kill(pid, SIGHUP)
+        writeQueue.async { [weak self] in
+            guard let self, !self.isClosed, !self.isReaped else { return }
+            kill(self.pid, SIGHUP)
+        }
     }
 
     private func startReading() {
@@ -125,6 +154,7 @@ public final class PTYSession: @unchecked Sendable {
             guard let self else { return }
             var status: Int32 = 0
             waitpid(self.pid, &status, 0)
+            self.stateLock.lock(); self._reaped = true; self.stateLock.unlock() // pid free for reuse
             let code: Int32? = (status & 0x7f) == 0 ? (status >> 8) & 0xff : nil
             self.onExit?(code)
             self.processSource?.cancel()
@@ -136,11 +166,32 @@ public final class PTYSession: @unchecked Sendable {
     /// Tears down the pty and stops the shell. Idempotent.
     public func close() {
         ioQueue.sync {
-            guard !closed else { return }
-            closed = true
+            stateLock.lock()
+            if _closed { stateLock.unlock(); return }
+            _closed = true
+            let alreadyReaped = _reaped
+            stateLock.unlock()
+
             readSource?.cancel()
             processSource?.cancel()
-            kill(pid, SIGKILL)
+            // Only signal a child we still own; a reaped pid may have been
+            // recycled to an unrelated process.
+            if !alreadyReaped {
+                kill(pid, SIGKILL)
+                // The exit source was just cancelled, so nothing else will
+                // reap this child — without a waitpid it stays a zombie until
+                // the app quits. SIGKILL can't be caught, so this returns
+                // almost immediately.
+                let pid = self.pid
+                DispatchQueue.global(qos: .utility).async {
+                    var status: Int32 = 0
+                    waitpid(pid, &status, 0)
+                }
+                stateLock.lock(); _reaped = true; stateLock.unlock()
+            }
+            // A write may be parked on writeQueue blocked on a full pty buffer;
+            // closing the fd here unblocks it (its next write returns ≤ 0) and
+            // its isClosed re-check bails. Reads are already cancelled.
             Darwin.close(masterFD)
         }
     }

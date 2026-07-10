@@ -104,6 +104,16 @@ final class ShellSession: @unchecked Sendable {
 /// Owns the live shell sessions on the Mac, keyed by id, so a reconnecting phone
 /// can resume the shell it started. One session per paired device in Phase 1.
 final class TerminalSessionRegistry: @unchecked Sendable {
+    /// Hard cap on concurrent shells. The phone allows 5 tabs; the headroom
+    /// covers races. Beyond this, a create is a runaway (e.g. a reconnect loop
+    /// spawning fresh shells) — refuse rather than fork zsh processes for 30
+    /// minutes of grace each.
+    static let maxSessions = 8
+
+    enum RegistryError: Error, Equatable {
+        case sessionLimitReached
+    }
+
     private let queue: DispatchQueue
     private let graceInterval: TimeInterval
     private let shellPath: String?
@@ -123,6 +133,10 @@ final class TerminalSessionRegistry: @unchecked Sendable {
 
     /// Spawns a fresh shell session. Call on `queue`.
     func create() throws -> ShellSession {
+        guard sessions.count < Self.maxSessions else {
+            FipleLog.connection.notice("terminal: refusing new shell — \(Self.maxSessions) already running")
+            throw RegistryError.sessionLimitReached
+        }
         let id = UUID().uuidString
         FipleLog.connection.info("terminal: shell session created (\(id.prefix(8)))")
         let pty = try PTYSession(shellPath: shellPath, arguments: shellArguments)

@@ -19,22 +19,43 @@ public final class TerminalService: @unchecked Sendable {
     private var connections: [ObjectIdentifier: ConnectionSession] = [:]
     private var activeCount = 0
 
+    /// The brute-force guard for master-password auth, shared across *all*
+    /// connections. It lives here — not on each `ConnectionSession` — because the
+    /// terminal drops the socket after a single failed handshake: a per-connection
+    /// throttle would reset on every reconnect and its lockout would be
+    /// unreachable, exactly the reset attack `PairingThrottle` is built to stop.
+    /// Touched only on `queue`.
+    private var authenticator: TerminalAuthenticator
+
     /// Reports how many phones are currently authenticated to the terminal, so
     /// the Mac UI can show "iPhone connected" instead of a raw port. Fired on the
     /// service queue whenever the count changes.
     public var onActiveSessionsChanged: (@Sendable (Int) -> Void)?
 
-    /// - Parameter graceInterval: how long a disconnected shell survives before
-    ///   SIGHUP (default 10 minutes).
+    /// How long an accepted connection may sit without authenticating before
+    /// it's reaped — parity with the tile channel's auth timeout.
+    private let authTimeout: TimeInterval
+
+    /// - Parameters:
+    ///   - graceInterval: how long a disconnected shell survives before
+    ///     SIGHUP (default 10 minutes).
+    ///   - authTimeout: how long a connection may stay unauthenticated
+    ///     (default 10 seconds; injectable for tests).
     public init(
         pairingToken: String,
         passwordRecord: MasterPasswordRecord,
         shellPath: String? = nil,
         shellArguments: [String]? = nil,
-        graceInterval: TimeInterval = 600
+        graceInterval: TimeInterval = 600,
+        authTimeout: TimeInterval = 10
     ) {
         self.pairingToken = pairingToken
         self.passwordRecord = passwordRecord
+        self.authTimeout = authTimeout
+        self.authenticator = TerminalAuthenticator(
+            record: passwordRecord,
+            authorizedTokens: [pairingToken]
+        )
         self.registry = TerminalSessionRegistry(
             queue: queue, graceInterval: graceInterval,
             shellPath: shellPath, shellArguments: shellArguments
@@ -106,10 +127,15 @@ public final class TerminalService: @unchecked Sendable {
     private func accept(_ connection: NWConnection) {
         let session = ConnectionSession(
             connection: connection,
-            pairingToken: pairingToken,
-            passwordRecord: passwordRecord,
             registry: registry,
-            queue: queue
+            queue: queue,
+            authTimeout: authTimeout,
+            // Runs on `queue`, so mutating the shared authenticator is serialized
+            // with every other connection's handshake — the throttle accumulates.
+            authenticate: { [weak self] token, proof, now in
+                guard let self else { return .rejected(.serviceDisabled) }
+                return self.authenticator.authenticate(token: token, passwordProof: proof, now: now)
+            }
         )
         connections[ObjectIdentifier(session)] = session
         session.onFinished = { [weak self] in
@@ -132,13 +158,22 @@ public final class TerminalService: @unchecked Sendable {
 /// One accepted connection: runs the auth handshake, then bridges the encrypted
 /// channel to a `ShellSession` (new or resumed). Confined to the service queue.
 private final class ConnectionSession: @unchecked Sendable {
+    /// Pre-auth inbound cap, mirroring the tile channel's posture: an auth
+    /// control frame is well under a kilobyte, so anything bigger from an
+    /// unauthenticated peer is hostile. Lifted to the full limit on auth.
+    private static let preAuthFrameLimit = 4096
+
     private let connection: NWConnection
     private let queue: DispatchQueue
     private let registry: TerminalSessionRegistry
-    private var decoder = TerminalFrameDecoder()
-    private var authenticator: TerminalAuthenticator
+    private let authTimeout: TimeInterval
+    private var decoder = TerminalFrameDecoder(maxFrameSize: ConnectionSession.preAuthFrameLimit)
+    /// Judges the two-factor handshake against the service-wide throttle. Called
+    /// only on `queue`.
+    private let authenticateHandshake: @Sendable (_ token: String, _ passwordProof: String, _ now: Date) -> TerminalAuthenticator.Decision
 
     private var authenticated = false
+    private var authDeadline: DispatchWorkItem?
     /// The shell this connection is currently driving (nil until authorized).
     private weak var shell: ShellSession?
     /// A resumed shell whose scrollback replay waits for the client's first
@@ -155,18 +190,16 @@ private final class ConnectionSession: @unchecked Sendable {
 
     init(
         connection: NWConnection,
-        pairingToken: String,
-        passwordRecord: MasterPasswordRecord,
         registry: TerminalSessionRegistry,
-        queue: DispatchQueue
+        queue: DispatchQueue,
+        authTimeout: TimeInterval,
+        authenticate: @escaping @Sendable (_ token: String, _ passwordProof: String, _ now: Date) -> TerminalAuthenticator.Decision
     ) {
         self.connection = connection
         self.queue = queue
         self.registry = registry
-        self.authenticator = TerminalAuthenticator(
-            record: passwordRecord,
-            authorizedTokens: [pairingToken]
-        )
+        self.authTimeout = authTimeout
+        self.authenticateHandshake = authenticate
     }
 
     func start() {
@@ -180,6 +213,15 @@ private final class ConnectionSession: @unchecked Sendable {
             }
         }
         connection.start(queue: queue)
+        // A socket that completes TLS but never authenticates would otherwise
+        // sit forever; give it a deadline.
+        let deadline = DispatchWorkItem { [weak self] in
+            guard let self, !self.authenticated else { return }
+            FipleLog.connection.notice("terminal: dropping connection — no auth within \(self.authTimeout)s")
+            self.finish()
+        }
+        authDeadline = deadline
+        queue.asyncAfter(deadline: .now() + authTimeout, execute: deadline)
         receive()
     }
 
@@ -240,10 +282,14 @@ private final class ConnectionSession: @unchecked Sendable {
     }
 
     private func authenticate(token: String, proof: String, resumeSessionID: String?, resumeOnly: Bool) {
-        switch authenticator.authenticate(token: token, passwordProof: proof, now: Date()) {
+        switch authenticateHandshake(token, proof, Date()) {
         case .authorized:
             FipleLog.connection.info("terminal: auth accepted (resume: \(resumeSessionID?.prefix(8) ?? "none"), strict: \(resumeOnly))")
             authenticated = true
+            authDeadline?.cancel()
+            authDeadline = nil
+            // The peer is trusted now — allow full-size frames (big pastes).
+            decoder.maxFrameSize = FrameCodec.maxFrameSize
             attachShell(resumeSessionID: resumeSessionID, resumeOnly: resumeOnly)
         case let .rejected(reason):
             FipleLog.connection.notice("terminal: auth rejected — \(reason.rawValue)")
@@ -334,6 +380,8 @@ private final class ConnectionSession: @unchecked Sendable {
     func finish() {
         if finished { return }
         finished = true
+        authDeadline?.cancel()
+        authDeadline = nil
         pendingReplayFallback?.cancel()
         pendingReplayFallback = nil
         pendingReplayShell = nil

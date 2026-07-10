@@ -63,6 +63,43 @@ struct PTYSessionTests {
         pty.close()
     }
 
+    @Test("A large write is echoed back without deadlocking the drain")
+    func largeWriteDoesNotDeadlock() async throws {
+        let sink = Sink()
+        let pty = try PTYSession(shellPath: "/bin/cat", arguments: ["/bin/cat"])
+        pty.onOutput = { sink.append($0) }
+
+        // ~64 KB in one write — far larger than the pty's input buffer. If reads
+        // and writes shared a queue, the blocked write would starve the drain
+        // and this would hang. Newline-terminated lines keep cat's canonical
+        // line discipline flowing; the trailing marker proves it all came back.
+        var paste = String(repeating: String(repeating: "x", count: 63) + "\n", count: 1024)
+        paste += "ENDMARK\n"
+        pty.write(Data(paste.utf8))
+
+        try await waitUntil(timeout: 8) { sink.text().contains("ENDMARK") }
+        #expect(sink.text().contains("ENDMARK"))
+        pty.close()
+    }
+
+    @Test("Closing after the child already exited is safe (no re-signal of a reaped pid)")
+    func closeAfterExitIsSafe() async throws {
+        let exitCode = ExitBox()
+        // /usr/bin/true exits immediately on its own.
+        let pty = try PTYSession(shellPath: "/usr/bin/true", arguments: ["/usr/bin/true"])
+        pty.onExit = { exitCode.set($0) }
+
+        try await waitUntil(timeout: 5) { exitCode.isSet() }
+        #expect(exitCode.isSet())
+        // The child is reaped; its pid may already belong to someone else.
+        // close() must not signal it — surviving this call is the assertion.
+        pty.close()
+        // Late writes/resizes against the closed pty must be no-ops too.
+        pty.write(Data("late\n".utf8))
+        pty.resize(cols: 100, rows: 30)
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+
     // MARK: - helpers
 
     private final class ExitBox: @unchecked Sendable {

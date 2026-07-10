@@ -67,8 +67,25 @@ final class TerminalSession {
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
     @ObservationIgnored private var loopTask: Task<Void, Never>?
 
-    /// Set by the terminal view to receive shell output bytes.
-    @ObservationIgnored var outputHandler: (@MainActor (Data) -> Void)?
+    /// The terminal view's sink for shell output bytes. Owner-tokened: on a
+    /// reconnect SwiftUI replaces the view (`generation` id change) and the
+    /// old view's dismantle can run *after* the new view attached — a bare
+    /// `outputHandler = nil` there would silently disconnect the new view and
+    /// eat the scrollback replay.
+    @ObservationIgnored private var outputHandler: (@MainActor (Data) -> Void)?
+    @ObservationIgnored private var outputOwner: ObjectIdentifier?
+
+    func setOutputHandler(owner: AnyObject, _ handler: @escaping @MainActor (Data) -> Void) {
+        outputOwner = ObjectIdentifier(owner)
+        outputHandler = handler
+    }
+
+    /// Clears the handler only if `owner` still owns it.
+    func clearOutputHandler(owner: AnyObject) {
+        guard outputOwner == ObjectIdentifier(owner) else { return }
+        outputHandler = nil
+        outputOwner = nil
+    }
 
     init(
         host: String, port: UInt16, token: String, password: String,

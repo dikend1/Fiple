@@ -52,6 +52,7 @@ public final class TerminalClient: @unchecked Sendable {
                     if once.claim() { cont.resume() }
                 case .failed(let error):
                     if once.claim() { cont.resume(throwing: error) }
+                    self?.connection.cancel()
                     self?.emit(.disconnected)
                 case .cancelled:
                     // A no-op if we already finished (e.g. user close); otherwise
@@ -62,8 +63,13 @@ public final class TerminalClient: @unchecked Sendable {
                 }
             }
             connection.start(queue: queue)
-            queue.asyncAfter(deadline: .now() + timeout) {
-                if once.claim() { cont.resume(throwing: TransportError.notConnected) }
+            queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                if once.claim() {
+                    // Give up AND stop the attempt — otherwise the connection
+                    // keeps dialling in the background after we reported failure.
+                    self?.connection.cancel()
+                    cont.resume(throwing: TransportError.notConnected)
+                }
             }
         }
         receive()
@@ -116,8 +122,17 @@ public final class TerminalClient: @unchecked Sendable {
     private func receive() {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self else { return }
-            if let data, !data.isEmpty, let frames = try? self.decoder.append(data) {
-                for frame in frames { self.handle(frame) }
+            if let data, !data.isEmpty {
+                do {
+                    for frame in try self.decoder.append(data) { self.handle(frame) }
+                } catch {
+                    // A framing error means the stream is desynced — every byte
+                    // after it would be garbage. Drop the link; the session
+                    // layer reconnects and resumes the shell.
+                    self.connection.cancel()
+                    self.emit(.disconnected)
+                    return
+                }
             }
             if isComplete || error != nil {
                 self.emit(.disconnected)

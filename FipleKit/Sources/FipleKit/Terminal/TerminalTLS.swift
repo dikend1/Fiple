@@ -5,12 +5,15 @@ import CryptoKit
 /// TLS parameters for the privileged terminal channel.
 ///
 /// ADR-0002 names the preferred encrypted target as "TLS with a key derived from
-/// the pairing code — PAKE or PSK". This uses **TLS 1.3 with an external
-/// pre-shared key** derived from the already-established pairing token: both
-/// peers prove knowledge of the same secret during the handshake, so the channel
-/// is encrypted *and* mutually authenticated (no trust-on-first-use window, no
-/// certificate lifecycle). The master password remains a separate second factor
-/// checked after the channel is up (see ``TerminalAuthenticator``).
+/// the pairing code — PAKE or PSK". This uses **TLS 1.2 with an external
+/// pre-shared key** (TLS_PSK_WITH_AES_128_GCM_SHA256) derived from the
+/// already-established pairing token: both peers prove knowledge of the same
+/// secret during the handshake, so the channel is encrypted *and* mutually
+/// authenticated (no trust-on-first-use window, no certificate lifecycle).
+/// 1.2 rather than 1.3 because Apple's stack fails the 1.3 external-PSK
+/// handshake (-9858); see the pinning below. The master password remains a
+/// separate second factor checked after the channel is up
+/// (see ``TerminalAuthenticator``).
 public enum TerminalTLS {
     private static let pskIdentity = "fiple-terminal-v1"
     private static let hkdfInfo = Data("fiple-terminal-psk".utf8)
