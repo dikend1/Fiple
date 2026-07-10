@@ -142,20 +142,30 @@ struct SendToMacView: View {
         batchTotal = items.count
         batchFailed = 0
         let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
+        // Pipeline: the next item exports from the photo library (or downloads
+        // from iCloud) WHILE the current one streams to the Mac — otherwise
+        // every photo pays load + send back to back.
+        var pendingLoad = loadTask(for: items[0])
         for (index, item) in items.enumerated() {
             batchIndex = index + 1
-            // Best-available name: the photo library rarely exposes one, so
-            // fall back to a timestamped name (indexed within the batch).
-            guard let data = try? await item.loadTransferable(type: Data.self) else {
+            let data = await pendingLoad.value
+            if index + 1 < items.count { pendingLoad = loadTask(for: items[index + 1]) }
+            guard let data else {
                 batchFailed += 1
                 continue
             }
+            // Best-available name: the photo library rarely exposes one, so
+            // fall back to a timestamped name (indexed within the batch).
             let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
             let suffix = items.count > 1 ? "-\(index + 1)" : ""
             await controller.beamFile(name: "iPhone \(stamp)\(suffix).\(ext)", data: data)
             if case .failed = controller.beamState { batchFailed += 1 }
         }
         pickedPhotos = []
+    }
+
+    private func loadTask(for item: PhotosPickerItem) -> Task<Data?, Never> {
+        Task { try? await item.loadTransferable(type: Data.self) }
     }
 
     private func sendFileBatch(_ urls: [URL]) async {
