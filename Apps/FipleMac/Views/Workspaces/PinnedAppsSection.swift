@@ -13,10 +13,10 @@ struct PinnedAppsSection: View {
     @State private var scrolledPage: Int?
     @State private var isAdding = false
 
-    // 6×2 per page: on the constrained content column this gives app-launcher
-    // density instead of four icons adrift in whitespace.
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.lg), count: 6)
-    private let perPage = 12
+    // 4×2 per page — eight tiles, the rest paging right, matching the iPhone's
+    // Fiple Bar exactly so both apps show the same shape.
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.lg), count: 4)
+    private let perPage = 8
 
     private enum Slot: Identifiable {
         case action(Action)
