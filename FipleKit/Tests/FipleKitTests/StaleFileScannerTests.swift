@@ -66,6 +66,26 @@ struct StaleFileScannerTests {
         #expect(store.candidates.isEmpty)
     }
 
+    @Test("Raising the threshold immediately evicts candidates that no longer qualify")
+    func raisedThresholdEvicts() throws {
+        let dir = try makeTempDir()
+        // Unused for 20 days: stale at 15, NOT stale at 90.
+        _ = try writeFile("meh.zip", in: dir, usedDaysAgo: 20)
+        let store = makeStore()
+
+        StaleFileScanner(stalenessThreshold: 15 * day).scan(folders: [dir], store: store, now: now)
+        #expect(store.candidates.count == 1)
+
+        // The user switches 15 → 90 days; the rescan must clear the list, not
+        // leave the old policy's candidates marching toward their deadline.
+        StaleFileScanner(stalenessThreshold: 90 * day).scan(folders: [dir], store: store, now: now)
+        #expect(store.candidates.isEmpty)
+
+        // Switching back finds it again (fresh review window).
+        StaleFileScanner(stalenessThreshold: 15 * day).scan(folders: [dir], store: store, now: now)
+        #expect(store.candidates.count == 1)
+    }
+
     @Test("A vanished candidate is evicted without action")
     func missingEvicted() throws {
         let dir = try makeTempDir()
