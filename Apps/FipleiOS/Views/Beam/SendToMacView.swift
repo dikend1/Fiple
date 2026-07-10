@@ -3,14 +3,20 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// "Send to Mac": pick a photo/video or any file — it lands in the Mac's
-/// Downloads (images also on its clipboard). Text/clipboard has no UI here:
-/// Universal Clipboard and Share → Fiple already own that path.
+/// "Send to Mac": pick photos/videos or files — they land in the Mac's
+/// Downloads (images also on its clipboard). Multi-select sends the whole
+/// batch in one go, one transfer after another. Text/clipboard has no UI
+/// here: Universal Clipboard and Share → Fiple already own that path.
 struct SendToMacView: View {
     let controller: RemoteController
 
-    @State private var pickedPhoto: PhotosPickerItem?
+    @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var showFileImporter = false
+    // Batch bookkeeping: which item is in flight and how the run went, so the
+    // status strip can say "Sending 2 of 5" instead of per-file noise.
+    @State private var batchTotal = 0
+    @State private var batchIndex = 0
+    @State private var batchFailed = 0
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -29,13 +35,17 @@ struct SendToMacView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
-        .onChange(of: pickedPhoto) { _, item in
-            guard let item else { return }
-            Task { await sendPicked(item) }
+        .onChange(of: pickedPhotos) { _, items in
+            guard !items.isEmpty else { return }
+            Task { await sendPickedBatch(items) }
         }
-        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item]) { result in
-            guard case let .success(url) = result else { return }
-            Task { await sendFile(at: url) }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            guard case let .success(urls) = result, !urls.isEmpty else { return }
+            Task { await sendFileBatch(urls) }
         }
         .onDisappear { controller.resetBeamState() }
     }
@@ -45,9 +55,13 @@ struct SendToMacView: View {
     private var fileCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             VStack(spacing: 0) {
-                PhotosPicker(selection: $pickedPhoto, matching: .any(of: [.images, .videos])) {
-                    PickerRow(icon: "photo.on.rectangle.angled", title: "Photo or Video",
-                              subtitle: "From your library")
+                PhotosPicker(
+                    selection: $pickedPhotos,
+                    maxSelectionCount: 30,
+                    matching: .any(of: [.images, .videos])
+                ) {
+                    PickerRow(icon: "photo.on.rectangle.angled", title: "Photos & Videos",
+                              subtitle: "Pick several — they send in one go")
                 }
                 .buttonStyle(.plain)
 
@@ -89,20 +103,33 @@ struct SendToMacView: View {
             EmptyView()
         case let .sending(progress):
             VStack(alignment: .leading, spacing: 6) {
-                Text("Sending… \(Int(progress * 100))%")
+                Text(batchTotal > 1
+                    ? "Sending \(batchIndex) of \(batchTotal)…"
+                    : "Sending… \(Int(progress * 100))%")
                     .font(.fiple(13, .medium))
                     .foregroundStyle(Theme.Palette.secondary)
-                ProgressView(value: progress).tint(Theme.Palette.brand)
+                // For a batch the bar covers the whole run, not just this file.
+                ProgressView(value: batchTotal > 1
+                    ? (Double(batchIndex - 1) + progress) / Double(batchTotal)
+                    : progress)
+                    .tint(Theme.Palette.brand)
             }
         case let .done(fileName):
             Label {
-                Text("“\(fileName)” saved to Downloads").font(.fiple(14, .medium))
+                Text(batchTotal > 1
+                    ? "\(batchTotal - batchFailed) of \(batchTotal) saved to Downloads"
+                    : "“\(fileName)” saved to Downloads")
+                    .font(.fiple(14, .medium))
             } icon: {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.Palette.brand)
+                Image(systemName: batchFailed == 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .foregroundStyle(batchFailed == 0 ? Theme.Palette.brand : .orange)
             }
         case let .failed(message):
             Label {
-                Text(message).font(.fiple(14))
+                Text(batchTotal > 1 && batchTotal > batchFailed
+                    ? "\(batchTotal - batchFailed) of \(batchTotal) saved — the rest failed"
+                    : message)
+                    .font(.fiple(14))
             } icon: {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
@@ -111,21 +138,40 @@ struct SendToMacView: View {
 
     // MARK: Sending
 
-    private func sendPicked(_ item: PhotosPickerItem) async {
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        // Best-available name: the photo library rarely exposes one, so fall
-        // back to a timestamped name with the right extension.
-        let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+    private func sendPickedBatch(_ items: [PhotosPickerItem]) async {
+        batchTotal = items.count
+        batchFailed = 0
         let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
-        await controller.beamFile(name: "iPhone \(stamp).\(ext)", data: data)
-        pickedPhoto = nil
+        for (index, item) in items.enumerated() {
+            batchIndex = index + 1
+            // Best-available name: the photo library rarely exposes one, so
+            // fall back to a timestamped name (indexed within the batch).
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                batchFailed += 1
+                continue
+            }
+            let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
+            let suffix = items.count > 1 ? "-\(index + 1)" : ""
+            await controller.beamFile(name: "iPhone \(stamp)\(suffix).\(ext)", data: data)
+            if case .failed = controller.beamState { batchFailed += 1 }
+        }
+        pickedPhotos = []
     }
 
-    private func sendFile(at url: URL) async {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else { return }
-        await controller.beamFile(name: url.lastPathComponent, data: data)
+    private func sendFileBatch(_ urls: [URL]) async {
+        batchTotal = urls.count
+        batchFailed = 0
+        for (index, url) in urls.enumerated() {
+            batchIndex = index + 1
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url) else {
+                batchFailed += 1
+                continue
+            }
+            await controller.beamFile(name: url.lastPathComponent, data: data)
+            if case .failed = controller.beamState { batchFailed += 1 }
+        }
     }
 }
 
