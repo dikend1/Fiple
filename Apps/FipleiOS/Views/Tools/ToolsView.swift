@@ -2,13 +2,12 @@ import FipleKit
 import SwiftUI
 
 /// The Tools tab: the phone→Mac utilities that don't need to crowd Home —
-/// Send to Mac, Scan to Mac, and Smart Trash. Home keeps just the daily
+/// Send to Mac and Smart Trash. Home keeps just the daily
 /// essentials (connection, Terminal, workspaces, Fiple Bar).
 struct ToolsView: View {
     let controller: RemoteController
 
     @State private var showSendSheet = false
-    @State private var showScanSheet = false
 
     var body: some View {
         NavigationStack {
@@ -16,16 +15,10 @@ struct ToolsView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     PageTitle("Tools")
 
-                    VStack(spacing: 0) {
-                        toolRow(icon: "square.and.arrow.up", title: "Send to Mac",
-                                subtitle: "Files to Downloads, text to clipboard",
-                                enabled: controller.isConnected) { showSendSheet = true }
-                        Divider().padding(.leading, 52)
-                        toolRow(icon: "qrcode.viewfinder", title: "Scan to Mac",
-                                subtitle: "QR or text from camera to clipboard",
-                                enabled: controller.isConnected) { showScanSheet = true }
-                    }
-                    .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+                    toolRow(icon: "square.and.arrow.up", title: "Send to Mac",
+                            subtitle: "Files to Downloads, text to clipboard",
+                            enabled: controller.isConnected) { showSendSheet = true }
+                        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
 
                     if !controller.trashCandidates.isEmpty {
                         trashRow
@@ -46,7 +39,6 @@ struct ToolsView: View {
             .toolbar(.hidden, for: .navigationBar)
         }
         .sheet(isPresented: $showSendSheet) { SendToMacView(controller: controller) }
-        .sheet(isPresented: $showScanSheet) { ScanToMacView(controller: controller) }
     }
 
     private var trashRow: some View {
