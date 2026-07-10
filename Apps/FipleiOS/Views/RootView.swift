@@ -14,6 +14,11 @@ struct RootView: View {
     /// reappear while the Mac is still discoverable. Reset once connected.
     @State private var userDismissedPairing = false
 
+    /// One-time welcome on first launch; the pairing sheet holds back until
+    /// it's dismissed so the two presentations never fight.
+    @AppStorage("fiple.hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var showWelcome = false
+
     var body: some View {
         MainTabView(controller: controller)
             .overlay { GestureOverlay(onGesture: handleGesture) }
@@ -57,7 +62,23 @@ struct RootView: View {
                 showPairing = true
                 controller.pairingRequested = false
             }
-            .onAppear { syncPairingSheet(controller.phase) }
+            .fullScreenCover(isPresented: $showWelcome, onDismiss: {
+                // Now that welcome is out of the way, let pairing appear.
+                syncPairingSheet(controller.phase)
+            }) {
+                WelcomeView {
+                    hasSeenWelcome = true
+                    showWelcome = false
+                }
+            }
+            .onAppear {
+                #if DEBUG
+                // "-welcome": force the first-run welcome, for screenshots.
+                if ProcessInfo.processInfo.arguments.contains("-welcome") { showWelcome = true }
+                #endif
+                if !hasSeenWelcome { showWelcome = true }
+                syncPairingSheet(controller.phase)
+            }
             .onChange(of: controller.phase) { _, phase in syncPairingSheet(phase) }
     }
 
@@ -74,6 +95,8 @@ struct RootView: View {
     }
 
     private func syncPairingSheet(_ phase: RemoteController.Phase) {
+        // Welcome owns the screen on first launch; pairing shows on dismiss.
+        guard !showWelcome else { return }
         switch phase {
         case .readyToPair, .connecting:
             if !userDismissedPairing { showPairing = true }
