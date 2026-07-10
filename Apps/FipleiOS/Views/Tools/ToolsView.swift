@@ -30,22 +30,19 @@ struct ToolsView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                     PageTitle("Tools")
 
-                    LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
-                        Button {
-                            Task { await beginTerminal() }
-                        } label: {
-                            ToolCard(
-                                icon: "terminal.fill",
-                                tint: Theme.Palette.label,
-                                title: "Terminal",
-                                detail: "Run a shell",
-                                caption: "On your Mac"
-                            )
-                        }
-                        .buttonStyle(ToolCardPressStyle())
-                        .disabled(controller.terminalTarget == nil)
-                        .opacity(controller.terminalTarget == nil ? 0.45 : 1)
+                    // Terminal is the flagship — a full-width hero row. The two
+                    // beam/cleanup tools pair up beneath it, so three tools
+                    // never leave an orphan hole in a 2-up grid.
+                    Button {
+                        Task { await beginTerminal() }
+                    } label: {
+                        TerminalHeroCard()
+                    }
+                    .buttonStyle(ToolCardPressStyle())
+                    .disabled(controller.terminalTarget == nil)
+                    .opacity(controller.terminalTarget == nil ? 0.45 : 1)
 
+                    LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
                         Button {
                             showSendSheet = true
                         } label: {
@@ -209,7 +206,7 @@ private struct ToolCard: View {
                 }
             }
 
-            Spacer(minLength: Theme.Spacing.lg)
+            Spacer(minLength: Theme.Spacing.sm)
 
             Text(title)
                 .font(.fiple(16, .semibold))
@@ -225,7 +222,44 @@ private struct ToolCard: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(height: 168)
+        .frame(height: 148)
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Theme.Palette.hairline)
+        )
+    }
+}
+
+/// The Terminal hero: a full-width row led by a miniature "terminal window"
+/// mark (black squircle, mono `>_`) — the one place the app's dark terminal
+/// identity shows on this page.
+private struct TerminalHeroCard: View {
+    var body: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.black)
+                .frame(width: 48, height: 48)
+                .overlay(
+                    Text(">_")
+                        .font(.system(size: 17, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Theme.Palette.brand)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Terminal")
+                    .font(.fiple(17, .semibold))
+                    .foregroundStyle(Theme.Palette.label)
+                Text("Run a shell on your Mac")
+                    .font(.fiple(13))
+                    .foregroundStyle(Theme.Palette.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.fiple(13, .semibold))
+                .foregroundStyle(Theme.Palette.secondary)
+        }
+        .padding(Theme.Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
