@@ -49,9 +49,12 @@ public struct StaleFileScanner: Sendable {
         return added
     }
 
-    /// Drops candidates whose file was opened/modified after candidacy or no
-    /// longer exists at the recorded path. Also run right before deadline
-    /// enforcement so a just-used file is never trashed.
+    /// Drops candidates that no longer qualify: the file was opened/modified
+    /// after candidacy, no longer exists at the recorded path, or isn't stale
+    /// under the *current* threshold (the user raised it — e.g. 15 → 90 days —
+    /// so files listed by the old policy must leave immediately, not linger
+    /// toward a deadline they no longer deserve). Also run right before
+    /// deadline enforcement so a just-used file is never trashed.
     public func evictUsedOrMissing(store: TrashCandidateStore, now: Date) {
         var evicted: Set<UUID> = []
         for candidate in store.candidates {
@@ -62,7 +65,12 @@ public struct StaleFileScanner: Sendable {
                 evicted.insert(candidate.id) // gone or unreadable → out
                 continue
             }
-            if let used = Self.lastUsed(values), used > candidate.addedAt {
+            guard let used = Self.lastUsed(values) else { continue }
+            if used > candidate.addedAt {
+                evicted.insert(candidate.id)
+            } else if now.timeIntervalSince(used) < stalenessThreshold {
+                // Under an unchanged threshold this can't fire (staleness only
+                // grows while unused) — it catches a raised threshold.
                 evicted.insert(candidate.id)
             }
         }
