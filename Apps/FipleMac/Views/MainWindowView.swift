@@ -13,6 +13,10 @@ struct MainWindowView: View {
     @State private var section: SidebarSection = .workspaces
     @State private var sidebarVisible = true
 
+    /// One-time welcome sheet on first launch.
+    @AppStorage("fiple.hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var showWelcome = false
+
     private let sidebarWidth: CGFloat = 250
 
     var body: some View {
@@ -39,6 +43,21 @@ struct MainWindowView: View {
         .frame(minWidth: 720, minHeight: 640)
         .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
+        .sheet(isPresented: $showWelcome) {
+            WelcomeSheet {
+                hasSeenWelcome = true
+                showWelcome = false
+            }
+            // Content pages resolve in light appearance; keep the sheet in step.
+            .environment(\.colorScheme, .light)
+        }
+        .onAppear {
+            #if DEBUG
+            // "-welcome": force the first-run welcome, for screenshots.
+            if ProcessInfo.processInfo.arguments.contains("-welcome") { showWelcome = true }
+            #endif
+            if !hasSeenWelcome { showWelcome = true }
+        }
     }
 
     /// Re-run a Recent entry: re-dispatch a single action, or look up the
