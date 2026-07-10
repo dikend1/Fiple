@@ -44,8 +44,6 @@ struct SendToMacView: View {
 
     private var fileCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            SectionHeader("File to Downloads")
-
             VStack(spacing: 0) {
                 PhotosPicker(selection: $pickedPhoto, matching: .any(of: [.images, .videos])) {
                     PickerRow(icon: "photo.on.rectangle.angled", title: "Photo or Video",
@@ -70,6 +68,12 @@ struct SendToMacView: View {
                 }
             }
             .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+
+            Text("Files land in the Downloads folder on your Mac. Images are also copied to its clipboard — ready to ⌘V.")
+                .font(.fiple(12))
+                .foregroundStyle(Theme.Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
         }
     }
 

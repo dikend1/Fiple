@@ -9,7 +9,13 @@ struct MainTabView: View {
 
     enum Tab: Hashable { case home, tools, recent, settings }
 
+    #if DEBUG
+    // "-demo-tools" (with -demo): open on the Tools tab, for screenshots.
+    @State private var selection: Tab =
+        ProcessInfo.processInfo.arguments.contains("-demo-tools") ? .tools : .home
+    #else
     @State private var selection: Tab = .home
+    #endif
 
     var body: some View {
         // App Store-style bar on iOS 26: shrinks to a compact pill while
