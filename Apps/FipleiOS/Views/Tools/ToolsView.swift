@@ -16,7 +16,7 @@ struct ToolsView: View {
                     PageTitle("Tools")
 
                     toolRow(icon: "square.and.arrow.up", title: "Send to Mac",
-                            subtitle: "Files to Downloads, text to clipboard",
+                            subtitle: "Photos and files land in Downloads",
                             enabled: controller.isConnected) { showSendSheet = true }
                         .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16))
 
