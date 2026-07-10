@@ -27,7 +27,9 @@ final class ShareSender {
 
     /// The same key the main app stores its reconnect token under.
     private static let tokenKey = "fiple.token"
-    private static let chunkSize = 1024 * 1024
+    // 4 MB raw → ~5.4 MB once base64'd into the JSON frame, under the 8 MB
+    // frame cap; matches the main app's beam chunk size.
+    private static let chunkSize = 4 * 1024 * 1024
 
     private enum Payload {
         case file(URL)

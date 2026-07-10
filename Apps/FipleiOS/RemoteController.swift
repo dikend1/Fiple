@@ -490,7 +490,10 @@ final class RemoteController {
     /// 15s timeout from a *previous* transfer can never kill the next one's wait.
     @ObservationIgnored private var beamWaitID: UUID?
 
-    private static let beamChunkSize = 1024 * 1024
+    // 4 MB raw is the sweet spot: base64 in the JSON frame inflates it to
+    // ~5.4 MB, safely under FrameCodec's 8 MB cap, with 4× fewer
+    // encode/await cycles than 1 MB chunks.
+    private static let beamChunkSize = 4 * 1024 * 1024
 
     /// Streams a file to the Mac's Downloads in ~1 MB chunks, driving
     /// `beamState` for the progress UI. One transfer at a time.
