@@ -512,7 +512,9 @@ final class RemoteController {
                 var sent = 0
                 while sent < data.count {
                     let end = min(sent + Self.beamChunkSize, data.count)
-                    try await peer.send(ClientMessage.beamChunk(
+                    // Chunks go as raw binary frames — no base64/JSON on the
+                    // hot path (BeamBinary); begin/end stay JSON.
+                    try await peer.sendRaw(BeamBinary.encodeChunk(
                         transferID: transferID, bytes: data[sent ..< end]
                     ))
                     sent = end

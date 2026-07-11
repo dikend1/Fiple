@@ -202,6 +202,13 @@ final class ServerController {
         await peer.startAuthTimeout(.seconds(Self.authTimeoutSeconds))
         do {
             for try await payload in await peer.messages {
+                // Beam chunks travel as raw binary (base64-in-JSON is too slow
+                // for the hot path) — branch on the magic byte before the JSON
+                // decoder. Same `process` path, so auth gating is identical.
+                if let (transferID, bytes) = BeamBinary.decodeChunk(payload) {
+                    await process(.beamChunk(transferID: transferID, bytes: bytes), on: peer)
+                    continue
+                }
                 // A newer phone may send message types this build doesn't know;
                 // skipping them keeps the session alive instead of tearing it
                 // down (and looping: reconnect → same message → drop again).
