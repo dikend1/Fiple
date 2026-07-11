@@ -20,6 +20,31 @@ struct BeamWireTests {
         }
     }
 
+    @Test("Binary beam chunks round-trip and never collide with JSON")
+    func binaryChunkRoundTrip() throws {
+        let id = UUID()
+        let bytes = Data((0 ..< 100_000).map { UInt8(truncatingIfNeeded: $0) })
+        let payload = BeamBinary.encodeChunk(transferID: id, bytes: bytes)
+
+        let decoded = try #require(BeamBinary.decodeChunk(payload))
+        #expect(decoded.transferID == id)
+        #expect(decoded.bytes == bytes)
+
+        // Round-trips through the frame codec's slicing too (non-zero indices).
+        let framed = try FrameCodec.frame(payload)
+        let sliced = framed.dropFirst(4)
+        let reDecoded = try #require(BeamBinary.decodeChunk(Data(sliced)))
+        #expect(reDecoded.bytes == bytes)
+
+        // A JSON payload must never be mistaken for a binary chunk…
+        let json = try MessageCodec.encode(ClientMessage.beamEnd(transferID: id))
+        #expect(BeamBinary.decodeChunk(json) == nil)
+        // …and a binary chunk must not be decodable as a known JSON message.
+        #expect(throws: Error.self) {
+            try MessageCodec.decodeIfKnown(ClientMessage.self, from: payload)
+        }
+    }
+
     @Test("beamResult round-trips with and without a message")
     func serverRoundTrip() throws {
         let id = UUID()

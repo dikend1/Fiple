@@ -188,7 +188,8 @@ final class ShareSender {
             var sent: Int64 = 0
             while sent < totalBytes {
                 guard let chunk = try handle.read(upToCount: Self.chunkSize), !chunk.isEmpty else { break }
-                try await peer.send(ClientMessage.beamChunk(transferID: transferID, bytes: chunk))
+                // Raw binary frame — no base64/JSON on the hot path.
+                try await peer.sendRaw(BeamBinary.encodeChunk(transferID: transferID, bytes: chunk))
                 sent += Int64(chunk.count)
                 phase = .sending(Double(sent) / Double(totalBytes))
             }
