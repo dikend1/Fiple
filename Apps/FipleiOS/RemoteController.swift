@@ -65,8 +65,52 @@ final class RemoteController {
     /// first, capped and persisted so it survives relaunch.
     private(set) var recents: [LaunchRecord] = []
 
+    /// Fiple Pro entitlement + purchase state. Injected so it can be shared with
+    /// the paywall and stubbed in tests/previews.
+    let entitlements: EntitlementStore
+
+    /// Set when the user taps a locked workspace; the UI presents the paywall and
+    /// resets it on dismiss.
+    var paywallRequested = false
+
+    init(entitlements: EntitlementStore = EntitlementStore()) {
+        self.entitlements = entitlements
+    }
+
     /// Workspaces are multi-action tiles; single-action tiles are "quick access".
     var workspaces: [Tile] { tiles.filter(\.isWorkspace) }
+
+    #if DEBUG
+    /// Debug-only override of the free limit, so the locked state can be exercised
+    /// without needing 9+ real items. `nil` uses the default (8).
+    var debugFreeLimitOverride: Int?
+    #endif
+
+    /// Free-tier limits per gated phone surface. The Fiple Bar (quick-launch apps)
+    /// is the lightweight free hook so it allows more; workspace presets are the
+    /// premium value, so far fewer are free.
+    static let freeFipleBarLimit = 8
+    static let freeWorkspaceLimit = 2
+
+    /// Applies the per-surface base limit, or the DEBUG override when set.
+    private func freeLimit(_ base: Int) -> Int {
+        #if DEBUG
+        if let override = debugFreeLimitOverride { return override }
+        #endif
+        return base
+    }
+
+    /// Fiple Bar actions locked behind Fiple Pro — the ones past the free limit
+    /// while not Pro. The first 8 quick-launch apps stay free.
+    var lockedFipleBarActionIDs: Set<UUID> {
+        FreeTierGate.lockedIDs(fipleBar, freeLimit: freeLimit(Self.freeFipleBarLimit), isPro: entitlements.isPro)
+    }
+
+    /// Workspace presets locked behind Fiple Pro — past the free limit while not
+    /// Pro. The first 2 workspaces stay free.
+    var lockedWorkspaceIDs: Set<UUID> {
+        FreeTierGate.lockedIDs(workspaces, freeLimit: freeLimit(Self.freeWorkspaceLimit), isPro: entitlements.isPro)
+    }
 
     /// Every individual action across all tiles, de-duplicated — the Quick
     /// Access row. Mirrors the Mac's action catalogue, derived from the same
@@ -112,6 +156,10 @@ final class RemoteController {
         // exercised without a paired Mac. Debug builds only.
         if ProcessInfo.processInfo.arguments.contains("-demo") {
             loadDemoFixture()
+            // Auto-present the paywall for App Store review screenshots.
+            if ProcessInfo.processInfo.arguments.contains("-paywall") {
+                paywallRequested = true
+            }
             return
         }
         #endif
@@ -423,6 +471,13 @@ final class RemoteController {
 
     func run(_ tile: Tile) async {
         guard phase == .connected, let peer else { return }
+        // Locked workspace (past the free limit, not Pro): show the paywall
+        // instead of running it.
+        if lockedWorkspaceIDs.contains(tile.id) {
+            FipleLog.execution.info("tile '\(tile.name)' is locked — presenting paywall")
+            paywallRequested = true
+            return
+        }
         FipleLog.execution.info("triggering tile '\(tile.name)'")
         runningTileID = tile.id
         runStartedAt[tile.id] = Date()
@@ -440,6 +495,12 @@ final class RemoteController {
     /// Trigger a single Fiple Bar action on the Mac.
     func runAction(_ action: Action) async {
         guard phase == .connected, let peer else { return }
+        // Locked quick-launch app (past the free limit, not Pro): show the paywall.
+        if lockedFipleBarActionIDs.contains(action.id) {
+            FipleLog.execution.info("action '\(action.displayLabel)' is locked — presenting paywall")
+            paywallRequested = true
+            return
+        }
         FipleLog.execution.info("triggering action: \(action.displayLabel)")
         runningActionID = action.id
         runStartedAt[action.id] = Date()
