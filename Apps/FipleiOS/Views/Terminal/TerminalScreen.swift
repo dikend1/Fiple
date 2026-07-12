@@ -126,10 +126,14 @@ struct TerminalScreen: View {
                 // typed on the inline field wins, else the initial typed one.
                 if let corrected = pendingRememberPassword {
                     didRemember = true
+                    FipleLog.execution.info("terminal: remembering corrected password")
                     TerminalCredentialStore.save(corrected)
                 } else if rememberOnSuccess {
                     didRemember = true
+                    FipleLog.execution.info("terminal: remembering typed password")
                     TerminalCredentialStore.save(masterPassword)
+                } else {
+                    FipleLog.execution.info("terminal: ready, nothing to remember (biometric session)")
                 }
             }
             if case .failed = phase, session.lastAuthFailReason == .badPassword {
