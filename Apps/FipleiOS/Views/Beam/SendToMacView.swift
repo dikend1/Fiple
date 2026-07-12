@@ -17,6 +17,10 @@ struct SendToMacView: View {
     @State private var batchTotal = 0
     @State private var batchIndex = 0
     @State private var batchFailed = 0
+    /// True from the moment the picker returns until the first bytes move —
+    /// the photo-library export (or iCloud download) can take seconds, and
+    /// with no status row it reads as a hang.
+    @State private var preparing = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -93,6 +97,7 @@ struct SendToMacView: View {
 
 
     private var hasBeamStatus: Bool {
+        if preparing { return true }
         if case .idle = controller.beamState { return false }
         return true
     }
@@ -100,7 +105,16 @@ struct SendToMacView: View {
     @ViewBuilder private var beamStatus: some View {
         switch controller.beamState {
         case .idle:
-            EmptyView()
+            if preparing {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text(batchTotal > 1
+                        ? "Preparing \(batchTotal) items…"
+                        : "Preparing…")
+                        .font(.fiple(13, .medium))
+                        .foregroundStyle(Theme.Palette.secondary)
+                }
+            }
         case let .sending(progress):
             VStack(alignment: .leading, spacing: 6) {
                 Text(batchTotal > 1
@@ -138,18 +152,36 @@ struct SendToMacView: View {
 
     // MARK: Sending
 
+    /// How many photo-library exports run concurrently. The export (and any
+    /// iCloud download) dominates a LAN batch's wall clock now that the wire
+    /// path is binary; three in flight hides most of it without holding an
+    /// unbounded number of originals in memory.
+    private static let loadWindow = 3
+
     private func sendPickedBatch(_ items: [PhotosPickerItem]) async {
         batchTotal = items.count
+        batchIndex = 1
         batchFailed = 0
+        preparing = true
+        defer { preparing = false }
         let stamp = Date().formatted(.iso8601.year().month().day().timeSeparator(.omitted).time(includingFractionalSeconds: false))
-        // Pipeline: the next item exports from the photo library (or downloads
-        // from iCloud) WHILE the current one streams to the Mac — otherwise
-        // every photo pays load + send back to back.
-        var pendingLoad = loadTask(for: items[0])
+        // Pipeline: exports run ahead of the wire — up to `loadWindow` items
+        // load from the photo library (or download from iCloud) WHILE earlier
+        // ones stream to the Mac. Without this every photo pays load + send
+        // back to back and the first seconds look frozen.
+        var loads: [Int: Task<Data?, Never>] = [:]
+        func topUpLoads(from index: Int) {
+            for i in index ..< min(index + Self.loadWindow, items.count) where loads[i] == nil {
+                loads[i] = loadTask(for: items[i])
+            }
+        }
+        topUpLoads(from: 0)
         for (index, item) in items.enumerated() {
             batchIndex = index + 1
-            let data = await pendingLoad.value
-            if index + 1 < items.count { pendingLoad = loadTask(for: items[index + 1]) }
+            guard let load = loads.removeValue(forKey: index) else { continue }
+            let data = await load.value
+            preparing = false
+            topUpLoads(from: index + 1)
             guard let data else {
                 batchFailed += 1
                 continue
