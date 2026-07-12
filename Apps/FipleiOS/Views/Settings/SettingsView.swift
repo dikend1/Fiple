@@ -166,6 +166,13 @@ struct SettingsView: View {
             GroupLabel("Debug")
 
             VStack(spacing: 0) {
+                SettingsRow(icon: "sparkles", title: "Replay onboarding") {
+                    // Clear the seen-flag and ask RootView to present welcome
+                    // again (it shows once this Settings tab is left).
+                    UserDefaults.standard.removeObject(forKey: "fiple.hasSeenWelcome")
+                    controller.replayWelcomeRequested = true
+                }
+                rowDivider
                 SettingsRow(icon: "arrow.counterclockwise", title: "Reset Pro (back to free)") {
                     controller.entitlements.debugReset()
                 }
