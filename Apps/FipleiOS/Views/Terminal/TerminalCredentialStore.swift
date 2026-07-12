@@ -18,6 +18,7 @@ enum TerminalCredentialStore {
     static func hasStoredPassword() -> Bool {
         var query = baseQuery()
         query[kSecReturnData as String] = false
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         let status = SecItemCopyMatching(query as CFDictionary, nil)
         if status != errSecSuccess {
             FipleLog.execution.info("terminal credential: none stored (status \(status))")
@@ -28,18 +29,27 @@ enum TerminalCredentialStore {
     /// Saves (or replaces) the password. Returns whether it persisted.
     @discardableResult
     static func save(_ password: String) -> Bool {
-        let deleteStatus = SecItemDelete(baseQuery() as CFDictionary)
+        // Purge EVERY stored variant first — synchronizable and not — so a stale
+        // item (e.g. one an older build synced to iCloud Keychain) can't be the
+        // one a later read returns. The base query matched only non-sync items,
+        // which is exactly how a wrong-but-present password survived a "save".
+        clearAllVariants()
+
         var query = baseQuery()
         query[kSecValueData as String] = Data(password.utf8)
         query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        query[kSecAttrSynchronizable as String] = false
         let addStatus = SecItemAdd(query as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
-            FipleLog.execution.error("terminal credential: SAVE FAILED — add status \(addStatus) (delete was \(deleteStatus))")
+            FipleLog.execution.error("terminal credential: SAVE FAILED — add status \(addStatus)")
             return false
         }
-        let verified = hasStoredPassword()
-        FipleLog.execution.info("terminal credential: saved, read-back \(verified ? "ok" : "FAILED")")
-        return verified
+        // Verify by CONTENT, not mere presence: re-read and compare bytes, so
+        // this can never again report success while a different value is stored.
+        let readBack = readPassword()
+        let ok = readBack == password
+        FipleLog.execution.info("terminal credential: saved len \(password.count), read-back \(ok ? "matches" : "MISMATCH len \(readBack?.count ?? -1)")")
+        return ok
     }
 
     /// Authenticates with Face ID / Touch ID (passcode fallback), then returns
@@ -76,15 +86,29 @@ enum TerminalCredentialStore {
     /// Forgets the remembered password (e.g. on a wrong-password failure).
     static func clear() {
         FipleLog.execution.notice("terminal credential: CLEARED (wrong-password path)")
-        SecItemDelete(baseQuery() as CFDictionary)
+        clearAllVariants()
+    }
+
+    /// Deletes the item in both synchronizable states, so nothing lingers to be
+    /// read back later. `kSecAttrSynchronizableAny` matches sync + non-sync.
+    private static func clearAllVariants() {
+        var query = baseQuery()
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+        SecItemDelete(query as CFDictionary)
     }
 
     private static func readPassword() -> String? {
         var query = baseQuery()
         query[kSecReturnData as String] = true
+        // Match either sync state — but there should only ever be the one
+        // non-sync item `save` writes now.
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else {
+            FipleLog.execution.info("terminal credential: read returned status \(status)")
+            return nil
+        }
         return String(decoding: data, as: UTF8.self)
     }
 
