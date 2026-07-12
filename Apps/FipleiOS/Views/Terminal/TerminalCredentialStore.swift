@@ -1,3 +1,4 @@
+import FipleKit
 import Foundation
 import LocalAuthentication
 import Security
@@ -17,18 +18,28 @@ enum TerminalCredentialStore {
     static func hasStoredPassword() -> Bool {
         var query = baseQuery()
         query[kSecReturnData as String] = false
-        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
+        let status = SecItemCopyMatching(query as CFDictionary, nil)
+        if status != errSecSuccess {
+            FipleLog.execution.info("terminal credential: none stored (status \(status))")
+        }
+        return status == errSecSuccess
     }
 
     /// Saves (or replaces) the password. Returns whether it persisted.
     @discardableResult
     static func save(_ password: String) -> Bool {
-        SecItemDelete(baseQuery() as CFDictionary)
+        let deleteStatus = SecItemDelete(baseQuery() as CFDictionary)
         var query = baseQuery()
         query[kSecValueData as String] = Data(password.utf8)
         query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        guard SecItemAdd(query as CFDictionary, nil) == errSecSuccess else { return false }
-        return hasStoredPassword()
+        let addStatus = SecItemAdd(query as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            FipleLog.execution.error("terminal credential: SAVE FAILED — add status \(addStatus) (delete was \(deleteStatus))")
+            return false
+        }
+        let verified = hasStoredPassword()
+        FipleLog.execution.info("terminal credential: saved, read-back \(verified ? "ok" : "FAILED")")
+        return verified
     }
 
     /// Authenticates with Face ID / Touch ID (passcode fallback), then returns
@@ -48,13 +59,23 @@ enum TerminalCredentialStore {
                     cont.resume(returning: ok)
                 }
             }
-            guard passed else { return nil }
+            guard passed else {
+                FipleLog.execution.info("terminal credential: biometric auth declined/failed")
+                return nil
+            }
+        } else {
+            FipleLog.execution.info("terminal credential: no auth policy available (\(policyError?.localizedDescription ?? "?")) — returning without prompt")
         }
-        return readPassword()
+        let password = readPassword()
+        if password == nil {
+            FipleLog.execution.error("terminal credential: auth passed but READ FAILED")
+        }
+        return password
     }
 
     /// Forgets the remembered password (e.g. on a wrong-password failure).
     static func clear() {
+        FipleLog.execution.notice("terminal credential: CLEARED (wrong-password path)")
         SecItemDelete(baseQuery() as CFDictionary)
     }
 
