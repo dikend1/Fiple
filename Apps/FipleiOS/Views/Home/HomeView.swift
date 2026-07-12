@@ -10,7 +10,6 @@ struct HomeView: View {
     /// matches the mockup without nesting a second settings navigation stack.
     var onOpenSettings: () -> Void = {}
 
-
     var body: some View {
         NavigationStack {
             #if DEBUG
@@ -92,8 +91,11 @@ struct HomeView: View {
                         ForEach(items) { tile in
                             WorkspaceCardView(
                                 tile: tile,
-                                isRunning: controller.runningTileID == tile.id
+                                isRunning: controller.runningTileID == tile.id,
+                                isLocked: controller.lockedWorkspaceIDs.contains(tile.id)
                             ) {
+                                // run() itself gates: a locked tile presents
+                                // the paywall instead of launching.
                                 Task { await controller.run(tile) }
                             }
                             .frame(width: 200)
@@ -108,7 +110,11 @@ struct HomeView: View {
     // MARK: Quick Access
 
     @ViewBuilder private var quickAccess: some View {
-        let items = controller.fipleBar
+        // Free actions first, locked (Pro) ones pushed to the end, so the paid
+        // tiles land on the later pages instead of interleaving with free ones.
+        let lockedIDs = controller.lockedFipleBarActionIDs
+        let raw = controller.fipleBar
+        let items = raw.filter { !lockedIDs.contains($0.id) } + raw.filter { lockedIDs.contains($0.id) }
         // The section is always present — when there's nothing yet it shows a
         // grid of empty slots (like the Mac's Fiple Bar) instead of collapsing
         // to a blank area, so the user can see where their apps will live.
@@ -126,11 +132,13 @@ struct HomeView: View {
             } else {
                 PagedTileGrid(items: items) { action in
                     Button {
+                        // runAction() gates: a locked action presents the paywall.
                         Task { await controller.runAction(action) }
                     } label: {
                         QuickAccessTile(
                             item: QuickAction(action: action, tileID: action.id),
-                            isRunning: controller.runningActionID == action.id
+                            isRunning: controller.runningActionID == action.id,
+                            isLocked: lockedIDs.contains(action.id)
                         )
                     }
                     .buttonStyle(QuickTilePressStyle())
@@ -138,7 +146,6 @@ struct HomeView: View {
             }
         }
     }
-
 }
 
 /// Height of one icon tile (icon + label + padding), so empty placeholder slots

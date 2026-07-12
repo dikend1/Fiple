@@ -1,12 +1,15 @@
 import FipleKit
 import SwiftUI
 
-/// A workspace preset (a multi-action ``Tile``) rendered as a tall gradient card:
-/// real icon, name, tagline, a stat row (apps / sites / files) and a Run button
-/// that triggers it on the Mac.
+/// A workspace preset (a multi-action ``Tile``) rendered as a compact gradient
+/// card: real icon, name, action count and a Run button that triggers it on
+/// the Mac. A locked card (past the free limit, no Pro) dims its content,
+/// wears a PRO chip, and its button opens the paywall instead of running.
 struct WorkspaceCardView: View {
     let tile: Tile
     var isRunning: Bool = false
+    /// Locked behind Fiple Pro — greyed, badged, and the action opens the paywall.
+    var isLocked: Bool = false
     let onRun: () -> Void
 
     private var accent: Accent { Accent(hex: tile.colorHex) }
@@ -23,6 +26,7 @@ struct WorkspaceCardView: View {
             // A soft coloured drop-shadow lifts the icon off the card without
             // the muddy halo a blurred backing plate created.
             .shadow(color: base.opacity(0.25), radius: 6, y: 3)
+            .opacity(isLocked ? 0.5 : 1)
 
             Spacer(minLength: 0)
 
@@ -41,10 +45,12 @@ struct WorkspaceCardView: View {
                         .foregroundStyle(Theme.Palette.secondary)
                         .lineLimit(1)
                 }
+                .opacity(isLocked ? 0.5 : 1)
                 Spacer(minLength: 0)
                 runButton
             }
         }
+        .overlay(alignment: .topTrailing) { if isLocked { proBadge } }
         .padding(Theme.Spacing.lg)
         // A FIXED height, not a minimum: no tile content can stretch the card
         // or, via carousel equalisation, its neighbours.
@@ -82,10 +88,16 @@ struct WorkspaceCardView: View {
 
     // MARK: Run button — the card's signature affordance
 
+    /// Run (free) or unlock (locked → the paywall, via the same `onRun`, which
+    /// the controller gates). Stays tappable and full-opacity when locked.
     private var runButton: some View {
         Button(action: onRun) {
             Group {
-                if isRunning {
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.fiple(14, .bold))
+                        .foregroundStyle(.white)
+                } else if isRunning {
                     ProgressView()
                         .controlSize(.small)
                         .tint(.white)
@@ -103,9 +115,23 @@ struct WorkspaceCardView: View {
         }
         .buttonStyle(RunButtonStyle())
         .disabled(isRunning)
-        .accessibilityLabel(isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
+        .accessibilityLabel(
+            isLocked ? "Unlock \(tile.name) with Fiple Pro"
+                     : (isRunning ? "Running \(tile.name)" : "Run \(tile.name)")
+        )
     }
 
+    /// Small "PRO" lock chip in the corner of a locked card.
+    private var proBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "lock.fill").font(.fiple(9, .bold))
+            Text("PRO").font(.system(size: 10, weight: .heavy, design: .rounded))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Theme.Palette.label.opacity(0.85), in: Capsule())
+    }
 }
 
 /// A tactile press for the run button — a firm scale-down with a touch of dim,

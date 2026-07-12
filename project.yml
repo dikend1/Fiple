@@ -15,6 +15,10 @@ packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     from: "1.2.0"
+  # RevenueCat (StoreKit 2 receipt backend) — powers the Fiple Pro paywall.
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios
+    from: "5.0.0"
 
 settings:
   base:
@@ -60,6 +64,7 @@ targets:
     dependencies:
       - package: FipleKit
       - package: SwiftTerm
+      - package: RevenueCat
       # Share-sheet extension: "Share → Fiple" beams files/text to the Mac
       # without opening the app.
       - target: FipleShare
