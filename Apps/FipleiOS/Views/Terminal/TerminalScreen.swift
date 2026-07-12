@@ -62,12 +62,13 @@ struct TerminalScreen: View {
     /// name never refers to two different shells within one screen's lifetime.
     @State private var nextSessionNumber = 1
     @State private var didRemember = false
-    /// A password the user typed on the inline retry field, to remember once it
-    /// authenticates (may differ from the one passed in).
-    @State private var retryPassword = ""
-    @State private var showRetryPassword = false
-    @FocusState private var passwordFocused: Bool
+    /// A password the user typed (first-time unlock or the retry field), to
+    /// reuse for new tabs and remember once it authenticates.
     @State private var pendingRememberPassword: String?
+    /// True when the screen opened without a password (first-time or Face ID
+    /// declined) and must collect one via ``TerminalUnlockView`` before it
+    /// connects, instead of the old plain Form sheet.
+    @State private var awaitingFirstUnlock = false
     /// The Pro paywall, presented over the terminal when a second parallel
     /// session is requested without Pro.
     @State private var showPaywall = false
@@ -90,7 +91,17 @@ struct TerminalScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let tab = activeTab {
+            if awaitingFirstUnlock {
+                // Opened with no password (first ever, or Face ID declined):
+                // the same styled unlock screen the retry path uses.
+                TerminalUnlockView(
+                    subtitle: "Enter the master password you set on your Mac."
+                ) { entered in
+                    pendingRememberPassword = entered // reused by tabs + saved on success
+                    awaitingFirstUnlock = false
+                    Task { await restoreOrOpenTabs() }
+                } onCancel: { dismiss() }
+            } else if let tab = activeTab {
                 content(for: tab)
             } else {
                 ProgressView().tint(.white)
@@ -111,7 +122,13 @@ struct TerminalScreen: View {
         }
         .task {
             guard tabs.isEmpty else { return }
-            await restoreOrOpenTabs()
+            // No password in hand → collect one with the styled unlock screen
+            // first; the submit handler kicks off the connection.
+            if masterPassword.isEmpty {
+                awaitingFirstUnlock = true
+            } else {
+                await restoreOrOpenTabs()
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             for tab in tabs { tab.session.scenePhaseChanged(active: phase == .active) }
@@ -432,7 +449,14 @@ struct TerminalScreen: View {
     @ViewBuilder
     private func failureView(_ session: TerminalSession, message: String) -> some View {
         if session.lastAuthFailReason == .badPassword {
-            passwordUnlockView
+            // Same styled screen as first-time entry — a wrong password just
+            // routes its submit through retry instead of the initial connect.
+            TerminalUnlockView(
+                subtitle: "That didn't match. Enter the master password from your Mac."
+            ) { entered in
+                pendingRememberPassword = entered
+                session.retry(withPassword: entered)
+            } onCancel: { dismiss() }
         } else {
             VStack(spacing: 20) {
                 Image(systemName: "exclamationmark.triangle")
@@ -448,124 +472,6 @@ struct TerminalScreen: View {
         }
     }
 
-    /// Unlock the terminal by entering the Mac's master password. Styled to match
-    /// the dark terminal: a green key badge, a monospace field with the reveal
-    /// toggle inline, and a full-width brand-green Connect.
-    private var passwordUnlockView: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 18) {
-                Image("FipleLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 72, height: 72)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
-                VStack(spacing: 8) {
-                    Text("Unlock terminal")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
-                    Text("Enter the master password you set on your Mac.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.white.opacity(0.55))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            passwordField
-
-            VStack(spacing: 12) {
-                Button(action: submitRetry) {
-                    Text("Connect")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14)
-                                .fill(canConnect ? Theme.Palette.brand : Color.white.opacity(0.12))
-                        )
-                        .foregroundStyle(canConnect ? .white : .white.opacity(0.4))
-                }
-                .disabled(!canConnect)
-
-                Button("Cancel") { dismiss() }
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .padding(.vertical, 6)
-            }
-        }
-        .padding(.horizontal, 28)
-        .frame(maxWidth: 420)
-    }
-
-    private var canConnect: Bool { retryPassword.count >= 4 }
-
-    private var passwordField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.35))
-            ZStack(alignment: .leading) {
-                if retryPassword.isEmpty {
-                    Text("Master password").foregroundStyle(.white.opacity(0.3))
-                }
-                Group {
-                    if showRetryPassword {
-                        TextField("", text: $retryPassword)
-                    } else {
-                        SecureField("", text: $retryPassword)
-                    }
-                }
-                .foregroundStyle(.white)
-                .tint(Theme.Palette.brand)
-                .font(.system(size: 16, design: .monospaced))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($passwordFocused)
-                .onSubmit(submitRetry)
-            }
-            Button {
-                showRetryPassword.toggle()
-            } label: {
-                Image(systemName: showRetryPassword ? "eye.slash.fill" : "eye.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 15)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.07))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(passwordFocused ? Theme.Palette.brand : Color.white.opacity(0.12),
-                                lineWidth: passwordFocused ? 1.5 : 1)
-                )
-        )
-        .animation(.easeOut(duration: 0.15), value: passwordFocused)
-        .onAppear { passwordFocused = true }
-    }
-
-    private func submitRetry() {
-        guard retryPassword.count >= 4 else { return }
-        pendingRememberPassword = retryPassword // remember it if it works
-        activeTab?.session.retry(withPassword: retryPassword)
-        retryPassword = ""
-    }
-
-    private func statusMessage(_ title: String, _ detail: String, systemImage: String) -> some View {
-        ContentUnavailableView {
-            Label(title, systemImage: systemImage)
-        } description: {
-            Text(detail)
-        }
-        .foregroundStyle(.white)
-    }
 }
 
 /// A keyboard accessory row for keys a soft keyboard lacks — Esc, Tab, Ctrl-C,
