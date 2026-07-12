@@ -45,8 +45,16 @@ struct TerminalScreen: View {
     /// True when the password was typed (not from Face ID) — save it behind
     /// biometrics once it authenticates, so next time is one-tap Face ID.
     var rememberOnSuccess: Bool = false
+    /// Fiple Pro state: one session is free forever (including Done-restore);
+    /// parallel sessions are the Pro tier. Nil (previews/tests) = ungated.
+    var entitlements: EntitlementStore?
 
     static let maxTabs = 5
+
+    /// Whether another parallel session may open right now.
+    private var canOpenAnotherSession: Bool {
+        tabs.isEmpty || entitlements?.isPro != false
+    }
 
     @State private var tabs: [TerminalTab] = []
     @State private var activeTabID: UUID?
@@ -60,6 +68,9 @@ struct TerminalScreen: View {
     @State private var showRetryPassword = false
     @FocusState private var passwordFocused: Bool
     @State private var pendingRememberPassword: String?
+    /// The Pro paywall, presented over the terminal when a second parallel
+    /// session is requested without Pro.
+    @State private var showPaywall = false
     /// Keyboard height + bottom safe area, so we can lift the terminal so the
     /// line you're typing is never hidden behind the keyboard.
     @State private var keyboardHeight: CGFloat = 0
@@ -134,6 +145,11 @@ struct TerminalScreen: View {
             saveTabs()
             for tab in tabs { tab.session.close() }
         }
+        .sheet(isPresented: $showPaywall) {
+            if let entitlements {
+                PaywallView(store: entitlements)
+            }
+        }
     }
 
     // MARK: Persistence — remember open shells across screen visits
@@ -163,7 +179,10 @@ struct TerminalScreen: View {
             await openNewTab()
             return
         }
-        for entry in saved.prefix(Self.maxTabs) {
+        // Free tier restores its one session; Pro restores everything. (A Pro
+        // lapse between visits must not resurrect a whole locked tab set.)
+        let restoreLimit = entitlements?.isPro == false ? 1 : Self.maxTabs
+        for entry in saved.prefix(restoreLimit) {
             let session = TerminalSession(
                 host: host, port: port, token: pairingToken, password: currentPassword,
                 passwordPrevalidated: true, restoreSessionID: entry.sessionID
@@ -360,9 +379,15 @@ struct TerminalScreen: View {
             }
             Divider()
             Button {
-                Task { await openNewTab() }
+                // Parallel sessions are the Pro tier: the first session is
+                // free forever, the second opens the paywall instead.
+                if canOpenAnotherSession {
+                    Task { await openNewTab() }
+                } else {
+                    showPaywall = true
+                }
             } label: {
-                Label("New Session", systemImage: "plus")
+                Label("New Session", systemImage: canOpenAnotherSession ? "plus" : "lock.fill")
             }
             .disabled(tabs.count >= Self.maxTabs)
             Button(role: .destructive) {

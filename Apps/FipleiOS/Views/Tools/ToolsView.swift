@@ -103,7 +103,8 @@ struct ToolsView: View {
                 TerminalScreen(
                     host: target.host, port: target.port,
                     pairingToken: target.token, masterPassword: terminalPassword,
-                    rememberOnSuccess: !terminalFromBiometrics
+                    rememberOnSuccess: !terminalFromBiometrics,
+                    entitlements: controller.entitlements
                 )
             }
         }

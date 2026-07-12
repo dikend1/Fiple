@@ -77,6 +77,7 @@ struct PaywallView: View {
     private var benefits: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             benefit("square.grid.2x2.fill", "Unlimited apps & workspaces", "Run everything you set up, past the free limit.")
+            benefit("terminal.fill", "Parallel terminal sessions", "Run several Mac shells side by side and switch between them.")
             benefit("bolt.fill", "One-tap context", "Restore any working setup on your Mac instantly.")
             benefit("lock.open.fill", "One purchase, every device", "Restore Pro on a new phone anytime.")
         }
