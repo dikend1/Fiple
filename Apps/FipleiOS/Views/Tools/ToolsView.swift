@@ -11,13 +11,11 @@ struct ToolsView: View {
     @State private var showSendSheet = false
 
     // Terminal unlock flow (moved here from Home with the entry itself).
-    @State private var showTerminalSheet = false
     @State private var terminalPassword = ""
     @State private var openTerminal = false
     /// Whether the current password came from Face ID (already saved) vs typed
     /// (save it only once it actually authenticates).
     @State private var terminalFromBiometrics = false
-    @FocusState private var passwordFocused: Bool
 
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
@@ -97,7 +95,6 @@ struct ToolsView: View {
                 .presentationDetents([.height(340)])
                 .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showTerminalSheet) { terminalPasswordSheet }
         .fullScreenCover(isPresented: $openTerminal) {
             if let target = controller.terminalTarget {
                 TerminalScreen(
@@ -113,51 +110,21 @@ struct ToolsView: View {
     // MARK: Terminal unlock
 
     /// Opens the terminal: unlock with Face ID if a password is already
-    /// remembered, otherwise ask for it (typed passwords are saved only after
-    /// they successfully authenticate — see TerminalScreen).
+    /// remembered, otherwise open with an empty password — the terminal's own
+    /// styled unlock screen collects it (no more plain Form sheet). Typed
+    /// passwords are saved only after they authenticate (see TerminalScreen).
     private func beginTerminal() async {
-        if TerminalCredentialStore.hasStoredPassword() {
-            if let password = await TerminalCredentialStore.retrieve(reason: "Unlock the Mac terminal") {
-                terminalPassword = password
-                terminalFromBiometrics = true
-                openTerminal = true
-                return
-            }
-            // Biometry cancelled or failed — fall back to typing.
+        if TerminalCredentialStore.hasStoredPassword(),
+           let password = await TerminalCredentialStore.retrieve(reason: "Unlock the Mac terminal") {
+            terminalPassword = password
+            terminalFromBiometrics = true
+        } else {
+            // First time, or Face ID cancelled/failed — the terminal screen
+            // asks for the password with its dark styled unlock view.
+            terminalPassword = ""
+            terminalFromBiometrics = false
         }
-        terminalPassword = ""
-        terminalFromBiometrics = false
-        showTerminalSheet = true
-    }
-
-    private var terminalPasswordSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Master Password") {
-                    SecureField("Enter master password", text: $terminalPassword)
-                        .textContentType(.password)
-                        .focused($passwordFocused)
-                }
-            }
-            .navigationTitle("Open Terminal")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showTerminalSheet = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Open") {
-                        // Don't save yet — only after it authenticates (so a
-                        // wrong password never gets remembered for Face ID).
-                        showTerminalSheet = false
-                        openTerminal = true
-                    }
-                    .disabled(terminalPassword.count < 4)
-                }
-            }
-            .onAppear { passwordFocused = true }
-        }
-        .presentationDetents([.height(200)])
+        openTerminal = true
     }
 
     /// The live fact each card leads with.
