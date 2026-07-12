@@ -547,24 +547,24 @@ private struct TerminalAccessoryBar: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            // Order = usefulness on a phone: arrows right after Paste — the
-            // soft keyboard has no arrows at all (history/TUI menus depend on
-            // them), while ~ / | - exist on its symbols plane, so they can
-            // afford to sit past the fold.
+            // Order = usefulness on a phone: everything the soft keyboard
+            // can't type (esc/tab/^C and the arrows — history, TUI menus)
+            // sits before the fold; ~ / | - exist on the keyboard's symbols
+            // plane, so they can afford to scroll.
             HStack(spacing: 7) {
                 iconKey("doc.on.clipboard", accent: true) {
                     if let text = UIPasteboard.general.string, !text.isEmpty {
                         session.send(Data(text.utf8))
                     }
                 }
+                key("esc") { session.send(Data([0x1b])) }
+                key("tab") { session.send(Data([0x09])) }
+                key("⌃C") { session.send(Data([0x03])) }
+                sep
                 key("↑") { session.send(Data([0x1b, 0x5b, 0x41])) }
                 key("↓") { session.send(Data([0x1b, 0x5b, 0x42])) }
                 key("←") { session.send(Data([0x1b, 0x5b, 0x44])) }
                 key("→") { session.send(Data([0x1b, 0x5b, 0x43])) }
-                sep
-                key("esc") { session.send(Data([0x1b])) }
-                key("tab") { session.send(Data([0x09])) }
-                key("⌃C") { session.send(Data([0x03])) }
                 sep
                 key("~") { session.send(Data("~".utf8)) }
                 key("/") { session.send(Data("/".utf8)) }
