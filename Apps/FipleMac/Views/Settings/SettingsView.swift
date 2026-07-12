@@ -34,6 +34,10 @@ struct SettingsView: View {
                 section("About") {
                     settingRow(title: "Version", value: version)
                     Divider().padding(.leading, Theme.Spacing.md)
+                    actionRow(title: "Show Welcome Guide") {
+                        NotificationCenter.default.post(name: .fipleReplayWelcome, object: nil)
+                    }
+                    Divider().padding(.leading, Theme.Spacing.md)
                     linkRow(title: "Help & Support", url: FipleLinks.support)
                     Divider().padding(.leading, Theme.Spacing.md)
                     linkRow(title: "Privacy Policy", url: FipleLinks.privacy)
@@ -155,6 +159,23 @@ struct SettingsView: View {
                 Text(title).font(.system(size: 14, weight: .medium))
                 Spacer()
                 Image(systemName: "arrow.up.forward")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, Theme.Spacing.sm)
+            .padding(.horizontal, Theme.Spacing.md)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// An in-app action row (chevron, not the external-link glyph).
+    private func actionRow(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title).font(.system(size: 14, weight: .medium))
+                Spacer()
+                Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
