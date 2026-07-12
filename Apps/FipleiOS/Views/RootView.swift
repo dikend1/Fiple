@@ -80,6 +80,13 @@ struct RootView: View {
                 syncPairingSheet(controller.phase)
             }
             .onChange(of: controller.phase) { _, phase in syncPairingSheet(phase) }
+            #if DEBUG
+            .onChange(of: controller.replayWelcomeRequested) { _, requested in
+                guard requested else { return }
+                controller.replayWelcomeRequested = false
+                showWelcome = true
+            }
+            #endif
     }
 
     /// A recognized global gesture: give immediate haptic feedback, then (if a

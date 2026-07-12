@@ -73,6 +73,12 @@ final class RemoteController {
     /// resets it on dismiss.
     var paywallRequested = false
 
+    #if DEBUG
+    /// Debug-only: Settings → Replay onboarding sets this; RootView shows the
+    /// welcome flow again and clears it.
+    var replayWelcomeRequested = false
+    #endif
+
     init(entitlements: EntitlementStore = EntitlementStore()) {
         self.entitlements = entitlements
     }
