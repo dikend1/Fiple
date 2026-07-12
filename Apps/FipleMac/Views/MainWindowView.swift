@@ -58,6 +58,10 @@ struct MainWindowView: View {
             #endif
             if !hasSeenWelcome { showWelcome = true }
         }
+        // Settings → Show Welcome Guide re-opens the onboarding on demand.
+        .onReceive(NotificationCenter.default.publisher(for: .fipleReplayWelcome)) { _ in
+            showWelcome = true
+        }
     }
 
     /// Re-run a Recent entry: re-dispatch a single action, or look up the
