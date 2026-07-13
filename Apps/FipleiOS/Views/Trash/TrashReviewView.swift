@@ -2,8 +2,8 @@ import FipleKit
 import SwiftUI
 
 /// The Smart Trash review screen: a full-screen swipe deck (photo-cleaner
-/// style). Swipe left to stage a file in the in-app basket, right to keep it
-/// forever; ✕/✓ buttons mirror the gestures and Undo steps back through the
+/// style). Swipe left or up to stage a file in the in-app basket, right or
+/// down to keep it forever; ✕/✓ buttons mirror the gestures and Undo steps back through the
 /// session's decisions. Nothing moves on the Mac until "Empty (N)" commits the
 /// basket as one batch — keeps flush when leaving the screen. The session
 /// lives on the controller, so leaving and re-entering keeps the basket.
@@ -104,7 +104,7 @@ struct TrashReviewView: View {
                 TrashCardView(
                     candidate: current,
                     thumbnail: controller.trashThumbnails[current.id],
-                    decisionProgress: dragOffset.width / Self.decisionDistance
+                    decisionProgress: decisionProgress
                 )
                 .offset(dragOffset)
                 .rotationEffect(.degrees(dragOffset.width / 18))
@@ -116,13 +116,28 @@ struct TrashReviewView: View {
         }
     }
 
+    /// Collapses the drag to one signed value on its dominant axis, where
+    /// positive = keep (right or down) and negative = trash (left or up).
+    private static func decisionAxis(of translation: CGSize) -> CGFloat {
+        abs(translation.width) >= abs(translation.height)
+            ? translation.width   // right = keep, left = trash
+            : translation.height  // down = keep, up = trash
+    }
+
+    /// The badge fades in with whichever direction currently dominates the
+    /// drag, so the gesture always announces what release would do.
+    private var decisionProgress: CGFloat {
+        Self.decisionAxis(of: dragOffset) / Self.decisionDistance
+    }
+
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { dragOffset = $0.translation }
             .onEnded { value in
-                if value.translation.width <= -Self.decisionDistance {
+                let axis = Self.decisionAxis(of: value.translation)
+                if axis <= -Self.decisionDistance {
                     decide(.trash)
-                } else if value.translation.width >= Self.decisionDistance {
+                } else if axis >= Self.decisionDistance {
                     decide(.keep)
                 } else {
                     withAnimation(.spring(duration: 0.3)) { dragOffset = .zero }
