@@ -38,15 +38,17 @@ settings:
     CURRENT_PROJECT_VERSION: "6"
     CODE_SIGN_STYLE: Automatic
   configs:
-    # Dev team signs Debug so device runs keep working on this machine
-    # (VXJ8BY6538 can't dev-register com.maksatov.fipleapp here — see 663ecde).
+    # One team everywhere: M3UQXL2W5B ("Bizhan Ashykhatov", the paid Individual
+    # membership; Dias is Admin). It signs device runs AND distribution — the
+    # app record + 1.0 live in the App Store under this team. VXJ8BY6538 is
+    # Dias's FREE Personal Team (7-day profiles, cannot distribute) — do not
+    # use it for archives; earlier comments had the two roles swapped.
     Debug:
       DEVELOPMENT_TEAM: M3UQXL2W5B
-    # Both distribution postures sign with the store team.
     Release-MAS:
-      DEVELOPMENT_TEAM: VXJ8BY6538
+      DEVELOPMENT_TEAM: M3UQXL2W5B
     Release-DevID:
-      DEVELOPMENT_TEAM: VXJ8BY6538
+      DEVELOPMENT_TEAM: M3UQXL2W5B
 
 targets:
   FipleMac:
