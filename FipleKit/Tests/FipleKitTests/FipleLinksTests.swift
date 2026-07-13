@@ -4,7 +4,7 @@ import Testing
 
 struct FipleLinksTests {
     @Test func allLinksUseHTTPSOnFipleDomain() {
-        for url in [FipleLinks.privacy, FipleLinks.terms, FipleLinks.support] {
+        for url in [FipleLinks.privacy, FipleLinks.terms, FipleLinks.support, FipleLinks.download] {
             #expect(url.scheme == "https")
             #expect(url.host == "fiple.app")
         }
@@ -16,7 +16,8 @@ struct FipleLinksTests {
         #expect(FipleLinks.privacy.path == "/privacy")
         #expect(FipleLinks.terms.path == "/terms")
         #expect(FipleLinks.support.path == "/support")
-        for url in [FipleLinks.privacy, FipleLinks.terms, FipleLinks.support] {
+        #expect(FipleLinks.download.path == "/download")
+        for url in [FipleLinks.privacy, FipleLinks.terms, FipleLinks.support, FipleLinks.download] {
             #expect(url.fragment == nil)
         }
     }
