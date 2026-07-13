@@ -16,6 +16,9 @@ struct MainWindowView: View {
     /// One-time welcome sheet on first launch.
     @AppStorage("fiple.hasSeenWelcome") private var hasSeenWelcome = false
     @State private var showWelcome = false
+    /// Which copy the welcome tells on its tools page; the DEBUG Settings row
+    /// replays the welcome with the Mac App Store copy for preview.
+    @State private var welcomeTerminalAvailable = TerminalController.isFeatureAvailable
 
     private let sidebarWidth: CGFloat = 250
 
@@ -44,10 +47,10 @@ struct MainWindowView: View {
         .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.22), value: sidebarVisible)
         .sheet(isPresented: $showWelcome) {
-            WelcomeSheet {
+            WelcomeSheet(onFinish: {
                 hasSeenWelcome = true
                 showWelcome = false
-            }
+            }, terminalAvailable: welcomeTerminalAvailable)
             // Content pages resolve in light appearance; keep the sheet in step.
             .environment(\.colorScheme, .light)
         }
@@ -58,8 +61,11 @@ struct MainWindowView: View {
             #endif
             if !hasSeenWelcome { showWelcome = true }
         }
-        // Settings → Show Welcome Guide re-opens the onboarding on demand.
-        .onReceive(NotificationCenter.default.publisher(for: .fipleReplayWelcome)) { _ in
+        // Settings → Show Welcome Guide re-opens the onboarding on demand; the
+        // DEBUG row passes terminalAvailable=false to preview the MAS copy.
+        .onReceive(NotificationCenter.default.publisher(for: .fipleReplayWelcome)) { note in
+            welcomeTerminalAvailable =
+                (note.userInfo?["terminalAvailable"] as? Bool) ?? TerminalController.isFeatureAvailable
             showWelcome = true
         }
         // Welcome's final CTA: land on Workspaces (its view opens the editor).

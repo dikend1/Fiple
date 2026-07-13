@@ -14,6 +14,10 @@ extension Notification.Name {
 /// row), Back/Continue navigation, and page dots. Ends on the pairing guide.
 struct WelcomeSheet: View {
     let onFinish: () -> Void
+    /// Which build's story to tell on the tools page. Defaults to this build's
+    /// reality; the DEBUG Settings row overrides it to preview the Mac App
+    /// Store copy (no terminal promise) from the unsandboxed dev build.
+    var terminalAvailable: Bool = TerminalController.isFeatureAvailable
 
     @State private var page = 0
     private let pageCount = 5
@@ -32,7 +36,7 @@ struct WelcomeSheet: View {
                     // The sandboxed Mac App Store build can't host a shell, so
                     // it must not promise a sidebar Terminal it doesn't have —
                     // it pitches Smart Trash and points at the full build.
-                    if TerminalController.isFeatureAvailable {
+                    if terminalAvailable {
                         FeatureStep(hero: { TerminalHeroMac() },
                                     title: "Terminal & tools",
                                     subtitle: "Your phone gets a real shell on this Mac (behind a master password) plus Smart Trash cleanup — in the sidebar.")
