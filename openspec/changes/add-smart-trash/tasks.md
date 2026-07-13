@@ -64,14 +64,16 @@
       (swipe/undo/return/commit/reconcile); `TrashCardView` keeps the grid's
       type chip + video glyph + urgency countdown; biggest-first order.
       FipleiOS builds green (2026-07-13).*
-- [x] 4.2b In-app basket: staged-count badge, sheet listing staged files with
-      per-item return-to-deck, "Empty (N)" → one batch `trash` action; keep
-      ids flushed as one batch on commit or screen exit; staging is in-memory
-      per session.
-      *Evidence: `TrashBasketSheet` (per-row Put back, "Empty (N) — free up
-      X", disabled while `trashActionInFlight`); commit/exit flush via
-      `takeTrashIDs()/takeKeepIDs()`. Full FipleKit suite 150 tests in 34
-      suites green (2026-07-13).*
+- [x] 4.2b In-app basket: staged-count badge, thumbnail-grid sheet with
+      per-cell ↺ return-to-deck, toolbar "Empty" → one batch `trash` action;
+      keep ids flushed as one batch on commit or screen exit; the basket
+      persists (session on `RemoteController`, staged ids saved locally and
+      restored against the next snapshot; cleared on fresh pairing).
+      *Evidence: `TrashBasketSheet` (3-col grid, "X to free up" summary,
+      Empty disabled while `trashActionInFlight`/disconnected);
+      `RemoteController.syncTrashSession` + `TrashReviewSession.stage(ids:)`
+      — `TrashReviewSessionTests` 6/6 green. Full FipleKit suite 151 tests in
+      34 suites green (2026-07-13).*
 - [x] 4.3 Local reminder scheduling on each sync (nearest deadline − 2 days).
       *Evidence: `TrashReminder.reschedule(for:)` called from the
       `trashCandidates` handler in `RemoteController` (2026-07-08).*

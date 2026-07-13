@@ -59,6 +59,10 @@ final class RemoteController {
     private(set) var trashThumbnails: [UUID: Data] = [:]
     /// Set while a batch review decision is in flight (disables the action bar).
     private(set) var trashActionInFlight = false
+    /// The swipe-deck review state. Lives here — not in the screen — so leaving
+    /// Smart Trash and coming back keeps the basket and progress; the staged
+    /// ids also persist across relaunches (restored on the next snapshot).
+    private(set) var trashSession = TrashReviewSession(candidates: [])
 
     /// Phone-side launch history. The Mac keeps its own `RecentStore`, but it is
     /// not sent over the wire, so the remote records what *it* triggers — newest
@@ -438,6 +442,7 @@ final class RemoteController {
                 candidates.contains { $0.id == id }
             }
             TrashReminder.reschedule(for: trashCandidates)
+            syncTrashSession()
 
         case let .trashThumbnail(candidateID, jpeg):
             trashThumbnails[candidateID] = jpeg
@@ -649,6 +654,63 @@ final class RemoteController {
         }
     }
 
+    // MARK: Swipe-deck session
+
+    /// Re-syncs the review session with the authoritative snapshot: vanished
+    /// candidates leave the deck/basket, new ones join (biggest first — the
+    /// screen's promise is "free up 1,3 GB"), and a basket persisted from a
+    /// previous run is restored before the saved ids are re-pruned.
+    private func syncTrashSession() {
+        trashSession.reconcile(with: trashCandidates.sorted { $0.sizeBytes > $1.sizeBytes })
+        let saved = UserDefaults.standard.stringArray(forKey: Self.stagedIDsKey) ?? []
+        trashSession.stage(ids: Set(saved.compactMap(UUID.init)))
+        persistStagedIDs()
+    }
+
+    /// The basket must survive app relaunches (the deck would otherwise
+    /// resurface files the user already threw out). Only the ids are stored;
+    /// the candidates themselves always come from the Mac's snapshot.
+    private func persistStagedIDs() {
+        UserDefaults.standard.set(
+            trashSession.staged.map(\.id.uuidString), forKey: Self.stagedIDsKey
+        )
+    }
+
+    private static let stagedIDsKey = "com.fiple.trash.stagedIDs"
+
+    func trashSwipe(_ decision: TrashDecision) {
+        trashSession.swipe(decision)
+        persistStagedIDs()
+    }
+
+    func trashUndo() {
+        _ = trashSession.undo()
+        persistStagedIDs()
+    }
+
+    func trashReturnToDeck(id: UUID) {
+        trashSession.returnToDeck(id: id)
+        persistStagedIDs()
+    }
+
+    /// "Empty (N)": one batch trash action plus any pending keeps. Connected
+    /// only — otherwise the basket stays put instead of silently vanishing.
+    func trashCommitBasket() async {
+        guard phase == .connected else { return }
+        let trashIDs = trashSession.takeTrashIDs()
+        let keepIDs = trashSession.takeKeepIDs()
+        persistStagedIDs()
+        await sendTrashAction(ids: trashIDs, decision: .trash)
+        await sendTrashAction(ids: keepIDs, decision: .keep)
+    }
+
+    /// Keeps are safe to apply without confirmation; flushed when leaving the
+    /// review screen.
+    func trashFlushKeeps() async {
+        let keepIDs = trashSession.takeKeepIDs()
+        await sendTrashAction(ids: keepIDs, decision: .keep)
+    }
+
     /// The Mac normally answers in well under a second; if nothing comes back,
     /// stop the spinner and say so instead of letting it spin forever (dropped
     /// result, Mac asleep, tile deleted on an old build that never replies).
@@ -710,6 +772,10 @@ final class RemoteController {
         trashCandidates = []
         trashThumbnails = [:]
         trashActionInFlight = false
+        // A fresh pairing may be a different Mac — its candidates have new ids,
+        // so the old basket (session + persisted ids) is meaningless.
+        trashSession = TrashReviewSession(candidates: [])
+        UserDefaults.standard.removeObject(forKey: Self.stagedIDsKey)
         macName = nil
         macKind = .laptop
         runningTileID = nil
@@ -873,6 +939,11 @@ final class RemoteController {
                            lastOpened: Date().addingTimeInterval(-80 * 86_400), addedAt: Date(),
                            deadline: Date().addingTimeInterval(7 * 86_400)),
         ]
+        // Fixture ids are minted per launch, so skip the persisted-basket
+        // restore (and never let demo state clobber a real saved basket).
+        trashSession = TrashReviewSession(
+            candidates: trashCandidates.sorted { $0.sizeBytes > $1.sizeBytes }
+        )
         phase = .connected
     }
 

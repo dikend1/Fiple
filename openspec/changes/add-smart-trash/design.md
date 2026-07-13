@@ -40,8 +40,12 @@ This file records the technical decisions.
    `trashAction(ids:, trash)` as one batch, and keep ids flush as one
    `trashAction(ids:, keep)` batch on commit or screen exit. Undo pops the last
    uncommitted decision (either direction) — purely local, no wire message.
-   Staging is in-memory per session; abandoned reviews leave files as ordinary
-   candidates. No protocol change: the existing snapshot/thumbnail/action
+   The basket persists on the phone: the session lives on the connection
+   controller (screen re-entry keeps it) and staged ids are saved locally,
+   restored against the next snapshot after a relaunch — staged files never
+   silently reappear in the deck. On the Mac they stay ordinary candidates
+   (deadlines keep ticking) until committed. A fresh pairing clears the saved
+   basket. No protocol change: the existing snapshot/thumbnail/action
    messages already cover this UI (thumbnails prefetch 2–3 cards ahead instead
    of per visible cell).
 10. **Notifications.** Mac: `UserNotifications` local notification when items

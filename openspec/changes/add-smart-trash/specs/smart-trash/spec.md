@@ -59,8 +59,16 @@ future scans.
 #### Scenario: Staged swipe touches nothing on the Mac
 
 - **WHEN** the user swipes candidates left but has not emptied the basket
-- **THEN** no message is sent and no file on the Mac moves; closing the app
-  discards the staged decisions and the files remain ordinary candidates
+- **THEN** no message is sent and no file on the Mac moves; the files remain
+  ordinary candidates on the Mac (deadlines keep ticking)
+
+#### Scenario: The basket survives leaving the screen and relaunching
+
+- **WHEN** the user swipes candidates into the basket, leaves Smart Trash (or
+  relaunches the app), and returns
+- **THEN** the staged files are still in the basket — not back in the deck —
+  until the user empties the basket or puts them back; candidates the Mac no
+  longer lists are dropped from the restored basket
 
 #### Scenario: Undo restores the last decision
 

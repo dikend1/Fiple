@@ -85,6 +85,17 @@ public struct TrashReviewSession: Sendable, Equatable {
         return ids
     }
 
+    /// Restores a persisted basket: moves the matching deck cards straight to
+    /// staged, keeping the rest of the deck order. No history entries — a
+    /// restored staging predates this session's gestures, so it returns to the
+    /// deck via the basket's "put back", not Undo. Unknown ids are ignored.
+    public mutating func stage(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let restored = deck.filter { ids.contains($0.id) }
+        deck.removeAll { ids.contains($0.id) }
+        staged.append(contentsOf: restored)
+    }
+
     // MARK: Syncing
 
     /// Applies a fresh Mac snapshot: candidates the Mac no longer lists vanish
