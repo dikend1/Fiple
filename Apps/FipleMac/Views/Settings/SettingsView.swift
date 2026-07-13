@@ -37,6 +37,17 @@ struct SettingsView: View {
                     actionRow(title: "Show Welcome Guide") {
                         NotificationCenter.default.post(name: .fipleReplayWelcome, object: nil)
                     }
+                    #if DEBUG
+                    Divider().padding(.leading, Theme.Spacing.md)
+                    // Preview how the sandboxed Mac App Store build tells the
+                    // tools story (no terminal promise) from this dev build.
+                    actionRow(title: "Show Welcome Guide (App Store copy)") {
+                        NotificationCenter.default.post(
+                            name: .fipleReplayWelcome, object: nil,
+                            userInfo: ["terminalAvailable": false]
+                        )
+                    }
+                    #endif
                     Divider().padding(.leading, Theme.Spacing.md)
                     linkRow(title: "Help & Support", url: FipleLinks.support)
                     Divider().padding(.leading, Theme.Spacing.md)
