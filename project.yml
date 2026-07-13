@@ -23,10 +23,13 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    # Automatic signing with the developer's team, so the apps install on real
-    # devices and the setting survives `xcodegen generate`.
+    # Automatic signing with this machine's active dev team, so the apps
+    # install on real devices and the setting survives `xcodegen generate`.
+    # The App Store archive team (VXJ8BY6538, see 663ecde) can't dev-register
+    # com.maksatov.fipleapp here — switch back only when producing the MAS
+    # archive.
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: VXJ8BY6538
+    DEVELOPMENT_TEAM: M3UQXL2W5B
     MARKETING_VERSION: "1.0.1"
     CURRENT_PROJECT_VERSION: "5"
 
