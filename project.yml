@@ -118,7 +118,10 @@ targets:
       - package: FipleKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp.Share
+        # NOTE: not `.Share` — that App ID was auto-claimed by the free
+        # Personal Team during device testing (free teams have no portal to
+        # release it), so distribution uses a fresh identifier.
+        PRODUCT_BUNDLE_IDENTIFIER: com.maksatov.fipleapp.ShareExtension
         PRODUCT_NAME: FipleShare
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleShare/Info.plist
