@@ -62,6 +62,10 @@ struct MainWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .fipleReplayWelcome)) { _ in
             showWelcome = true
         }
+        // Welcome's final CTA: land on Workspaces (its view opens the editor).
+        .onReceive(NotificationCenter.default.publisher(for: .fipleCreateFirstWorkspace)) { _ in
+            section = .workspaces
+        }
     }
 
     /// Re-run a Recent entry: re-dispatch a single action, or look up the

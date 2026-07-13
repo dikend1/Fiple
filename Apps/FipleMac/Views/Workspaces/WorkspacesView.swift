@@ -48,6 +48,14 @@ struct WorkspacesView: View {
         }
         .sheet(item: $editingTile) { TileEditorView(store: store, tile: $0) }
         .sheet(isPresented: $isCreating) { TileEditorView(store: store, tile: nil) }
+        // Welcome's "Create First Workspace" CTA lands here with the editor open
+        // (delayed a beat so the welcome sheet finishes dismissing first).
+        .onReceive(NotificationCenter.default.publisher(for: .fipleCreateFirstWorkspace)) { _ in
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                isCreating = true
+            }
+        }
         .alert(
             "Delete workspace?",
             isPresented: Binding(get: { deletingTile != nil }, set: { if !$0 { deletingTile = nil } }),
