@@ -44,11 +44,14 @@ struct TrashCardView: View {
             ZStack {
                 Rectangle().fill(Theme.Palette.secondary.opacity(0.08))
                 if let thumbnail, let image = UIImage(data: thumbnail) {
+                    // Fit, not fill: the point of the card is recognizing the
+                    // file, and a document cropped to the card's tall aspect
+                    // shows a zoomed corner instead of the page. The soft
+                    // backdrop owns whatever the preview doesn't cover.
                     Image(uiImage: image)
                         .resizable()
-                        .scaledToFill()
+                        .scaledToFit()
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .clipped()
                 } else {
                     Image(systemName: "doc.fill")
                         .font(.fiple(56))

@@ -185,9 +185,12 @@ final class TrashController {
     func thumbnail(for id: UUID) async -> Data? {
         if let cached = thumbnailCache[id] { return cached }
         guard let candidate = store.candidate(id: id) else { return nil }
+        // 512pt @2x: the phone shows one full-screen card at a time now, not a
+        // grid of cells — 240pt upscaled to a card reads as mush. ~150–400 KB
+        // of JPEG per file, far under the 8 MB frame cap, and cached per id.
         let request = QLThumbnailGenerator.Request(
             fileAt: URL(fileURLWithPath: candidate.path),
-            size: CGSize(width: 240, height: 240), scale: 2, representationTypes: .thumbnail
+            size: CGSize(width: 512, height: 512), scale: 2, representationTypes: .thumbnail
         )
         guard let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request),
               let tiff = rep.nsImage.tiffRepresentation,
