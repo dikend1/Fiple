@@ -2,8 +2,8 @@ import FipleKit
 import SwiftUI
 
 /// The Smart Trash review screen: a full-screen swipe deck (photo-cleaner
-/// style). Swipe left or up to stage a file in the in-app basket, right or
-/// down to keep it forever; ✕/✓ buttons mirror the gestures and Undo steps back through the
+/// style). Swipe left to stage a file in the in-app basket, right to keep it
+/// forever; ✕/✓ buttons mirror the gestures and Undo steps back through the
 /// session's decisions. Nothing moves on the Mac until "Empty (N)" commits the
 /// basket as one batch — keeps flush when leaving the screen. The session
 /// lives on the controller, so leaving and re-entering keeps the basket.
@@ -12,9 +12,12 @@ struct TrashReviewView: View {
 
     @State private var dragOffset: CGSize = .zero
     @State private var showBasket = false
+    @State private var showGestureGuide = false
 
     /// Swipe past this many points of horizontal travel = a decision.
     private static let decisionDistance: CGFloat = 120
+
+    private static let gestureGuideSeenKey = "com.fiple.trash.gestureGuideSeen"
 
     private var session: TrashReviewSession { controller.trashSession }
 
@@ -46,6 +49,90 @@ struct TrashReviewView: View {
             let controller = controller
             Task { await controller.trashFlushKeeps() }
         }
+        .onAppear {
+            // First visit with something to review: explain the two gestures
+            // once, before the user has to guess what a swipe does.
+            if session.current != nil,
+               !UserDefaults.standard.bool(forKey: Self.gestureGuideSeenKey) {
+                showGestureGuide = true
+            }
+        }
+        .overlay {
+            if showGestureGuide { gestureGuide }
+        }
+    }
+
+    // MARK: Gesture guide
+
+    /// One-time overlay: hands + directions. Tap anywhere to start reviewing.
+    private var gestureGuide: some View {
+        ZStack {
+            Color.black.opacity(0.62).ignoresSafeArea()
+            VStack(spacing: Theme.Spacing.xxl) {
+                Text("Review by swiping")
+                    .font(.fiple(22, .bold))
+                    .foregroundStyle(.white)
+
+                HStack(alignment: .top, spacing: Theme.Spacing.xxl) {
+                    guideColumn(
+                        hand: "hand.point.left.fill", badge: "xmark", color: .red,
+                        title: "Swipe left",
+                        caption: "into the basket —\nnothing moves until\nyou empty it"
+                    )
+                    guideColumn(
+                        hand: "hand.point.right.fill", badge: "checkmark", color: Theme.Palette.brand,
+                        title: "Swipe right",
+                        caption: "keep the file —\nnever suggested\nagain"
+                    )
+                }
+
+                Label("Undo takes back your last swipe", systemImage: "arrow.uturn.backward")
+                    .font(.fiple(13))
+                    .foregroundStyle(.white.opacity(0.75))
+
+                Text("Tap to start")
+                    .font(.fiple(15, .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.vertical, Theme.Spacing.sm)
+                    .background(.white.opacity(0.18), in: Capsule())
+            }
+            .padding(Theme.Spacing.xxl)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { dismissGestureGuide() }
+        .transition(.opacity)
+    }
+
+    private func guideColumn(
+        hand: String, badge: String, color: Color, title: String, caption: String
+    ) -> some View {
+        VStack(spacing: Theme.Spacing.md) {
+            ZStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 64, height: 64)
+                Image(systemName: badge)
+                    .font(.fiple(26, .bold))
+                    .foregroundStyle(.white)
+            }
+            Image(systemName: hand)
+                .font(.fiple(34))
+                .foregroundStyle(.white)
+            Text(title)
+                .font(.fiple(16, .semibold))
+                .foregroundStyle(.white)
+            Text(caption)
+                .font(.fiple(13))
+                .foregroundStyle(.white.opacity(0.75))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func dismissGestureGuide() {
+        UserDefaults.standard.set(true, forKey: Self.gestureGuideSeenKey)
+        withAnimation(.easeOut(duration: 0.2)) { showGestureGuide = false }
     }
 
     // MARK: Header
@@ -116,28 +203,20 @@ struct TrashReviewView: View {
         }
     }
 
-    /// Collapses the drag to one signed value on its dominant axis, where
-    /// positive = keep (right or down) and negative = trash (left or up).
-    private static func decisionAxis(of translation: CGSize) -> CGFloat {
-        abs(translation.width) >= abs(translation.height)
-            ? translation.width   // right = keep, left = trash
-            : translation.height  // down = keep, up = trash
-    }
-
-    /// The badge fades in with whichever direction currently dominates the
-    /// drag, so the gesture always announces what release would do.
+    /// The ✕/✓ badge fades in with the horizontal drag, so release is never
+    /// a surprise. Horizontal only — vertical swipes stay free for scrolling
+    /// muscle memory and never decide anything.
     private var decisionProgress: CGFloat {
-        Self.decisionAxis(of: dragOffset) / Self.decisionDistance
+        dragOffset.width / Self.decisionDistance
     }
 
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { dragOffset = $0.translation }
             .onEnded { value in
-                let axis = Self.decisionAxis(of: value.translation)
-                if axis <= -Self.decisionDistance {
+                if value.translation.width <= -Self.decisionDistance {
                     decide(.trash)
-                } else if axis >= Self.decisionDistance {
+                } else if value.translation.width >= Self.decisionDistance {
                     decide(.keep)
                 } else {
                     withAnimation(.spring(duration: 0.3)) { dragOffset = .zero }
