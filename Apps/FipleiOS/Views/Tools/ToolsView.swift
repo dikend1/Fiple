@@ -18,7 +18,10 @@ struct ToolsView: View {
     @State private var terminalFromBiometrics = false
     /// Explains why Terminal is dark when the connected Mac can't host it
     /// (Mac App Store build, or the feature is switched off on the Mac).
-    @State private var showTerminalHelp = false
+    /// `-demo-terminal-help` presents it on launch for screenshots, like
+    /// `-demo-tools` / `-paywall` do for their screens.
+    @State private var showTerminalHelp =
+        ProcessInfo.processInfo.arguments.contains("-demo-terminal-help")
 
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
