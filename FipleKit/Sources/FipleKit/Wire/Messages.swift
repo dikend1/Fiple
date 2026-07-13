@@ -39,6 +39,12 @@ public enum ClientMessage: Sendable, Equatable {
     case beamEnd(transferID: UUID)
     /// Put text on the Mac's clipboard (the QR / live-text bridge).
     case setClipboard(text: String)
+    /// Ask the Mac to open the Fiple download page in its browser (the phone's
+    /// terminal explainer: downloading the full Mac build is a Mac-side act).
+    /// Deliberately payload-free — the Mac opens ITS OWN hardcoded URL, so the
+    /// phone can never steer the Mac's browser anywhere else (ActionPolicy
+    /// stance: no arbitrary content execution from the peer).
+    case openDownloadPage
 }
 
 /// The phone's verdict on Smart Trash candidates.
@@ -58,7 +64,7 @@ extension ClientMessage: WireTypeTagged {
 extension ClientMessage: Codable {
     private enum Tag: String, Codable, CaseIterable {
         case pair, reconnect, guestReconnect, run, runAction, gesture, trashThumbnail, trashAction,
-             beamBegin, beamChunk, beamEnd, setClipboard
+             beamBegin, beamChunk, beamEnd, setClipboard, openDownloadPage
     }
     private enum CodingKeys: String, CodingKey {
         case type, code, token, tileID, actionID, version, action, candidateID, ids, decision,
@@ -104,6 +110,8 @@ extension ClientMessage: Codable {
             self = .beamEnd(transferID: try c.decode(UUID.self, forKey: .transferID))
         case .setClipboard:
             self = .setClipboard(text: try c.decode(String.self, forKey: .text))
+        case .openDownloadPage:
+            self = .openDownloadPage
         }
     }
 
@@ -153,6 +161,8 @@ extension ClientMessage: Codable {
         case let .setClipboard(text):
             try c.encode(Tag.setClipboard, forKey: .type)
             try c.encode(text, forKey: .text)
+        case .openDownloadPage:
+            try c.encode(Tag.openDownloadPage, forKey: .type)
         }
     }
 }

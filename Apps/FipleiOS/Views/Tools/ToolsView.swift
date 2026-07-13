@@ -106,8 +106,9 @@ struct ToolsView: View {
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showTerminalHelp) {
-            TerminalUnavailableSheet()
-                .presentationDetents([.height(360)])
+            TerminalUnavailableSheet(onOpenOnMac: controller.isConnected
+                ? { controller.openDownloadPageOnMac() } : nil)
+                .presentationDetents([.height(400)])
                 .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $openTerminal) {
@@ -254,9 +255,15 @@ private struct TerminalHeroCard: View {
 /// Shown when the connected Mac doesn't advertise a terminal: the Mac App
 /// Store build can't host a shell (App Sandbox), so the full Fiple for Mac
 /// from fiple.app is required — or the feature is simply switched off there.
+/// Downloading is a Mac-side act, so the primary button sends the page to the
+/// connected Mac's browser; opening on the phone stays as the fallback.
 private struct TerminalUnavailableSheet: View {
+    /// Sends the download page to the paired Mac; nil when not connected.
+    var onOpenOnMac: (() -> Void)?
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @State private var sentToMac = false
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -275,22 +282,43 @@ private struct TerminalUnavailableSheet: View {
                 .foregroundStyle(Theme.Palette.label)
                 .multilineTextAlignment(.center)
 
-            Text("Mac App Store apps run in a sandbox that can't host a real shell. Download the full version of Fiple for Mac from fiple.app, then switch Terminal on in its settings — this card comes alive.")
+            Text("Mac App Store apps run in a sandbox that can't host a real shell. Get the full version of Fiple for Mac from fiple.app, then switch Terminal on in its settings — this card comes alive.")
                 .font(.fiple(14))
                 .foregroundStyle(Theme.Palette.secondary)
                 .multilineTextAlignment(.center)
 
             Spacer(minLength: 0)
 
-            Button {
-                openURL(FipleLinks.download)
-            } label: {
-                Text("Get Fiple for Mac")
-                    .font(.fiple(16, .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Theme.Palette.brand, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .foregroundStyle(.white)
+            if let onOpenOnMac {
+                Button {
+                    onOpenOnMac()
+                    withAnimation { sentToMac = true }
+                } label: {
+                    Label(sentToMac ? "Opened — check your Mac" : "Open Download Page on My Mac",
+                          systemImage: sentToMac ? "checkmark" : "macbook.and.iphone")
+                        .font(.fiple(16, .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Theme.Palette.brand.opacity(sentToMac ? 0.75 : 1),
+                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(.white)
+                }
+                .disabled(sentToMac)
+
+                Button("Open on this iPhone instead") { openURL(FipleLinks.download) }
+                    .font(.fiple(14, .medium))
+                    .foregroundStyle(Theme.Palette.secondary)
+            } else {
+                Button {
+                    openURL(FipleLinks.download)
+                } label: {
+                    Text("Get Fiple for Mac")
+                        .font(.fiple(16, .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Theme.Palette.brand, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(.white)
+                }
             }
 
             Button("Not Now") { dismiss() }
