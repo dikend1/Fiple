@@ -3,6 +3,10 @@ import SwiftUI
 extension Notification.Name {
     /// Posted by Settings → Show Welcome Guide; MainWindowView re-opens the sheet.
     static let fipleReplayWelcome = Notification.Name("fiple.replayWelcome")
+    /// Posted by the welcome sheet's final CTA; the Workspaces page opens the
+    /// New Workspace editor so a fresh (empty) install flows straight into
+    /// creating the first tile instead of landing on an empty screen.
+    static let fipleCreateFirstWorkspace = Notification.Name("fiple.createFirstWorkspace")
 }
 
 /// First-launch onboarding sheet: a paged, illustrated walkthrough matched to
@@ -25,9 +29,18 @@ struct WelcomeSheet: View {
                                 title: "Build workspaces",
                                 subtitle: "Group apps, sites and files into a tile. Tapping it on the phone restores the whole context here.")
                 case 2:
-                    FeatureStep(hero: { TerminalHeroMac() },
-                                title: "Terminal & tools",
-                                subtitle: "Your phone gets a real shell on this Mac (behind a master password) plus Smart Trash cleanup — in the sidebar.")
+                    // The sandboxed Mac App Store build can't host a shell, so
+                    // it must not promise a sidebar Terminal it doesn't have —
+                    // it pitches Smart Trash and points at the full build.
+                    if TerminalController.isFeatureAvailable {
+                        FeatureStep(hero: { TerminalHeroMac() },
+                                    title: "Terminal & tools",
+                                    subtitle: "Your phone gets a real shell on this Mac (behind a master password) plus Smart Trash cleanup — in the sidebar.")
+                    } else {
+                        FeatureStep(hero: { TerminalHeroMac() },
+                                    title: "Smart Trash & tools",
+                                    subtitle: "Review stale files from your phone and reclaim space — in the sidebar. A real phone terminal comes with the full Fiple for Mac at fiple.app.")
+                    }
                 case 3:
                     FeatureStep(hero: { BeamHeroMac() },
                                 title: "Send to this Mac",
@@ -123,12 +136,28 @@ struct WelcomeSheet: View {
                 }
             }
             Spacer()
-            Button(isLast ? "Get Started" : "Continue") {
-                if isLast { onFinish() } else { withAnimation(.snappy) { page += 1 } }
+            if isLast {
+                // A fresh install is EMPTY — end on the action, not a dead
+                // stop: the primary CTA flows straight into creating the
+                // first workspace (the pairing steps stay on screen behind).
+                Button("Get Started") { onFinish() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                Button("Create First Workspace") {
+                    onFinish()
+                    NotificationCenter.default.post(name: .fipleCreateFirstWorkspace, object: nil)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.Palette.brand)
+                .keyboardShortcut(.defaultAction)
+            } else {
+                Button("Continue") {
+                    withAnimation(.snappy) { page += 1 }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.Palette.brand)
+                .keyboardShortcut(.defaultAction)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.Palette.brand)
-            .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
