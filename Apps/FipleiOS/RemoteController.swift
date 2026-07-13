@@ -503,6 +503,17 @@ final class RemoteController {
         }
     }
 
+    /// Terminal explainer: ask the connected Mac to open fiple.app/download in
+    /// its own browser — downloading the full Mac build is a Mac-side act, so
+    /// sending the page to the Mac beats opening it on the phone. Payload-free
+    /// on the wire; the Mac opens its own hardcoded URL. A 1.0 Mac silently
+    /// skips the message (tolerant decode on both sides since 1.0).
+    func openDownloadPageOnMac() {
+        guard phase == .connected, let peer else { return }
+        FipleLog.execution.info("asking the Mac to open the download page")
+        Task { try? await peer.send(ClientMessage.openDownloadPage) }
+    }
+
     /// Trigger a single Fiple Bar action on the Mac.
     func runAction(_ action: Action) async {
         guard phase == .connected, let peer else { return }

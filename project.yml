@@ -35,7 +35,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "6"
+    CURRENT_PROJECT_VERSION: "7"
     CODE_SIGN_STYLE: Automatic
   configs:
     # One team everywhere: M3UQXL2W5B ("Bizhan Ashykhatov", the paid Individual

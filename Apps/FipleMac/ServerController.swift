@@ -370,6 +370,17 @@ final class ServerController {
             NSPasteboard.general.setString(text, forType: .string)
             FipleLog.execution.info("clipboard set from phone (\(text.count) chars)")
 
+        case .openDownloadPage:
+            // The phone's terminal explainer: open OUR OWN download page in the
+            // Mac's browser (payload-free by design — the peer can't pick the
+            // URL). Sent when this build is the sandboxed one without terminal.
+            guard peer === self.peer, isPaired else {
+                FipleLog.execution.notice("openDownloadPage ignored — not the authenticated peer")
+                return
+            }
+            NSWorkspace.shared.open(FipleLinks.download)
+            FipleLog.execution.info("opened the download page at the phone's request")
+
         case let .gesture(action):
             guard peer === self.peer, isPaired else {
                 FipleLog.execution.notice("gesture ignored — not the authenticated peer")

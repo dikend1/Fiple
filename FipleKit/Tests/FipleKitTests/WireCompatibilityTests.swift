@@ -25,6 +25,12 @@ struct WireCompatibilityTests {
         )
     }
 
+    @Test("openDownloadPage round-trips (payload-free request; the Mac owns the URL)")
+    func openDownloadPageRoundTrips() throws {
+        let data = try MessageCodec.encode(ClientMessage.openDownloadPage)
+        #expect(try MessageCodec.decodeIfKnown(ClientMessage.self, from: data) == .openDownloadPage)
+    }
+
     @Test("deviceInfo round-trips and tolerates an unknown family")
     func deviceInfoRoundTrips() throws {
         let data = try MessageCodec.encode(ServerMessage.deviceInfo(macKind: .macStudio))
