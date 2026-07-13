@@ -466,7 +466,7 @@ final class ServerController {
         // Bring the terminal listener in line with this pairing (its PSK is keyed
         // to the token) and tell the phone whether/where it can connect.
         await terminal.syncService(pairingToken: token)
-        try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled, port: terminal.port))
+        try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled && TerminalController.isFeatureAvailable, port: terminal.port))
         // Smart Trash snapshot (metadata only). Sent even when empty so the
         // phone clears any stale list from a previous session.
         if trash.enabled {
@@ -486,7 +486,7 @@ final class ServerController {
     private func pushTerminalInfo() async {
         guard isPaired, let peer, let token = sessionToken else { return }
         await terminal.syncService(pairingToken: token)
-        try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled, port: terminal.port))
+        try? await peer.send(ServerMessage.terminalService(enabled: terminal.enabled && TerminalController.isFeatureAvailable, port: terminal.port))
     }
 
     /// Compares bearer tokens without early exit, so a mismatch's timing leaks

@@ -42,7 +42,7 @@ struct SidebarView: View {
 
     private var navigation: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            ForEach(Array(SidebarSection.groups.enumerated()), id: \.offset) { index, group in
+            ForEach(Array(SidebarSection.visibleGroups.enumerated()), id: \.offset) { index, group in
                 if index > 0 {
                     // A hairline anchors each group; the old bare gaps left the
                     // items floating in the dark.

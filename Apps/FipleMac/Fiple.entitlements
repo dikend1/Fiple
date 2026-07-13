@@ -22,5 +22,17 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Send to Mac: beamed files land in ~/Downloads. This is the sanctioned
+	     sandbox path for it — no temporary exception. -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<!-- Smart Trash: the user grants folders to scan via NSOpenPanel
+	     (user-selected access), and we persist those grants across launches as
+	     app-scoped security-scoped bookmarks. This is Apple's blessed pattern —
+	     unlike the home-relative temporary exception that drew review scrutiny. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.bookmarks.app-scope</key>
+	<true/>
 </dict>
 </plist>
