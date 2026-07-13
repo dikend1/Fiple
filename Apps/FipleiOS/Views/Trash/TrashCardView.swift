@@ -44,14 +44,32 @@ struct TrashCardView: View {
             ZStack {
                 Rectangle().fill(Theme.Palette.secondary.opacity(0.08))
                 if let thumbnail, let image = UIImage(data: thumbnail) {
-                    // Fit, not fill: the point of the card is recognizing the
-                    // file, and a document cropped to the card's tall aspect
-                    // shows a zoomed corner instead of the page. The soft
-                    // backdrop owns whatever the preview doesn't cover.
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: proxy.size.width, height: proxy.size.height)
+                    if fillCropLoss(image: image.size, card: proxy.size) <= 0.3 {
+                        // Close enough to the card's aspect (photos,
+                        // screenshots): full-bleed like a photo cleaner.
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                    } else {
+                        // Very different aspect (documents, panoramas):
+                        // cropping would show a zoomed corner instead of the
+                        // file, so show it whole over a blurred cover of
+                        // itself — edge-to-edge, no flat gray bars.
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                            .blur(radius: 26, opaque: true)
+                            .overlay(.black.opacity(0.12))
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .shadow(color: .black.opacity(0.25), radius: 12)
+                    }
                 } else {
                     Image(systemName: "doc.fill")
                         .font(.fiple(56))
@@ -105,6 +123,15 @@ struct TrashCardView: View {
             .background(color, in: Circle())
             .padding(Theme.Spacing.xl)
             .opacity(opacity)
+    }
+
+    /// Fraction of the image lost when scaling it to fill the card: 0 for a
+    /// perfect aspect match, →1 as the shapes diverge.
+    private func fillCropLoss(image: CGSize, card: CGSize) -> CGFloat {
+        guard image.width > 0, image.height > 0, card.width > 0, card.height > 0
+        else { return 1 }
+        let ratio = (image.width / image.height) / (card.width / card.height)
+        return 1 - min(ratio, 1 / ratio)
     }
 
     private var sizeText: String {
