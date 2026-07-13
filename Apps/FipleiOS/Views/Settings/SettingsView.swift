@@ -173,6 +173,12 @@ struct SettingsView: View {
                     controller.replayWelcomeRequested = true
                 }
                 rowDivider
+                SettingsRow(icon: "hand.draw", title: "Replay Smart Trash guide") {
+                    // Clear the seen-flag; the guide shows on the next visit
+                    // to the Smart Trash deck (needs candidates to review).
+                    UserDefaults.standard.removeObject(forKey: "com.fiple.trash.gestureGuideSeen")
+                }
+                rowDivider
                 SettingsRow(icon: "arrow.counterclockwise", title: "Reset Pro (back to free)") {
                     controller.entitlements.debugReset()
                 }
