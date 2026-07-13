@@ -21,6 +21,23 @@ final class PinnedAppsStore {
         } else {
             actions = []
         }
+        dropLegacySeed()
+    }
+
+    /// 1.0 auto-filled the bar from the demo workspaces on first launch (and
+    /// left the `…seeded` flag behind); 1.1 starts empty. If that flag is
+    /// present, this one-time migration strips exactly the auto-seeded entries
+    /// (recognition lives in `LegacyDemoSeed`, unit-tested in FipleKit) so an
+    /// updated install lands "like new" — anything the user pinned themselves
+    /// has a different identity and stays.
+    private func dropLegacySeed() {
+        let seededFlag = "fiple.fipleBar.seeded"
+        guard UserDefaults.standard.bool(forKey: seededFlag) else { return }
+        UserDefaults.standard.removeObject(forKey: seededFlag)
+        let remaining = LegacyDemoSeed.nonSeedActions(actions)
+        guard remaining.count != actions.count else { return }
+        actions = remaining
+        persist()
     }
 
     func add(_ kind: ActionKind) {
