@@ -42,8 +42,9 @@ the Mac was off or asleep SHALL be enforced at the next launch.
 ### Requirement: Phone review by id with keep-list
 
 The phone SHALL present the synced candidates one at a time in a swipe deck:
-a swipe left or up SHALL stage the candidate in an in-app basket, a swipe
-right or down SHALL mark it keep (the dominant drag axis decides). Decisions SHALL stay local until committed — trash ids are sent
+swipe left SHALL stage the candidate in an in-app basket, swipe right SHALL
+mark it keep. On the first visit the screen SHALL show a dismissable gesture
+guide explaining the two directions. Decisions SHALL stay local until committed — trash ids are sent
 as one batch when the user empties the basket; keep ids are sent as one batch
 on commit or when leaving the screen. The phone SHALL send only candidate ids
 with a `keep` or `trash` decision; the Mac SHALL resolve ids against its own
