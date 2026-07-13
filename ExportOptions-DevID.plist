@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Export options for the fiple.app/download build: re-signs the
+	     FipleMac-DevID archive with the Developer ID Application certificate
+	     for notarized distribution outside the Mac App Store. Used by:
+	     xcodebuild -exportArchive -exportOptionsPlist ExportOptions-DevID.plist -->
+	<key>method</key>
+	<string>developer-id</string>
+	<key>teamID</key>
+	<string>VXJ8BY6538</string>
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>
