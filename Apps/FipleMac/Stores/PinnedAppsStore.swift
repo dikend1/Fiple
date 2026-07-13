@@ -3,8 +3,9 @@ import FipleKit
 import Observation
 
 /// The user's "Fiple Bar": an ordered list of quick actions (apps, websites or
-/// files) shown in the Workspaces grid. Persisted locally; seeded once from the
-/// actions already used by the workspaces so the bar isn't empty on first run.
+/// files) shown in the Workspaces grid. Persisted locally; starts empty on a
+/// fresh install — the user pins what *they* use (auto-seeding from demo tiles
+/// read as someone else's setup to new users).
 @MainActor
 @Observable
 final class PinnedAppsStore {
@@ -12,7 +13,6 @@ final class PinnedAppsStore {
     /// Notifies when the bar changes, so the server can re-sync it to the phone.
     @ObservationIgnored var didChange: (() -> Void)?
     private let key = "fiple.fipleBar"
-    private let seededKey = "fiple.fipleBar.seeded"
 
     init() {
         if let data = UserDefaults.standard.data(forKey: key),
@@ -21,23 +21,6 @@ final class PinnedAppsStore {
         } else {
             actions = []
         }
-    }
-
-    /// One-time seed from the distinct actions used by existing workspaces.
-    func seedIfNeeded(from tiles: [Tile]) {
-        guard !UserDefaults.standard.bool(forKey: seededKey) else { return }
-        UserDefaults.standard.set(true, forKey: seededKey)
-        guard actions.isEmpty else { return }
-
-        var seen = Set<String>()
-        var out: [Action] = []
-        for tile in tiles {
-            for action in tile.actions where seen.insert(Self.key(action.kind)).inserted {
-                out.append(Action(kind: action.kind))
-            }
-        }
-        actions = out
-        persist()
     }
 
     func add(_ kind: ActionKind) {

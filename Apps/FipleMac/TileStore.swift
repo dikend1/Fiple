@@ -25,7 +25,10 @@ final class TileStore {
            let saved = try? JSONDecoder().decode([Tile].self, from: data) {
             tiles = saved.sorted { $0.order < $1.order }
         } else {
-            tiles = TileStore.seed
+            // A fresh install starts EMPTY — the user builds their own
+            // workspaces. Demo seed tiles confused real users (a new user saw
+            // someone else's "ready-made" setup on first launch).
+            tiles = []
         }
     }
 
@@ -65,53 +68,4 @@ final class TileStore {
         didChange?()
     }
 
-    static let seed: [Tile] = [
-        Tile(
-            name: "Start Coding",
-            subtitle: "Everything you need to code",
-            iconSystemName: "chevron.left.forwardslash.chevron.right",
-            colorHex: "#84CC16",
-            order: 0,
-            actions: [
-                Action(kind: .launchApp(bundleID: "com.apple.dt.Xcode")),
-                Action(kind: .openURL(URL(string: "https://github.com")!)),
-                Action(kind: .launchApp(bundleID: "com.apple.Terminal")),
-            ]
-        ),
-        Tile(
-            name: "Design Session",
-            subtitle: "Design and prototype",
-            iconSystemName: "pencil.and.outline",
-            colorHex: "#8B5CF6",
-            order: 1,
-            actions: [
-                Action(kind: .launchApp(bundleID: "com.apple.Preview")),
-                Action(kind: .openURL(URL(string: "https://figma.com")!)),
-                Action(kind: .openURL(URL(string: "https://dribbble.com")!)),
-            ]
-        ),
-        Tile(
-            name: "Deep Work",
-            subtitle: "Focus and get things done",
-            iconSystemName: "target",
-            colorHex: "#3B82F6",
-            order: 2,
-            actions: [
-                Action(kind: .launchApp(bundleID: "com.apple.Notes")),
-                Action(kind: .openURL(URL(string: "https://music.apple.com")!)),
-            ]
-        ),
-        Tile(
-            name: "Ship Mode",
-            subtitle: "Build, ship, repeat",
-            iconSystemName: "paperplane.fill",
-            colorHex: "#F59E0B",
-            order: 3,
-            actions: [
-                Action(kind: .launchApp(bundleID: "com.apple.dt.Xcode")),
-                Action(kind: .launchApp(bundleID: "com.apple.Terminal")),
-                Action(kind: .openURL(URL(string: "https://github.com")!)),
-            ]
-        ),
-    ]
 }
