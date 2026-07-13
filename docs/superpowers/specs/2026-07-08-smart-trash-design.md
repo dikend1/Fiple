@@ -4,7 +4,7 @@ Status: draft — pending human acceptance (per repo governance). Target: Fiple 
 
 ## Idea
 
-The Mac finds stale files (not opened for a long time) in Downloads and Desktop, lists them as deletion candidates with a countdown, and the iPhone reviews them in a photo-style grid: select several → "Move to Trash" / "Keep". Unreviewed candidates auto-move to the **system macOS Trash** when their countdown expires — always recoverable, never permanently deleted by Fiple.
+The Mac finds stale files (not opened for a long time) in Downloads and Desktop, lists them as deletion candidates with a countdown, and the iPhone reviews them one at a time in a full-screen swipe deck (photo-cleaner style): swipe left → into an in-app staging basket, swipe right → keep. Nothing touches the Mac until the user confirms the basket with "Empty". Unreviewed candidates auto-move to the **system macOS Trash** when their countdown expires — always recoverable, never permanently deleted by Fiple.
 
 ## Chosen approach: virtual candidate list ("Variant A")
 
@@ -13,8 +13,8 @@ Files are **never physically moved** until the user acts or the deadline expires
 Lifecycle of one file:
 1. File sits untouched in Downloads/Desktop for the staleness threshold (default 60 days, based on macOS last-open date).
 2. Daily scan adds it to the candidate list with a review deadline (default +7 days).
-3. Phone shows it in the Trash grid (thumbnail, name, size, "not opened for 2 months, 5 days left").
-4. User: "Move to Trash" → system Trash now. "Keep" → excluded forever.
+3. Phone shows it as a card in the review deck (thumbnail, name, size, "not opened for 2 months, 5 days left").
+4. User swipes left → staged in the in-app basket; "Empty (N)" commits the batch → system Trash. Swipe right → excluded forever ("keep"). Undo steps back through this session's swipes until a decision is committed.
 5. No action by the deadline → Mac auto-moves it to the system Trash and posts a notification.
 6. If the file is opened/modified/moved while a candidate, it silently leaves the list.
 
@@ -23,7 +23,7 @@ Lifecycle of one file:
 - **`StaleFileScanner`** (FipleKit, macOS): daily scan of user-granted folders; staleness via last-open metadata; emits candidates.
 - **`TrashCandidateStore`** (FipleKit, macOS): persisted candidates (path, size, deadline), keep-list of exclusions, deadline enforcement → `FileManager.trashItem` (system Trash). Missed deadlines (Mac asleep) are enforced on next launch.
 - **Wire messages** (FipleKit): new message types on the existing LAN tile channel — list candidates, fetch thumbnail (QuickLook JPEG ~50–100 KB), action(trash/keep, ids). No new transport, no backend.
-- **iOS Trash screen**: Photos-style thumbnail grid, multi-select, bottom bar "Move to Trash" / "Keep", per-item countdown badge; entry card on Home with a badge count.
+- **iOS Trash screen**: full-screen swipe deck (one card per candidate: thumbnail, name, size, staleness + countdown). Swipe left = stage for trash (red ✕ overlay), swipe right = keep (green ✓ overlay); mirrored ✕ / ✓ buttons plus an Undo button that steps back through this session's decisions. Header shows "reviewed/total" progress and a basket icon with a staged count; the basket sheet lists staged files, lets the user return any card to the deck, and "Empty (N)" sends one batch `trash` action. Keep decisions are sent as a batch on commit or when leaving the screen. Staging is in-memory only — quitting mid-review discards uncommitted decisions and those files simply remain candidates. The next 2–3 card thumbnails are prefetched so the deck stays smooth. Entry card on Home with a badge count.
 
 ## Sandbox & App Store
 

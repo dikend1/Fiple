@@ -41,16 +41,32 @@ the Mac was off or asleep SHALL be enforced at the next launch.
 
 ### Requirement: Phone review by id with keep-list
 
-The phone SHALL present the synced candidate list for review and SHALL send
-only candidate ids with a `keep` or `trash` decision; the Mac SHALL resolve ids
-against its own store and act only on matches. `keep` SHALL permanently exclude
-the file from future scans.
+The phone SHALL present the synced candidates one at a time in a swipe deck:
+swipe left SHALL stage the candidate in an in-app basket, swipe right SHALL
+mark it keep. Decisions SHALL stay local until committed — trash ids are sent
+as one batch when the user empties the basket; keep ids are sent as one batch
+on commit or when leaving the screen. The phone SHALL send only candidate ids
+with a `keep` or `trash` decision; the Mac SHALL resolve ids against its own
+store and act only on matches. `keep` SHALL permanently exclude the file from
+future scans.
 
 #### Scenario: Batch trash from the phone
 
-- **WHEN** the user selects several candidates and confirms "Move to Trash"
+- **WHEN** the user empties the basket ("Empty (N)")
 - **THEN** the Mac moves each resolved file to the system Trash and pushes an
   updated candidate list
+
+#### Scenario: Staged swipe touches nothing on the Mac
+
+- **WHEN** the user swipes candidates left but has not emptied the basket
+- **THEN** no message is sent and no file on the Mac moves; closing the app
+  discards the staged decisions and the files remain ordinary candidates
+
+#### Scenario: Undo restores the last decision
+
+- **WHEN** the user taps Undo after one or more uncommitted swipes
+- **THEN** the most recent decision is reverted and its card returns to the
+  top of the deck, repeatable back to the start of the session
 
 #### Scenario: Keep excludes forever
 
@@ -67,14 +83,15 @@ the file from future scans.
 ### Requirement: Thumbnails over the existing LAN channel
 
 The Mac SHALL serve per-candidate thumbnails (QuickLook-generated JPEG) on
-request over the existing paired LAN channel; the phone SHALL fetch them lazily
-for visible items.
+request over the existing paired LAN channel; the phone SHALL fetch the
+current card's thumbnail and prefetch the next few cards.
 
-#### Scenario: Grid shows previews
+#### Scenario: Deck shows previews
 
-- **WHEN** the phone displays candidate cells
-- **THEN** it requests thumbnails for visible ids and renders them; items
-  without a thumbnail show a document icon with name and size
+- **WHEN** the phone displays a candidate card
+- **THEN** its thumbnail (requested ahead of time for the next 2–3 cards) is
+  rendered; a candidate without a thumbnail shows a document icon with name
+  and size
 
 ### Requirement: Opt-in with user-granted folder access
 

@@ -53,11 +53,16 @@
 - [x] 4.1 Home entry card with candidate-count badge.
       *Evidence: `HomeView.trashEntry`, shown only when candidates exist
       (2026-07-08).*
-- [x] 4.2 Trash screen: thumbnail grid, multi-select, bottom bar
-      "Move to Trash" / "Keep", per-item countdown, lazy thumbnail fetch.
-      *Evidence: `TrashReviewView` (3-col grid, Select All, urgency-red
-      countdown, `.task` lazy thumbnail requests); FipleiOS builds green
-      (2026-07-08).*
+- [ ] 4.2 Trash screen: full-screen swipe deck (card = thumbnail, name, size,
+      countdown; left = stage for trash with red ✕ overlay, right = keep with
+      green ✓ overlay), mirrored ✕/✓ buttons, multi-step Undo,
+      reviewed/total progress header, thumbnail prefetch for the next 2–3
+      cards. *(Supersedes the shipped 2026-07-08 grid/multi-select
+      `TrashReviewView` — that UI is replaced by the deck.)*
+- [ ] 4.2b In-app basket: staged-count badge, sheet listing staged files with
+      per-item return-to-deck, "Empty (N)" → one batch `trash` action; keep
+      ids flushed as one batch on commit or screen exit; staging is in-memory
+      per session.
 - [x] 4.3 Local reminder scheduling on each sync (nearest deadline − 2 days).
       *Evidence: `TrashReminder.reschedule(for:)` called from the
       `trashCandidates` handler in `RemoteController` (2026-07-08).*

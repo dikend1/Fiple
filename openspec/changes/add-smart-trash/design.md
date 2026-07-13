@@ -33,7 +33,18 @@ This file records the technical decisions.
 8. **Persistence.** Candidate list, keep-list, bookmarks, and settings persist
    on the Mac (Application Support JSON via existing store patterns); the phone
    holds only a synced snapshot.
-9. **Notifications.** Mac: `UserNotifications` local notification when items
+9. **Swipe-deck review with local staging (supersedes the earlier grid +
+   multi-select).** The phone reviews candidates one at a time in a full-screen
+   card deck: swipe left = stage for trash, swipe right = keep. Staged ids
+   accumulate in an in-app basket; only "Empty (N)" sends
+   `trashAction(ids:, trash)` as one batch, and keep ids flush as one
+   `trashAction(ids:, keep)` batch on commit or screen exit. Undo pops the last
+   uncommitted decision (either direction) — purely local, no wire message.
+   Staging is in-memory per session; abandoned reviews leave files as ordinary
+   candidates. No protocol change: the existing snapshot/thumbnail/action
+   messages already cover this UI (thumbnails prefetch 2–3 cards ahead instead
+   of per visible cell).
+10. **Notifications.** Mac: `UserNotifications` local notification when items
    are ≤2 days from deadline and when auto-trash fires. iOS: on each sync,
    reschedule one local notification for (nearest deadline − 2 days).
 
