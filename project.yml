@@ -47,14 +47,15 @@ targets:
         PRODUCT_NAME: Fiple
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Apps/FipleMac/Info.plist
-        # 1.0 ships sandboxed for the Mac App Store (Fiple.entitlements). The
-        # phone-driven terminal needs a real login shell, which the sandbox
-        # can't host — it ships later as a Developer ID build with the sandbox
-        # off (see FipleTerminalDev.entitlements / ADR-0006). For local terminal
-        # testing on this machine, flip ENABLE_APP_SANDBOX to NO and swap the
-        # entitlements to FipleTerminalDev.entitlements — but never commit that.
-        ENABLE_APP_SANDBOX: "YES"
-        CODE_SIGN_ENTITLEMENTS: Apps/FipleMac/Fiple.entitlements
+        # BRANCH DEV CONFIG: sandbox off so the phone-driven terminal can spawn
+        # a real login shell (TerminalController.isFeatureAvailable detects this
+        # at runtime and shows/hides the feature accordingly). The Mac App Store
+        # archive uses the SANDBOXED config — before archiving for MAS, flip to:
+        #   ENABLE_APP_SANDBOX: "YES"
+        #   CODE_SIGN_ENTITLEMENTS: Apps/FipleMac/Fiple.entitlements
+        # (see commit 663ecde / a9daece for the exact production posture).
+        ENABLE_APP_SANDBOX: "NO"
+        CODE_SIGN_ENTITLEMENTS: Apps/FipleMac/FipleTerminalDev.entitlements
         SWIFT_STRICT_CONCURRENCY: complete
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
