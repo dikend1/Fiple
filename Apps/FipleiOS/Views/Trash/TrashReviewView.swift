@@ -50,10 +50,11 @@ struct TrashReviewView: View {
             Task { await controller.trashFlushKeeps() }
         }
         .onAppear {
-            // First visit with something to review: explain the two gestures
-            // once, before the user has to guess what a swipe does.
-            if session.current != nil,
-               !UserDefaults.standard.bool(forKey: Self.gestureGuideSeenKey) {
+            // Strictly once: the very first time this screen opens — marked
+            // seen immediately, so leaving mid-guide (or an empty deck) never
+            // re-triggers it. The DEBUG Settings row re-arms it on demand.
+            if !UserDefaults.standard.bool(forKey: Self.gestureGuideSeenKey) {
+                UserDefaults.standard.set(true, forKey: Self.gestureGuideSeenKey)
                 showGestureGuide = true
             }
         }
@@ -131,7 +132,6 @@ struct TrashReviewView: View {
     }
 
     private func dismissGestureGuide() {
-        UserDefaults.standard.set(true, forKey: Self.gestureGuideSeenKey)
         withAnimation(.easeOut(duration: 0.2)) { showGestureGuide = false }
     }
 
