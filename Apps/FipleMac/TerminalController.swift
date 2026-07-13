@@ -19,8 +19,16 @@ final class TerminalController {
     /// the non-sandboxed Developer ID build. The sandboxed Mac App Store build
     /// hides it entirely (sidebar entry gone, never advertised to the phone).
     /// Detected at runtime, so one codebase produces both builds.
-    nonisolated static let isFeatureAvailable: Bool =
-        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
+    nonisolated static let isFeatureAvailable: Bool = {
+        #if DEBUG
+        // Screenshot aid: force the sandboxed (Mac App Store) posture from the
+        // dev build, so store screenshots match what App Review downloads —
+        // the sidebar Terminal entry disappears and the phone is never told a
+        // terminal exists. Runtime only; the shipping check is below.
+        if ProcessInfo.processInfo.arguments.contains("-mas-preview") { return false }
+        #endif
+        return ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
+    }()
 
     /// Whether the user has turned the feature on. Persisted; defaults to off.
     private(set) var enabled: Bool
