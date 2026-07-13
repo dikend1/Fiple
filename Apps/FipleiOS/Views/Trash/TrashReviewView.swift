@@ -74,6 +74,11 @@ struct TrashReviewView: View {
                             Text("\(session.staged.count)")
                                 .font(.fiple(11, .bold))
                                 .foregroundStyle(.white)
+                                .lineLimit(1)
+                                // The overlay is only as wide as the trash
+                                // glyph, so a two-digit count would wrap into
+                                // a digit stack without this.
+                                .fixedSize()
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
                                 .background(.red, in: Capsule())
