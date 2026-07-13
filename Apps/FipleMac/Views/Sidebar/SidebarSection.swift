@@ -44,4 +44,22 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         [.terminal, .smartTrash],
         [.devices, .settings],
     ]
+
+    /// Whether this section is reachable in the current build. Terminal exists
+    /// only in the non-sandboxed Developer ID build (see
+    /// `TerminalController.isFeatureAvailable`); the sandboxed App Store build
+    /// drops its sidebar entry.
+    var isAvailable: Bool {
+        switch self {
+        case .terminal: return TerminalController.isFeatureAvailable
+        default: return true
+        }
+    }
+
+    /// `groups` with build-unavailable sections removed (empty groups dropped).
+    /// The Tools group keeps Smart Trash, so no group disappears and the group
+    /// labels stay index-aligned.
+    static var visibleGroups: [[SidebarSection]] {
+        groups.map { $0.filter(\.isAvailable) }.filter { !$0.isEmpty }
+    }
 }

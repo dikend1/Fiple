@@ -14,6 +14,14 @@ import Observation
 @MainActor
 @Observable
 final class TerminalController {
+    /// Whether this build can host a terminal at all. A real login shell needs
+    /// filesystem access the App Sandbox forbids, so the feature exists ONLY in
+    /// the non-sandboxed Developer ID build. The sandboxed Mac App Store build
+    /// hides it entirely (sidebar entry gone, never advertised to the phone).
+    /// Detected at runtime, so one codebase produces both builds.
+    nonisolated static let isFeatureAvailable: Bool =
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
+
     /// Whether the user has turned the feature on. Persisted; defaults to off.
     private(set) var enabled: Bool
     /// Whether a master password has been set (its verifier is in the Keychain).
@@ -72,6 +80,8 @@ final class TerminalController {
     /// `pairingToken`) when enabled + password set + a phone is paired; stopped
     /// otherwise. Called on pairing and whenever the toggle changes.
     func syncService(pairingToken: String?) async {
+        // Sandboxed (App Store) build: the feature doesn't exist here.
+        guard Self.isFeatureAvailable else { stopService(); return }
         let shouldRun = enabled && hasPassword && pairingToken != nil
         guard shouldRun, let token = pairingToken, let record = loadRecord() else {
             stopService()
