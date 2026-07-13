@@ -30,6 +30,22 @@ final class TileStore {
             // someone else's "ready-made" setup on first launch).
             tiles = []
         }
+        dropLegacyDemoTiles()
+    }
+
+    /// 1.0 seeded four demo workspaces on first launch; 1.1 starts empty. This
+    /// one-time migration removes those templates from old installs so an
+    /// update also lands "like new" — but only tiles the user never touched
+    /// (recognition lives in `LegacyDemoSeed`, unit-tested in FipleKit). A
+    /// renamed or edited demo tile is the user's own work now and stays.
+    private func dropLegacyDemoTiles() {
+        let flag = "fiple.migration.dropDemoSeed"
+        guard !UserDefaults.standard.bool(forKey: flag) else { return }
+        UserDefaults.standard.set(true, forKey: flag)
+        let remaining = LegacyDemoSeed.nonDemoTiles(tiles)
+        guard remaining.count != tiles.count else { return }
+        tiles = remaining
+        commit()
     }
 
     func add(_ tile: Tile) {
