@@ -69,7 +69,6 @@ struct PinnedAppsSection: View {
                 CarouselDots(count: pages.count, current: scrolledPage ?? 0)
             }
         }
-        .task { bar.seedIfNeeded(from: store.tiles) }
         .sheet(isPresented: $isAdding) {
             AddActionSheet { kind in
                 bar.add(kind)
