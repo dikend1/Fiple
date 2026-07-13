@@ -10,6 +10,9 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     @State private var confirmingUnpair = false
     @State private var confirmingClearHistory = false
+    #if DEBUG
+    @State private var didResetTrashGuide = false
+    #endif
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -173,10 +176,16 @@ struct SettingsView: View {
                     controller.replayWelcomeRequested = true
                 }
                 rowDivider
-                SettingsRow(icon: "hand.draw", title: "Replay Smart Trash guide") {
+                SettingsRow(
+                    icon: "hand.draw", title: "Replay Smart Trash guide",
+                    // The action just clears a flag, which reads as "nothing
+                    // happened" without this acknowledgement.
+                    value: didResetTrashGuide ? "✓ on next visit" : nil
+                ) {
                     // Clear the seen-flag; the guide shows on the next visit
                     // to the Smart Trash deck (needs candidates to review).
                     UserDefaults.standard.removeObject(forKey: "com.fiple.trash.gestureGuideSeen")
+                    withAnimation(.easeOut(duration: 0.15)) { didResetTrashGuide = true }
                 }
                 rowDivider
                 SettingsRow(icon: "arrow.counterclockwise", title: "Reset Pro (back to free)") {
