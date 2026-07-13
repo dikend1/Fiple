@@ -1,83 +1,146 @@
 import FipleKit
 import SwiftUI
 
-/// The Smart Trash review screen. One compact header line carries the shared
-/// facts (count · size, the batch's nearest auto-trash date, the safety net);
-/// the grid itself stays quiet — per-cell chrome appears only when it says
-/// something unique (an urgent deadline, a selection). Selection follows the
-/// system Photos pattern: tap to select, filled checkmark in the corner.
+/// The Smart Trash review screen: a full-screen swipe deck (photo-cleaner
+/// style). Swipe left to stage a file in the in-app basket, right to keep it
+/// forever; ✕/✓ buttons mirror the gestures and Undo steps back through this
+/// session's decisions. Nothing moves on the Mac until "Empty (N)" commits the
+/// basket as one batch — keeps flush when committing or leaving the screen.
+/// Biggest files lead: the screen's promise is "free up 1,3 GB".
 struct TrashReviewView: View {
     let controller: RemoteController
 
-    @State private var selection: Set<UUID> = []
-    /// Biggest first by default — the screen's promise is "free up 1,3 GB",
-    /// so the files that actually deliver it lead; deadline order is one tap
-    /// away for "what's about to disappear".
-    @State private var sortBySize = true
+    @State private var session: TrashReviewSession
+    @State private var dragOffset: CGSize = .zero
+    @State private var showBasket = false
 
-    private let columns = Array(
-        repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
-        count: 2
-    )
+    /// Swipe past this many points of horizontal travel = a decision.
+    private static let decisionDistance: CGFloat = 120
 
-    private var sortedCandidates: [TrashCandidate] {
-        sortBySize
-            ? controller.trashCandidates.sorted { $0.sizeBytes > $1.sizeBytes }
-            : controller.trashCandidates.sorted { $0.deadline < $1.deadline }
+    init(controller: RemoteController) {
+        self.controller = controller
+        _session = State(initialValue: TrashReviewSession(
+            candidates: controller.trashCandidates.sorted { $0.sizeBytes > $1.sizeBytes }
+        ))
     }
 
     var body: some View {
         Group {
-            if controller.trashCandidates.isEmpty {
-                emptyState
+            if session.total == 0 {
+                allCleanState
             } else {
-                grid
+                VStack(spacing: Theme.Spacing.lg) {
+                    header
+                    deck
+                    controls
+                }
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.bottom, Theme.Spacing.xl)
             }
         }
+        .background(Theme.Palette.background)
         .navigationTitle("Smart Trash")
         .navigationBarTitleDisplayMode(.inline)
-        .background(Theme.Palette.background)
-        .safeAreaInset(edge: .bottom) {
-            if !controller.trashCandidates.isEmpty { actionBar }
-        }
         .toolbar {
-            if !controller.trashCandidates.isEmpty {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Sort", selection: $sortBySize) {
-                            Label("Biggest first", systemImage: "arrow.down.circle").tag(true)
-                            Label("Deadline first", systemImage: "clock").tag(false)
+            if session.total > 0 { basketButton }
+        }
+        .sheet(isPresented: $showBasket) {
+            TrashBasketSheet(
+                staged: session.staged,
+                thumbnails: controller.trashThumbnails,
+                actionInFlight: controller.trashActionInFlight,
+                onReturn: { id in session.returnToDeck(id: id) },
+                onEmpty: { commit() }
+            )
+        }
+        // The Mac stays authoritative: evicted/auto-trashed candidates leave
+        // the deck and basket; newly scanned ones join the end of the deck.
+        .onChange(of: controller.trashCandidates) { _, snapshot in
+            session.reconcile(with: snapshot)
+        }
+        .task(id: session.current?.id) { await prefetchThumbnails() }
+        .onDisappear { flushKeeps() }
+    }
+
+    // MARK: Header
+
+    /// Progress plus the shared safety-net fact, said once.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(session.reviewed) of \(session.total) reviewed")
+                .font(.fiple(22, .bold))
+                .contentTransition(.numericText())
+            Text("Trashed files are recoverable from the Mac's Trash")
+                .font(.fiple(13))
+                .foregroundStyle(Theme.Palette.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var basketButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showBasket = true
+            } label: {
+                Image(systemName: "trash")
+                    .overlay(alignment: .topTrailing) {
+                        if !session.staged.isEmpty {
+                            Text("\(session.staged.count)")
+                                .font(.fiple(11, .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(.red, in: Capsule())
+                                .offset(x: 12, y: -10)
                         }
-                        Divider()
-                        Button(allSelected ? "Deselect All" : "Select All") {
-                            selection = allSelected ? [] : Set(controller.trashCandidates.map(\.id))
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down.circle")
-                            .font(.fiple(16, .medium))
                     }
+            }
+            .disabled(session.staged.isEmpty)
+            .accessibilityLabel("Basket, \(session.staged.count) files")
+        }
+    }
+
+    // MARK: Deck
+
+    @ViewBuilder private var deck: some View {
+        if let current = session.current {
+            ZStack {
+                if let next = session.upcoming.first {
+                    TrashCardView(candidate: next, thumbnail: controller.trashThumbnails[next.id])
+                        .scaleEffect(0.94)
+                        .offset(y: 10)
+                }
+                TrashCardView(
+                    candidate: current,
+                    thumbnail: controller.trashThumbnails[current.id],
+                    decisionProgress: dragOffset.width / Self.decisionDistance
+                )
+                .offset(dragOffset)
+                .rotationEffect(.degrees(dragOffset.width / 18))
+                .gesture(dragGesture)
+            }
+            .frame(maxHeight: .infinity)
+        } else {
+            deckDoneState
+        }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture()
+            .onChanged { dragOffset = $0.translation }
+            .onEnded { value in
+                if value.translation.width <= -Self.decisionDistance {
+                    decide(.trash)
+                } else if value.translation.width >= Self.decisionDistance {
+                    decide(.keep)
+                } else {
+                    withAnimation(.spring(duration: 0.3)) { dragOffset = .zero }
                 }
             }
-        }
-        // Candidates the Mac evicted (used again / already handled) leave the
-        // selection too, so the action bar never operates on ghosts.
-        .onChange(of: controller.trashCandidates) { _, candidates in
-            let ids = Set(candidates.map(\.id))
-            selection = selection.intersection(ids)
-        }
     }
 
-    private var allSelected: Bool {
-        selection.count == controller.trashCandidates.count
-    }
-
-    private var selectedBytes: Int64 {
-        controller.trashCandidates
-            .filter { selection.contains($0.id) }
-            .reduce(0) { $0 + $1.sizeBytes }
-    }
-
-    private var emptyState: some View {
+    /// No candidates at all — the Mac has nothing for us.
+    private var allCleanState: some View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "sparkles")
                 .font(.fiple(34))
@@ -93,233 +156,105 @@ struct TrashReviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var grid: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                summaryHeader
-
-                LazyVGrid(columns: columns, spacing: Theme.Spacing.lg) {
-                    ForEach(sortedCandidates) { candidate in
-                        TrashCandidateCell(
-                            candidate: candidate,
-                            thumbnail: controller.trashThumbnails[candidate.id],
-                            isSelected: selection.contains(candidate.id)
-                        ) {
-                            if selection.contains(candidate.id) {
-                                selection.remove(candidate.id)
-                            } else {
-                                selection.insert(candidate.id)
-                            }
-                        }
-                        .task { await controller.requestTrashThumbnail(candidate.id) }
-                    }
-                }
-            }
-            .padding(.horizontal, Theme.Spacing.lg)
-            .padding(.top, Theme.Spacing.sm)
-            .padding(.bottom, Theme.Spacing.xxl)
-        }
-    }
-
-    /// The shared facts, said once: count · size on the first line; the batch
-    /// deadline and the safety net in one short secondary line.
-    private var summaryHeader: some View {
-        let candidates = controller.trashCandidates
-        let totalBytes = candidates.reduce(Int64(0)) { $0 + $1.sizeBytes }
-        let total = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-        let count = candidates.count == 1 ? "1 file" : "\(candidates.count) files"
-
-        return VStack(alignment: .leading, spacing: 3) {
-            Text("\(count) · \(total)")
-                .font(.fiple(22, .bold))
-            Text("\(deadlineText(candidates)) · recoverable from the Mac's Trash")
-                .font(.fiple(13))
+    /// Every card swiped; the basket may still hold uncommitted files.
+    private var deckDoneState: some View {
+        VStack(spacing: Theme.Spacing.md) {
+            Image(systemName: session.staged.isEmpty ? "checkmark.circle" : "trash")
+                .font(.fiple(44))
+                .foregroundStyle(Theme.Palette.brand)
+            Text(session.staged.isEmpty
+                 ? "All caught up — nothing left to review."
+                 : "Deck done. Empty the basket to move \(session.staged.count) file\(session.staged.count == 1 ? "" : "s") to the Mac's Trash.")
+                .font(.fiple(15))
                 .foregroundStyle(Theme.Palette.secondary)
-        }
-    }
-
-    private func deadlineText(_ candidates: [TrashCandidate]) -> String {
-        guard let nearest = candidates.map(\.deadline).min() else { return "" }
-        let days = Int(nearest.timeIntervalSinceNow / 86_400)
-        if days <= 0 { return "Auto-trash starts today" }
-        return days == 1 ? "Auto-trash in 1 day" : "Auto-trash in \(days) days"
-    }
-
-    /// Always visible so the mechanic needs no discovery. Keep is quiet (it's
-    /// the safe no-op); Move to Trash is the one prominent action and carries
-    /// the live count. Both disabled until something is selected.
-    private var actionBar: some View {
-        let count = selection.count
-        let size = ByteCountFormatter.string(fromByteCount: selectedBytes, countStyle: .file)
-
-        // A system edit-toolbar (Mail/Photos selection pattern): quiet text
-        // actions at the edges, the selection count in the middle — not two
-        // shouting full-width pills.
-        return HStack {
-            Button("Keep") { apply(.keep) }
-                .font(.fiple(16, .medium))
-                .tint(Theme.Palette.brand)
-                .disabled(count == 0 || controller.trashActionInFlight)
-
-            Spacer()
-            Text(count == 0 ? "Tap files to select" : "\(count) · \(size)")
-                .font(.fiple(13))
-                .foregroundStyle(Theme.Palette.secondary)
-                .contentTransition(.numericText())
-            Spacer()
-
-            Button(count > 1 ? "Trash \(count)" : "Trash") { apply(.trash) }
-                .font(.fiple(16, .semibold))
-                .tint(.red)
-                .disabled(count == 0 || controller.trashActionInFlight)
-        }
-        .animation(.easeOut(duration: 0.15), value: selection.isEmpty)
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.vertical, 14)
-        .background(.bar)
-    }
-
-    private func apply(_ decision: TrashDecision) {
-        let ids = Array(selection)
-        Task { await controller.sendTrashAction(ids: ids, decision: decision) }
-    }
-}
-
-/// One grid cell, Photos-style: the thumbnail on a soft well, a filled brand
-/// checkmark in the corner only when selected, and a red "time left" chip only
-/// when this file's deadline is inside the urgent 2-day window — cells whose
-/// deadline matches the batch header stay chrome-free.
-private struct TrashCandidateCell: View {
-    let candidate: TrashCandidate
-    let thumbnail: Data?
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 6) {
-                // Color.clear owns the layout; the fill image lives in an
-                // overlay so its intrinsic size can never inflate the cell
-                // (a .fill image as a layout child stretched cells unevenly,
-                // pushing the right column off the screen edge).
-                Color.clear
-                    .frame(height: 130)
-                    .frame(maxWidth: .infinity)
-                    .overlay {
-                        ZStack {
-                            Rectangle().fill(Theme.Palette.secondary.opacity(0.08))
-                            thumbnailImage
-                            // A video's first frame is often near-black — the
-                            // play glyph says "this is a video" at a glance.
-                            if isVideo {
-                                Image(systemName: "play.circle.fill")
-                                    .font(.fiple(30))
-                                    .foregroundStyle(.white.opacity(0.9), .black.opacity(0.35))
-                            }
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(alignment: .bottomTrailing) {
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.fiple(22, .semibold))
-                            .foregroundStyle(.white, Theme.Palette.brand)
-                            .padding(6)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .overlay(alignment: .bottomLeading) {
-                    // The extension chip carries the "what kind of file" signal
-                    // the thumbnails alone can't (a .db, a spreadsheet, a video).
-                    if let ext = fileExtension {
-                        Text(ext)
-                            .font(.fiple(9, .bold, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(.black.opacity(0.55), in: Capsule())
-                            .padding(6)
-                    }
-                }
-                .overlay(alignment: .topLeading) {
-                    if isUrgent {
-                        Text(countdownText)
-                            .font(.fiple(10, .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(.red, in: Capsule())
-                            .padding(6)
-                    }
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(
-                            isSelected ? Theme.Palette.brand : Theme.Palette.hairline,
-                            lineWidth: isSelected ? 2 : 1
-                        )
-                )
-
-                // Name without the extension (the chip already says the type)
-                // and the size on one quiet line — the caption supports the
-                // thumbnail instead of competing with it.
-                VStack(alignment: .leading, spacing: 1) {
-                    Text((candidate.fileName as NSString).deletingPathExtension)
-                        .font(.fiple(12, .medium))
-                        .foregroundStyle(Theme.Palette.label)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(sizeText)
-                        .font(.fiple(11))
-                        .foregroundStyle(Theme.Palette.secondary)
-                }
-                .padding(.horizontal, 2)
+                .multilineTextAlignment(.center)
+            if !session.staged.isEmpty {
+                Button("Open Basket") { showBasket = true }
+                    .font(.fiple(15, .semibold))
+                    .tint(Theme.Palette.brand)
             }
-            .animation(.easeOut(duration: 0.12), value: isSelected)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(candidate.fileName), \(sizeText), \(countdownText) left\(isSelected ? ", selected" : "")")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder private var thumbnailImage: some View {
-        if let thumbnail, let image = UIImage(data: thumbnail) {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } else {
-            Image(systemName: "doc.fill")
-                .font(.fiple(28))
-                .foregroundStyle(Theme.Palette.secondary.opacity(0.4))
+    // MARK: Controls
+
+    private var controls: some View {
+        HStack(spacing: Theme.Spacing.xxl) {
+            controlButton(symbol: "xmark", tint: .red, label: "Move to basket") {
+                animateOff(.trash)
+            }
+            controlButton(
+                symbol: "arrow.uturn.backward", tint: Theme.Palette.secondary,
+                label: "Undo", small: true
+            ) {
+                withAnimation(.spring(duration: 0.3)) { _ = session.undo() }
+            }
+            .disabled(!session.canUndo)
+            .opacity(session.canUndo ? 1 : 0.35)
+            controlButton(symbol: "checkmark", tint: Theme.Palette.brand, label: "Keep") {
+                animateOff(.keep)
+            }
+        }
+        .disabled(session.current == nil)
+        .opacity(session.current == nil ? 0.35 : 1)
+    }
+
+    private func controlButton(
+        symbol: String, tint: Color, label: String, small: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.fiple(small ? 17 : 22, .bold))
+                .foregroundStyle(tint)
+                .frame(width: small ? 48 : 64, height: small ? 48 : 64)
+                .background(Theme.Palette.surface, in: Circle())
+                .overlay(Circle().strokeBorder(Theme.Palette.hairline))
+        }
+        .accessibilityLabel(label)
+    }
+
+    // MARK: Actions
+
+    /// Button path: fling the card off in the decision's direction, then decide.
+    private func animateOff(_ decision: TrashDecision) {
+        withAnimation(.easeIn(duration: 0.18)) {
+            dragOffset = CGSize(width: decision == .trash ? -500 : 500, height: 0)
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(180))
+            decide(decision)
         }
     }
 
-    private var sizeText: String {
-        ByteCountFormatter.string(fromByteCount: candidate.sizeBytes, countStyle: .file)
+    private func decide(_ decision: TrashDecision) {
+        session.swipe(decision)
+        dragOffset = .zero
     }
 
-    /// Uppercased extension for the type chip; nil when the name has none.
-    private var fileExtension: String? {
-        let ext = (candidate.fileName as NSString).pathExtension
-        return ext.isEmpty ? nil : ext.uppercased()
+    /// Fetch the visible card and the next two so the deck never shows a blank.
+    private func prefetchThumbnails() async {
+        let wanted = [session.current].compactMap { $0 } + session.upcoming.prefix(2)
+        for candidate in wanted {
+            await controller.requestTrashThumbnail(candidate.id)
+        }
     }
 
-    private var isVideo: Bool {
-        ["mp4", "mov", "m4v", "avi", "mkv", "webm"].contains(
-            (candidate.fileName as NSString).pathExtension.lowercased()
-        )
+    /// "Empty (N)": one batch trash action, plus any pending keeps.
+    private func commit() {
+        let trashIDs = session.takeTrashIDs()
+        let keepIDs = session.takeKeepIDs()
+        showBasket = false
+        Task {
+            await controller.sendTrashAction(ids: trashIDs, decision: .trash)
+            await controller.sendTrashAction(ids: keepIDs, decision: .keep)
+        }
     }
 
-    private var isUrgent: Bool {
-        candidate.deadline.timeIntervalSinceNow <= 2 * 86_400
-    }
-
-    private var countdownText: String {
-        let remaining = candidate.deadline.timeIntervalSinceNow
-        guard remaining > 0 else { return "any moment" }
-        let days = Int(remaining / 86_400)
-        if days >= 1 { return days == 1 ? "1 day" : "\(days) days" }
-        let hours = max(1, Int(remaining / 3_600))
-        return hours == 1 ? "1 hour" : "\(hours) hours"
+    /// Keeps are safe to apply without confirmation; flush them when leaving.
+    private func flushKeeps() {
+        let keepIDs = session.takeKeepIDs()
+        Task { await controller.sendTrashAction(ids: keepIDs, decision: .keep) }
     }
 }
