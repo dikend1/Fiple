@@ -77,6 +77,20 @@ struct TrashReviewSessionTests {
         #expect(session.current == c)
     }
 
+    @Test("Staging restored ids moves them from the deck to the basket, no undo")
+    func stageRestoresBasket() {
+        let a = candidate("a"), b = candidate("b"), c = candidate("c")
+        var session = TrashReviewSession(candidates: [a, b, c])
+        session.stage(ids: [b.id, UUID()]) // unknown id ignored
+        #expect(session.current == a)
+        #expect(session.staged == [b])
+        #expect(session.reviewed == 1)
+        #expect(!session.canUndo)
+        session.returnToDeck(id: b.id) // basket "put back" still works
+        #expect(session.current == b)
+        #expect(session.staged.isEmpty)
+    }
+
     @Test("Reconcile drops vanished candidates and appends new ones")
     func reconcileSyncsWithSnapshot() {
         let a = candidate("a"), b = candidate("b"), c = candidate("c"), d = candidate("d")

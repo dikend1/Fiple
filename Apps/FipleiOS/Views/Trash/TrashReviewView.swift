@@ -3,26 +3,20 @@ import SwiftUI
 
 /// The Smart Trash review screen: a full-screen swipe deck (photo-cleaner
 /// style). Swipe left to stage a file in the in-app basket, right to keep it
-/// forever; ✕/✓ buttons mirror the gestures and Undo steps back through this
+/// forever; ✕/✓ buttons mirror the gestures and Undo steps back through the
 /// session's decisions. Nothing moves on the Mac until "Empty (N)" commits the
-/// basket as one batch — keeps flush when committing or leaving the screen.
-/// Biggest files lead: the screen's promise is "free up 1,3 GB".
+/// basket as one batch — keeps flush when leaving the screen. The session
+/// lives on the controller, so leaving and re-entering keeps the basket.
 struct TrashReviewView: View {
     let controller: RemoteController
 
-    @State private var session: TrashReviewSession
     @State private var dragOffset: CGSize = .zero
     @State private var showBasket = false
 
     /// Swipe past this many points of horizontal travel = a decision.
     private static let decisionDistance: CGFloat = 120
 
-    init(controller: RemoteController) {
-        self.controller = controller
-        _session = State(initialValue: TrashReviewSession(
-            candidates: controller.trashCandidates.sorted { $0.sizeBytes > $1.sizeBytes }
-        ))
-    }
+    private var session: TrashReviewSession { controller.trashSession }
 
     var body: some View {
         Group {
@@ -45,21 +39,13 @@ struct TrashReviewView: View {
             if session.total > 0 { basketButton }
         }
         .sheet(isPresented: $showBasket) {
-            TrashBasketSheet(
-                staged: session.staged,
-                thumbnails: controller.trashThumbnails,
-                actionInFlight: controller.trashActionInFlight,
-                onReturn: { id in session.returnToDeck(id: id) },
-                onEmpty: { commit() }
-            )
-        }
-        // The Mac stays authoritative: evicted/auto-trashed candidates leave
-        // the deck and basket; newly scanned ones join the end of the deck.
-        .onChange(of: controller.trashCandidates) { _, snapshot in
-            session.reconcile(with: snapshot)
+            TrashBasketSheet(controller: controller)
         }
         .task(id: session.current?.id) { await prefetchThumbnails() }
-        .onDisappear { flushKeeps() }
+        .onDisappear {
+            let controller = controller
+            Task { await controller.trashFlushKeeps() }
+        }
     }
 
     // MARK: Header
@@ -188,7 +174,7 @@ struct TrashReviewView: View {
                 symbol: "arrow.uturn.backward", tint: Theme.Palette.secondary,
                 label: "Undo", small: true
             ) {
-                withAnimation(.spring(duration: 0.3)) { _ = session.undo() }
+                withAnimation(.spring(duration: 0.3)) { controller.trashUndo() }
             }
             .disabled(!session.canUndo)
             .opacity(session.canUndo ? 1 : 0.35)
@@ -229,7 +215,7 @@ struct TrashReviewView: View {
     }
 
     private func decide(_ decision: TrashDecision) {
-        session.swipe(decision)
+        controller.trashSwipe(decision)
         dragOffset = .zero
     }
 
@@ -239,22 +225,5 @@ struct TrashReviewView: View {
         for candidate in wanted {
             await controller.requestTrashThumbnail(candidate.id)
         }
-    }
-
-    /// "Empty (N)": one batch trash action, plus any pending keeps.
-    private func commit() {
-        let trashIDs = session.takeTrashIDs()
-        let keepIDs = session.takeKeepIDs()
-        showBasket = false
-        Task {
-            await controller.sendTrashAction(ids: trashIDs, decision: .trash)
-            await controller.sendTrashAction(ids: keepIDs, decision: .keep)
-        }
-    }
-
-    /// Keeps are safe to apply without confirmation; flush them when leaving.
-    private func flushKeeps() {
-        let keepIDs = session.takeKeepIDs()
-        Task { await controller.sendTrashAction(ids: keepIDs, decision: .keep) }
     }
 }
