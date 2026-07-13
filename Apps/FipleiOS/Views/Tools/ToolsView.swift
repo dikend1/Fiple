@@ -16,6 +16,9 @@ struct ToolsView: View {
     /// Whether the current password came from Face ID (already saved) vs typed
     /// (save it only once it actually authenticates).
     @State private var terminalFromBiometrics = false
+    /// Explains why Terminal is dark when the connected Mac can't host it
+    /// (Mac App Store build, or the feature is switched off on the Mac).
+    @State private var showTerminalHelp = false
 
     private let columns = Array(
         repeating: GridItem(.flexible(), spacing: Theme.Spacing.md),
@@ -32,13 +35,17 @@ struct ToolsView: View {
                     // beam/cleanup tools pair up beneath it, so three tools
                     // never leave an orphan hole in a 2-up grid.
                     Button {
-                        Task { await beginTerminal() }
+                        if controller.terminalTarget != nil {
+                            Task { await beginTerminal() }
+                        } else {
+                            showTerminalHelp = true
+                        }
                     } label: {
                         TerminalHeroCard()
                     }
                     .buttonStyle(ToolCardPressStyle())
-                    .disabled(controller.terminalTarget == nil)
-                    .opacity(controller.terminalTarget == nil ? 0.45 : 1)
+                    .disabled(!controller.isConnected)
+                    .opacity(controller.isConnected ? 1 : 0.45)
 
                     LazyVGrid(columns: columns, spacing: Theme.Spacing.md) {
                         Button {
@@ -93,6 +100,11 @@ struct ToolsView: View {
                 // Two picker rows don't need a full screen — a compact card
                 // keeps the context (and the app) visible behind.
                 .presentationDetents([.height(340)])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showTerminalHelp) {
+            TerminalUnavailableSheet()
+                .presentationDetents([.height(360)])
                 .presentationDragIndicator(.visible)
         }
         .fullScreenCover(isPresented: $openTerminal) {
@@ -233,6 +245,58 @@ private struct TerminalHeroCard: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Theme.Palette.hairline)
         )
+    }
+}
+
+/// Shown when the connected Mac doesn't advertise a terminal: the Mac App
+/// Store build can't host a shell (App Sandbox), so the full Fiple for Mac
+/// from fiple.app is required — or the feature is simply switched off there.
+private struct TerminalUnavailableSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.lg) {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.black)
+                .frame(width: 64, height: 64)
+                .overlay(
+                    Text(">_")
+                        .font(.system(size: 22, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Theme.Palette.brand)
+                )
+                .padding(.top, Theme.Spacing.lg)
+
+            Text("Terminal needs the full Fiple for Mac")
+                .font(.fiple(20, .bold))
+                .foregroundStyle(Theme.Palette.label)
+                .multilineTextAlignment(.center)
+
+            Text("Mac App Store apps run in a sandbox that can't host a real shell. Download the full version of Fiple for Mac from fiple.app, then switch Terminal on in its settings — this card comes alive.")
+                .font(.fiple(14))
+                .foregroundStyle(Theme.Palette.secondary)
+                .multilineTextAlignment(.center)
+
+            Spacer(minLength: 0)
+
+            Button {
+                openURL(FipleLinks.download)
+            } label: {
+                Text("Get Fiple for Mac")
+                    .font(.fiple(16, .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Theme.Palette.brand, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .foregroundStyle(.white)
+            }
+
+            Button("Not Now") { dismiss() }
+                .font(.fiple(15, .medium))
+                .foregroundStyle(Theme.Palette.secondary)
+        }
+        .padding(.horizontal, Theme.Spacing.lg)
+        .padding(.bottom, Theme.Spacing.lg)
+        .presentationBackground(Theme.Palette.background)
     }
 }
 
