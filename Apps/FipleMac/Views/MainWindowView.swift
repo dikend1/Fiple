@@ -59,6 +59,9 @@ struct MainWindowView: View {
             // "-welcome": force the first-run welcome, for screenshots.
             if ProcessInfo.processInfo.arguments.contains("-welcome") { showWelcome = true }
             #endif
+            // Zip download running from ~/Downloads? Offer to move to
+            // /Applications first — the welcome then shows from the real home.
+            SelfInstaller.offerMoveToApplicationsIfNeeded()
             if !hasSeenWelcome { showWelcome = true }
         }
         // Settings → Show Welcome Guide re-opens the onboarding on demand; the
